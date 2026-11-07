@@ -19,7 +19,7 @@ export interface Rule {
   /** Files this rule reads, by extension. */
   extensions: string[];
   /** Line rule: true when the line breaks the rule. Must be pure: same line, same answer. */
-  test?(line: string): boolean;
+  test?(line: string): boolean | "partial";
   /** File rule, for checks that need context (e.g. "an AI call with no logging in this file").
    *  Returns 1-based line numbers to flag. Must be pure. */
   fileTest?(lines: string[]): number[];
@@ -53,7 +53,19 @@ export interface Finding {
   note: string;
   /** The suggested change, laid out for a person to approve or decline. */
   proposal: Proposal;
+  /** Stable id: rule, file and the flagged line's content (not its number). Contains no code. */
+  fingerprint: string;
+  /** Set when .lintsure/baseline.json exists: whether the finding is new since then. */
+  change?: "new" | "unchanged";
+  /** Set when a person accepted this finding in .lintsure/accepted.yaml. */
+  accepted?: Acceptance;
 }
+
+/** A person's decision to accept a finding, with their reason. Expired acceptances count as open again. */
+export interface Acceptance { reason: string; by: string; date: string; reviewBy?: string; expired: boolean }
+
+/** What changed since the baseline: findings that were in the baseline and are now gone. */
+export interface BaselineDiff { created: string; newCount: number; unchangedCount: number; fixed: { ruleId: string; file: string; fingerprint: string }[] }
 
 export interface OutsideItem { framework: FrameworkId; control: string; title: string; evidence: string }
 
@@ -69,4 +81,6 @@ export interface Report {
   disclaimer: string;
   /** Files the rules actually read (after skipping folders, large and binary files). */
   filesChecked: number;
+  /** Present when the repo has a .lintsure/baseline.json. */
+  baseline?: BaselineDiff;
 }

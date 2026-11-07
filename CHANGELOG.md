@@ -2,6 +2,25 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.2.0 · 2026-11-08 · Reports you can act on, rules you can measure
+
+### Reports
+- `lintsure baseline` saves today's findings to `.lintsure/baseline.json`. Every later report says what is new, fixed or unchanged.
+- Accept a finding after review in `.lintsure/accepted.yaml`, with a reason, a name, a date and an optional review date. Accepted findings stay in the report but don't fail CI; past the review date they count as open again.
+- Each finding has a fingerprint (a one-way hash of rule, file and line content), so moving code doesn't make old findings look new.
+- `--sarif` writes `lintsure.sarif` for GitHub code scanning; `--github` prints line annotations; `--new-only` fails only on new findings.
+- None of these files contain source code.
+
+### GitHub Action
+- Findings show on their lines in the pull request.
+- With a baseline, only new findings fail the job (`new-only`, on by default).
+- Optional SARIF output and an opt-in pull request comment that lists new findings, never code.
+
+### Rules and accuracy
+- New benchmark: labelled lines every rule must catch or must not flag. The build fails if any rule scores lower than before. Scores are on the docs Rules page.
+- Personal data in logs: only the log call's own arguments are checked, so other code on the same line no longer causes false alarms.
+- SQL built from strings: Gap when the inserted value looks like user input, Partial when it may be fixed text from your own code. Sentences such as "Select a plan from..." are no longer read as SQL.
+
 ## 0.1.3 · 2026-11-08 · Ask first, every time
 
 A hard rule for every agent that uses Lintsure: explain, point, show the benefit, ask, and wait.

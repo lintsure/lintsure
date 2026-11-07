@@ -12,8 +12,9 @@
   },
   "scripts": {
     "build": "tsc -b packages/core packages/cli packages/mcp",
-    "test": "npm run build && node --test \"packages/core/dist/test/**/*.test.js\" && node scripts/mcp-smoke.mjs",
-    "scan:sample": "node packages/cli/dist/src/index.js scan fixtures/sample-app"
+    "test": "npm run build && node --test \"packages/core/dist/test/**/*.test.js\" && node scripts/mcp-smoke.mjs && node scripts/benchmark.mjs",
+    "scan:sample": "node packages/cli/dist/src/index.js scan fixtures/sample-app",
+    "benchmark": "npm run build && node scripts/benchmark.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

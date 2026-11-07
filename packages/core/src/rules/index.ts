@@ -11,6 +11,16 @@ const LOG_CALL = /\b(console\.(log|info|warn|error|debug)|logger\.\w+|log\.(info
 // Drops the text of string literals but keeps interpolations, so "email error" is ignored and `${user.email}` or f"{user.email}" is not.
 const codeOnly = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1).)*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
 const PII = /\b(e-?mail|phone|ssn|social_?security|passport|date_?of_?birth|dob|password|passwd|credit_?card|card_?number|iban)\b/i;
+// The arguments of the first log call on a line, up to its matching ")". Other code on the same line is ignored.
+function logArgs(l: string): string | null {
+  const m = LOG_CALL.exec(l); if (!m) return null;
+  let depth = 0, i = m.index + m[0].length - 1;
+  for (let j = i; j < l.length; j++) { if (l[j] === "(") depth++; else if (l[j] === ")" && --depth === 0) return l.slice(i + 1, j); }
+  return l.slice(i + 1);
+}
+// Values that usually come from a request or the user. SQL built from them is a Gap; from other values, Partial.
+const USER_INPUT = /\b(req|request|params|query|body|input|args|form|ctx|event|payload|searchParams|user_input)\b/;
+const SQL_PARTS = /\$\{([^}]*)\}|\bf["'][^"']*\{([^}]*)\}|["']\s*\+\s*([\w.[\]]+)|\.format\(([^)]*)\)|%s["']\s*%\s*([^\n]+)/g;
 
 export const rules: Rule[] = [
   {
@@ -25,7 +35,7 @@ export const rules: Rule[] = [
     fix: "Mask or remove the personal field before logging, for example mask(user.email).",
     note: "Logs are copied to many places and kept for a long time. Personal data in them is hard to find and delete.",
     extensions: CODE,
-    test: (l) => LOG_CALL.test(l) && PII.test(codeOnly(l)),
+    test: (l) => { const a = logArgs(l); return a !== null && PII.test(codeOnly(a)); },
     ...DRAFT,
   },
   {
@@ -128,10 +138,16 @@ export const rules: Rule[] = [
       { framework: "iso-27001", id: "A.8.28", title: "Secure coding" },
       { framework: "gdpr", id: "Art. 32", title: "Security of processing" },
     ],
-    fix: "Use parameterized queries or your ORM's query builder.",
-    note: "String-built SQL can let an attacker read or change your data (SQL injection).",
+    fix: "Use parameterized queries or your ORM's query builder. If the inserted value is fixed text from your own code, confirm it can never come from a user.",
+    note: "String-built SQL can let an attacker read or change your data (SQL injection). Marked Gap when the inserted value looks like user input, Partial when it may be fixed text from your code.",
     extensions: CODE,
-    test: (l) => /\b(SELECT|INSERT|UPDATE|DELETE)\b[^"'`]*\b(FROM|INTO|SET|WHERE)\b/i.test(l) && /(\$\{|["']\s*\+\s*\w|\bf["'][^"']*\{|%s["']\s*%|\.format\()/.test(l),
+    test: (l) => {
+      // SQL keywords are written in UPPER or lower case; "Select a plan from..." in a sentence is not SQL.
+      if (!/\b(SELECT|INSERT|UPDATE|DELETE|select|insert|update|delete)\b[^"'`]*\b(FROM|INTO|SET|WHERE|from|into|set|where)\b/.test(l)) return false;
+      const parts = [...l.matchAll(SQL_PARTS)].map((m) => m.slice(1).find(Boolean) ?? "");
+      if (!parts.length) return false;
+      return parts.some((p) => USER_INPUT.test(p)) ? true : "partial";
+    },
     ...DRAFT,
   },
   {

@@ -6,6 +6,9 @@ import { outsideFor } from "./knowledge/index.js";
 import { rules } from "./rules/index.js";
 import type { Finding, FrameworkId, Report } from "./types.js";
 import { proposalFor } from "./guidance.js";
+import { applyReview, fingerprint, isOpen } from "./review.js";
+export * from "./review.js";
+export { toSarif } from "./sarif.js";
 
 /** Heading above every proposed change, in every report. Tests check it is there for each finding. */
 export const PROPOSAL_HEADING = "Proposed change. Nothing changes until you approve it.";
@@ -15,7 +18,7 @@ export { rules };
 export * from "./guidance.js";
 export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
-export const RULES_VERSION = "0.1.3";
+export const RULES_VERSION = "0.2.0";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -31,12 +34,15 @@ export const NOT_A_VERDICT =
 
 /** Plain next steps, so a report always ends with what a person still needs to do. */
 export function nextSteps(r: Report): string[] {
-  const gaps = r.findings.filter((f) => f.status === "gap").length;
-  const partial = r.findings.filter((f) => f.status === "partial").length;
+  const open = r.findings.filter(isOpen);
+  const gaps = open.filter((f) => f.status === "gap").length;
+  const partial = open.filter((f) => f.status === "partial").length;
+  const expired = r.findings.filter((f) => f.accepted?.expired).length;
   return [
     gaps ? `Review the ${gaps} gap${gaps === 1 ? "" : "s"} and decide how to fix each one. Approve any change before it is made.` : "No gaps were found by the current rules. Keep checking as the code changes.",
     partial ? `Check the ${partial} partial finding${partial === 1 ? "" : "s"}: each depends on context only you can confirm.` : "",
     `Work through the ${r.outside.length} item${r.outside.length === 1 ? "" : "s"} that live outside code. Code checks alone are not enough for a full review.`,
+    expired ? `${expired} accepted finding${expired === 1 ? " is" : "s are"} past the review date. Look again, then renew the acceptance or fix it.` : "",
     "Ask a qualified compliance professional to review the results before you rely on them.",
   ].filter(Boolean);
 }
@@ -103,15 +109,16 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     const lines = buf.toString("utf8").split(/\r?\n/);
     if (lines.some((l) => l.length > MAX_LINE)) continue; // minified or generated
     filesChecked++;
-    const add = (r: (typeof relevant)[number], line: number) => {
+    const add = (r: (typeof relevant)[number], line: number, status: Finding["status"] = r.status) => {
       const controls = r.controls.filter((c) => frameworks.includes(c.framework));
       findings.push({
-        ruleId: r.id, file, line, status: r.status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
+        ruleId: r.id, file, line, status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
         proposal: proposalFor({ file, line, title: r.title, fix: r.fix, note: r.note, controls }),
+        fingerprint: fingerprint(r.id, file, lines[line - 1] ?? ""),
       });
     };
     for (const r of relevant) {
-      if (r.test) lines.forEach((text, i) => { if (r.test!(text)) add(r, i + 1); });
+      if (r.test) lines.forEach((text, i) => { const hit = r.test!(text); if (hit) add(r, i + 1, hit === "partial" ? "partial" : r.status); });
       if (r.fileTest) for (const n of r.fileTest(lines)) add(r, n);
     }
   }
@@ -120,7 +127,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const deduped = findings.filter((f) => { const k = `${f.ruleId}|${f.file}|${f.line}`; return seen.has(k) ? false : (seen.add(k), true); })
     .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.ruleId.localeCompare(b.ruleId));
   const hit = new Set(deduped.map((f) => f.ruleId));
-  return {
+  return applyReview({
     rulesVersion: RULES_VERSION,
     frameworks: [...frameworks].sort(),
     findings: deduped,
@@ -129,10 +136,12 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     outside: outsideFor(frameworks),
     filesChecked,
     disclaimer: DISCLAIMER,
-  };
+  }, root, new Date().toISOString().slice(0, 10));
 }
 
 const LABEL = { gap: "Gap", partial: "Partial", met: "Met", outside: "Outside code" } as const;
+const acceptedLine = (a: NonNullable<Finding["accepted"]>) =>
+  `> Accepted by ${a.by} on ${a.date}: ${a.reason}` + (a.expired ? ` (review date ${a.reviewBy} has passed: look at it again)` : a.reviewBy ? ` (review by ${a.reviewBy})` : "");
 const ctl = (c: { framework: string; id: string }[]) => c.map((x) => `${x.framework.toUpperCase()} ${x.id}`).join(" · ");
 
 export function toMarkdown(r: Report): string {
@@ -142,12 +151,16 @@ export function toMarkdown(r: Report): string {
     `> ${DISCLAIMER}`, "",
     `## Findings (${r.findings.length})`, "",
   ];
+  if (r.baseline) lines.splice(lines.length - 2, 0, `Since the baseline of ${r.baseline.created}: ${r.baseline.newCount} new, ${r.baseline.fixed.length} fixed, ${r.baseline.unchangedCount} unchanged.`, "");
   if (!r.findings.length) lines.push("No issues found by the current rules.", "");
   for (const f of r.findings) lines.push(
-    `### ${LABEL[f.status]} · \`${f.file}:${f.line}\``, `**${f.title}** (${f.severity})`, "", `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, "",
+    `### ${LABEL[f.status]} · \`${f.file}:${f.line}\`${f.change === "new" ? " · New since baseline" : ""}`, `**${f.title}** (${f.severity})`, "",
+    ...(f.accepted ? [acceptedLine(f.accepted), ""] : []),
+    `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, "",
     `**${PROPOSAL_HEADING}**`, "",
     `- Where: \`${f.proposal.where}\``, `- What: ${f.proposal.what}`, `- Why: ${f.proposal.why}`, `- Benefit: ${f.proposal.benefit}`, "",
   );
+  if (r.baseline?.fixed.length) lines.push(`## Fixed since baseline (${r.baseline.fixed.length})`, "", ...r.baseline.fixed.map((x) => `- ${x.ruleId} in \`${x.file}\``), "");
   lines.push(`## Met (${r.met.length})`, "", ...r.met.map((m) => `- ${m.title} · ${ctl(m.controls)}`), "");
   lines.push(`## Outside code (${r.outside.length})`, "", "Code can't prove these. They still need to be done before a full review.", "", ...r.outside.map((o) => `- ${o.framework.toUpperCase()} ${o.control} · ${o.title}: ${o.evidence}`), "");
   lines.push("## What to do next", "", ...nextSteps(r).map((s, i) => `${i + 1}. ${s}`), "");

@@ -1,0 +1,77 @@
+{
+  "pii.logged": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 16
+  },
+  "secret.in-source": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 10
+  },
+  "transport.plain-http": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7
+  },
+  "pii.to-analytics": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7
+  },
+  "pii.in-url": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6
+  },
+  "crypto.weak-password-hash": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6
+  },
+  "transport.tls-verify-off": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7
+  },
+  "sql.string-built": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 10
+  },
+  "cors.any-origin": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7
+  },
+  "session.cookie-insecure": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "config.debug-on": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "ai.automated-decision": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "ai.hides-being-ai": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6
+  },
+  "ai.synthetic-media": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "ai.emotion-or-biometric": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  }
+}

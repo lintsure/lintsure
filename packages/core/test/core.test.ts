@@ -198,3 +198,52 @@ test("guardrail: agents are told to explain, point, show the benefit, ask and wa
     assert.ok(APPROVAL_RULES.includes(part), `approval rules miss: ${part}`);
   assert.ok(AGENT_GUIDANCE.includes(APPROVAL_RULES), "server instructions must carry the approval rules");
 });
+
+import { fingerprint, parseAccepted, toBaseline, toSarif, BASELINE_FILE, ACCEPTED_FILE } from "../src/index.js";
+
+test("fingerprints survive moved lines, change when the line changes, and hold no code", () => {
+  const a = fingerprint("pii.logged", "src/a.ts", "  logger.info(`x ${user.email}`);");
+  assert.equal(a, fingerprint("pii.logged", "src/a.ts", "logger.info(`x   ${user.email}`);"));
+  assert.notEqual(a, fingerprint("pii.logged", "src/a.ts", "logger.info(`x ${user.phone}`);"));
+  assert.match(a, /^[0-9a-f]{16}$/);
+});
+
+test("baseline marks new, unchanged and fixed; accepted findings are set aside and expire", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-bl-"));
+  await mkdir(join(dir, "src")); await mkdir(join(dir, ".lintsure"));
+  await writeFile(join(dir, "src/a.ts"), "console.log(user.email);\napp.use(cors({ origin: \"*\" }));\n");
+  const first = await scan(dir);
+  await writeFile(join(dir, BASELINE_FILE), JSON.stringify(toBaseline(first, "2026-01-01")));
+  const baseText = JSON.stringify(toBaseline(first, "2026-01-01"));
+  assert.doesNotMatch(baseText, /console|cors\(/, "baseline must not contain code");
+
+  const cors = first.findings.find((f) => f.ruleId === "cors.any-origin")!;
+  await writeFile(join(dir, ACCEPTED_FILE), `- rule: cors.any-origin\n  where: src/a.ts\n  fingerprint: ${cors.fingerprint}\n  reason: Public read-only API\n  accepted_by: J. Smith\n  date: 2026-01-01\n  review_by: 2099-01-01\n`);
+  await writeFile(join(dir, "src/a.ts"), "// moved\napp.use(cors({ origin: \"*\" }));\nconst h = md5(user.password);\n");
+  const second = await scan(dir);
+  assert.equal(second.baseline?.fixed.length, 1, "the email log was fixed");
+  assert.equal(second.findings.find((f) => f.ruleId === "cors.any-origin")?.change, "unchanged", "moving a line keeps it the same finding");
+  assert.equal(second.findings.find((f) => f.ruleId === "crypto.weak-password-hash")?.change, "new");
+  assert.equal(second.findings.find((f) => f.ruleId === "cors.any-origin")?.accepted?.expired, false);
+  assert.match(toMarkdown(second), /Accepted by J\. Smith/);
+  assert.match(toMarkdown(second), /Fixed since baseline \(1\)/);
+
+  await writeFile(join(dir, ACCEPTED_FILE), `- rule: cors.any-origin\n  fingerprint: ${cors.fingerprint}\n  reason: x\n  accepted_by: J\n  date: 2020-01-01\n  review_by: 2020-06-01\n`);
+  const third = await scan(dir);
+  assert.equal(third.findings.find((f) => f.ruleId === "cors.any-origin")?.accepted?.expired, true, "past the review date it counts as open again");
+});
+
+test("accepted.yaml entries without a reason or a person are ignored", () => {
+  assert.equal(parseAccepted("- rule: a\n  fingerprint: f\n  accepted_by: J\n").length, 0);
+  assert.equal(parseAccepted("- rule: a\n  fingerprint: f\n  reason: ok\n  accepted_by: J\n").length, 1);
+});
+
+test("SARIF output has locations and fingerprints but never source code", async () => {
+  const r = await scan(root);
+  const sarif = JSON.stringify(toSarif(r, "test"));
+  assert.ok(sarif.includes("\"startLine\""));
+  assert.ok(sarif.includes("lintsure/v1"));
+  assert.doesNotMatch(sarif, /sk_live_|logger\.info\(|md5\(user/, "SARIF must not include code from the flagged lines");
+});

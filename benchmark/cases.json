@@ -1,0 +1,198 @@
+{
+  "_about": "Labelled lines for every line rule. 'flag' must be caught, 'pass' must not be. A flag case may name the status it must get. Add a case for every false alarm or miss someone reports, before fixing the rule. Lines are written for this test set; none are copied from a real project.",
+  "pii.logged": {
+    "flag": [
+      "logger.info(`signup ${user.email}`);",
+      "console.log('created user', user.email);",
+      "logging.info(f\"reset sent to {email}\")",
+      "log.warn({ phone: customer.phone }, 'sms failed');",
+      "print(user.password)",
+      "console.debug(`card ${payment.card_number}`)",
+      "logger.error('payment failed', { iban: account.iban });",
+      "console.log('Received auth event', { emailType, email: payload.data.email, run_id })"
+    ],
+    "pass": [
+      "console.error(\"Transactional email error:\", error);",
+      "logger.warning(\"Model returned meta-text instead of an email. Discarding.\")",
+      "logger.info('signup', { userId: user.id });",
+      "<Gate onUnlock={(d) => { save({ email: d.email }); }} onError={(e) => { console.error(e) }} />",
+      "const email = form.email; logger.info('form submitted');",
+      "console.log(`sent ${count} emails`);",
+      "logger.info(`signup ${mask(user.id)}`);",
+      "sendEmail(user.email); logger.info('queued');"
+    ]
+  },
+  "secret.in-source": {
+    "flag": [
+      "export const stripeKey = \"sk_live_51HxQabcdefghijklmnop\";",
+      "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
+      "token: ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+      "SLACK_TOKEN=xoxb-1234567890-abcdefghij",
+      "-----BEGIN RSA PRIVATE KEY-----"
+    ],
+    "pass": [
+      "const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);",
+      "export const publishable = \"pk_test_51Habc\";",
+      "AWS_ACCESS_KEY_ID=",
+      "// Set GITHUB_TOKEN in your CI secrets",
+      "-----BEGIN PUBLIC KEY-----"
+    ]
+  },
+  "transport.plain-http": {
+    "flag": [
+      "return fetch(\"http://payments.example.com/charge\", { method: \"POST\", body });",
+      "await axios.post('http://api.partner.io/v1/users', data);",
+      "r = requests.get(\"http://internal.example.org/export\")"
+    ],
+    "pass": [
+      "fetch(\"https://api.example.com/charge\")",
+      "fetch(\"http://localhost:3000/health\")",
+      "axios.get('http://127.0.0.1:8080/debug')",
+      "const docs = \"http://example.com/docs\";"
+    ]
+  },
+  "pii.to-analytics": {
+    "flag": [
+      "posthog.identify(user.id, { email: user.email });",
+      "analytics.track('Signup', { email });",
+      "mixpanel.people.set({ $email: user.email, phone: user.phone });",
+      "Sentry.setUser({ email: user.email });"
+    ],
+    "pass": [
+      "posthog.identify(user.id);",
+      "analytics.track('Signup', { plan: 'pro' });",
+      "mixpanel.track('Page viewed');"
+    ]
+  },
+  "pii.in-url": {
+    "flag": [
+      "fetch(`/api/reset?email=${user.email}`);",
+      "const url = 'https://api.example.com/v1?api_key=' + key;",
+      "redirect(`/login?token=${t}`)"
+    ],
+    "pass": [
+      "fetch('/api/reset', { method: 'POST', body: JSON.stringify({ email }) });",
+      "const url = `/users?page=${page}`;",
+      "const label = 'Enter your email';"
+    ]
+  },
+  "crypto.weak-password-hash": {
+    "flag": [
+      "const hash = md5(user.password);",
+      "hashed = hashlib.sha1(password.encode()).hexdigest()",
+      "const digest = crypto.createHash('md5').update(passwd).digest('hex');"
+    ],
+    "pass": [
+      "const hash = await bcrypt.hash(user.password, 12);",
+      "const etag = md5(fileContents);",
+      "const checksum = sha1(buffer);"
+    ]
+  },
+  "transport.tls-verify-off": {
+    "flag": [
+      "const agent = new https.Agent({ rejectUnauthorized: false });",
+      "process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';",
+      "r = requests.get(url, verify=False)",
+      "client = httpx.Client(verify=False)"
+    ],
+    "pass": [
+      "result = await find_email(\"Jane\", \"Doe\", \"acme.com\", verify=False)",
+      "const agent = new https.Agent({ rejectUnauthorized: true });",
+      "r = requests.get(url, timeout=10)"
+    ]
+  },
+  "sql.string-built": {
+    "flag": [
+      { "line": "db.query(`SELECT * FROM users WHERE id = ${req.params.id}`);", "status": "gap" },
+      { "line": "cursor.execute(f\"SELECT * FROM orders WHERE user_id = {request.args['id']}\")", "status": "gap" },
+      { "line": "db.query(\"DELETE FROM sessions WHERE token = '\" + body.token + \"'\");", "status": "gap" },
+      { "line": "rows = await query_db(f\"SELECT {_USAGE_SUM} FROM usage_events WHERE {where}\")", "status": "partial" },
+      { "line": "with_site = await _scalar(f\"SELECT COUNT(*) FROM companies WHERE {has_site}\")", "status": "partial" },
+      { "line": "db.query(`SELECT * FROM ${TABLE} WHERE active = 1`);", "status": "partial" }
+    ],
+    "pass": [
+      "db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);",
+      "cursor.execute(\"SELECT * FROM orders WHERE user_id = %s\", (user_id,))",
+      "const sql = 'SELECT COUNT(*) FROM companies';",
+      "const msg = `Select a plan from the list ${name}`;"
+    ]
+  },
+  "cors.any-origin": {
+    "flag": [
+      "app.use(cors({ origin: \"*\" }));",
+      "'Access-Control-Allow-Origin': '*',",
+      "CORS_ALLOW_ALL_ORIGINS = True",
+      "app.add_middleware(CORSMiddleware, allow_origins=[\"*\"])"
+    ],
+    "pass": [
+      "app.use(cors({ origin: \"https://app.example.com\" }));",
+      "'Access-Control-Allow-Origin': origin,",
+      "allow_origins=[\"https://app.example.com\"]"
+    ]
+  },
+  "session.cookie-insecure": {
+    "flag": [
+      "res.cookie(\"session\", user.token, { httpOnly: false });",
+      "res.cookie('sid', id, { secure: false, httpOnly: true });",
+      "SESSION_COOKIE_SECURE = False"
+    ],
+    "pass": [
+      "res.cookie('sid', id, { secure: true, httpOnly: true, sameSite: 'lax' });",
+      "SESSION_COOKIE_SECURE = True"
+    ]
+  },
+  "config.debug-on": {
+    "flag": [
+      "DEBUG = True",
+      "app.run(host='0.0.0.0', debug=True)"
+    ],
+    "pass": [
+      "DEBUG = os.environ.get('DEBUG') == '1'",
+      "DEBUG = False",
+      "logger.setLevel(logging.DEBUG)"
+    ]
+  },
+  "ai.automated-decision": {
+    "flag": [
+      "const decision = model.predict(features) > 0.7 ? \"approved\" : \"rejected\";",
+      "if clf.predict_proba(applicant)[0][1] > 0.5: status = 'loan_denied'"
+    ],
+    "pass": [
+      "const label = model.predict(image);",
+      "const summary = await generateText({ model, prompt });"
+    ]
+  },
+  "ai.hides-being-ai": {
+    "flag": [
+      "const system = \"Pretend to be a human support agent named Sam.\";",
+      "Never reveal that you are an AI assistant.",
+      "Act as a real person and never mention being a bot."
+    ],
+    "pass": [
+      "const system = \"You are Lintsure's assistant. Say you are an AI if asked.\";",
+      "Act as a helpful assistant.",
+      "Pretend the user is a beginner and explain slowly."
+    ]
+  },
+  "ai.synthetic-media": {
+    "flag": [
+      "const img = await openai.images.generate({ prompt });",
+      "const mp3 = await openai.audio.speech.create({ model: 'tts-1', input });",
+      "pipe = StableDiffusionPipeline.from_pretrained(model_id)"
+    ],
+    "pass": [
+      "const img = await fetch('/static/logo.png');",
+      "const text = await openai.chat.completions.create({ model, messages });"
+    ]
+  },
+  "ai.emotion-or-biometric": {
+    "flag": [
+      "const mood = DeepFace.analyze(frame, { actions: [\"emotion\"] });",
+      "emotions = detect_emotion(face_image)"
+    ],
+    "pass": [
+      "const sentiment = analyzeSentiment(reviewText);",
+      "faces = detect_faces(photo)"
+    ]
+  }
+}
