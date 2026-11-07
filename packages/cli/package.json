@@ -1,0 +1,10 @@
+{
+  "name": "lintsure",
+  "version": "0.1.0",
+  "description": "Compliance checks for the code your AI writes. CLI.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": { "lintsure": "dist/src/index.js" },
+  "files": ["dist/src"],
+  "dependencies": { "@lintsure/core": "0.1.0" }
+}

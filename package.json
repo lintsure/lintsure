@@ -1,0 +1,16 @@
+{
+  "name": "lintsure-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/core", "packages/cli", "packages/mcp"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -b packages/core packages/cli packages/mcp",
+    "test": "npm run build && node --test \"packages/core/dist/test/**/*.test.js\"",
+    "scan:sample": "node packages/cli/dist/src/index.js scan fixtures/sample-app"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

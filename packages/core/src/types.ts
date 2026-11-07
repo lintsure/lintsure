@@ -1,0 +1,49 @@
+// The finding schema. Every rule must fill every field: the site promises file, line,
+// rules broken, a fix and an auditor note for each finding.
+
+export type Status = "met" | "partial" | "gap" | "outside";
+export type Severity = "high" | "medium" | "low";
+export type FrameworkId = "gdpr" | "soc2" | "iso-27001" | "eu-ai-act";
+
+export interface Control { framework: FrameworkId; id: string; title: string }
+
+export interface Rule {
+  id: string;
+  title: string;
+  /** Statuses a rule can produce. Only the Checker may produce "met". */
+  status: Exclude<Status, "met" | "outside">;
+  severity: Severity;
+  controls: Control[];
+  fix: string;
+  note: string;
+  /** Files this rule reads, by extension. */
+  extensions: string[];
+  /** Returns true when the line breaks the rule. Must be pure: same line, same answer. */
+  test(line: string): boolean;
+  mappedBy: string;
+  reviewedAt: string;
+}
+
+export interface Finding {
+  ruleId: string;
+  file: string;
+  line: number;
+  status: Status;
+  severity: Severity;
+  title: string;
+  controls: Control[];
+  fix: string;
+  note: string;
+}
+
+export interface OutsideItem { framework: FrameworkId; control: string; title: string; evidence: string }
+
+export interface Report {
+  /** Bump when output format or rule behavior changes. */
+  rulesVersion: string;
+  frameworks: FrameworkId[];
+  findings: Finding[];
+  /** Rule ids that ran and found nothing: those controls are Met for the code checked. */
+  met: { ruleId: string; title: string; controls: Control[] }[];
+  outside: OutsideItem[];
+}
