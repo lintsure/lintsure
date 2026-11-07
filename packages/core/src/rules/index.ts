@@ -1,10 +1,11 @@
 // v0 rule set. Pattern-based, deterministic, no network. Each rule maps to every
 // framework it touches. Mappings are a first draft: the auditor must review each
-// one (mappedBy / reviewedAt) before a framework is called "Available".
+// one (mappedBy / reviewedAt) before a framework leaves Beta.
 import type { Rule } from "../types.js";
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
-const DRAFT = { mappedBy: "draft", reviewedAt: "pending" };
+// Beta: mapped by us, awaiting review by a qualified compliance professional.
+const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 
 const LOG_CALL = /\b(console\.(log|info|warn|error|debug)|logger\.\w+|log\.(info|warn|error|debug)|logging\.\w+|print)\s*\(/;
 const PII = /\b(e-?mail|phone|ssn|social_?security|passport|date_?of_?birth|dob|password|passwd|credit_?card|card_?number|iban)\b/i;

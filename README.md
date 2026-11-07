@@ -43,7 +43,7 @@ gap      src/users.ts:5    Personal data written to logs
 
 ## Try it
 
-> **Status: v0.1.** Not on npm yet. Run it from source:
+> **Status: v0.1, Beta.** All rules are in Beta until their mappings are reviewed by a qualified compliance professional. Not on npm yet. Run it from source:
 
 ```bash
 git clone https://github.com/lintsure/lintsure.git

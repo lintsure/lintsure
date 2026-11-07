@@ -70,7 +70,7 @@ ${fws.map((f) => `<tr><td>${NAME[f]}</td><td>${r.findings.filter((x) => x.status
 <h3>How results are produced</h3>
 <ul><li>A fixed set of rules (version ${esc(r.rulesVersion)}) looks for known patterns, line by line or file by file. It does not use a language model to decide results, so the same code gives the same findings.</li>
 <li><b>Gap</b>: a rule found code that may break a control. <b>Partial</b>: a likely problem that depends on context only you can confirm. <b>Met</b>: the rule ran and found nothing in the files it read. <b>Outside code</b>: work that code cannot show.</li>
-<li>Rules reflect our reading of the publicly available text of each framework. Their mappings to framework controls are drafts awaiting review by a qualified compliance professional.</li></ul>
+<li>Rules reflect our reading of the publicly available text of each framework. They are in Beta: their mappings to framework controls await review by a qualified compliance professional.</li></ul>
 <h3>Known limits</h3>
 <ul><li>Rules can miss real problems and can flag code that is fine.</li><li>They do not follow data across files or functions.</li><li>They mainly cover JavaScript, TypeScript and Python.</li><li>They cannot see infrastructure, cloud settings, or anything outside the folder that was scanned.</li></ul>`;
 
