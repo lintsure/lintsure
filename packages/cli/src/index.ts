@@ -27,7 +27,7 @@ async function main(argv: string[]) {
   if (rest.includes("--json")) await writeFile("lintsure-report.json", JSON.stringify(report, null, 2));
 
   const n = (s: string) => report.findings.filter((f) => f.status === s).length;
-  console.log(`✓ ${report.findings.length + report.met.length} checks · ${n("gap")} gap · ${n("partial")} partial · ${report.met.length} met · ${report.outside.length} outside code`);
+  console.log(`✓ ${report.findings.length} findings · ${n("gap")} gap · ${n("partial")} partial · ${report.met.length} rules met · ${report.outside.length} outside code`);
   for (const f of report.findings) console.log(`${f.status.padEnd(8)} ${f.file}:${f.line}  ${f.title}`);
   console.log("Report saved to lintsure-report.md");
 
