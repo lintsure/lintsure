@@ -1,10 +1,52 @@
 {
   "name": "@lintsure/mcp",
   "version": "0.1.0",
-  "description": "Lintsure MCP server for Claude Code, Cursor, Codex and Windsurf.",
+  "description": "Lintsure MCP server for Claude Code, Cursor, Codex and Windsurf. Readiness checks, not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
-  "bin": { "lintsure-mcp": "dist/src/index.js" },
-  "files": ["dist/src"],
-  "dependencies": { "@lintsure/core": "0.1.0", "@modelcontextprotocol/sdk": "^1.12.0", "zod": "^3.24.0" }
+  "bin": {
+    "lintsure-mcp": "dist/src/index.js"
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@lintsure/core": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
+  },
+  "author": "Lintsure <hello@lintsure.com>",
+  "homepage": "https://lintsure.com/docs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lintsure/lintsure.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lintsure/lintsure/issues",
+    "email": "support@lintsure.com"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "compliance",
+    "gdpr",
+    "soc2",
+    "iso27001",
+    "eu-ai-act",
+    "mcp",
+    "static-analysis",
+    "readiness",
+    "mcp-server",
+    "claude-code",
+    "cursor"
+  ],
+  "scripts": {
+    "prepublishOnly": "cd ../.. && npm test"
+  }
 }

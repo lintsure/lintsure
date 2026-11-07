@@ -1,10 +1,47 @@
 {
   "name": "lintsure",
   "version": "0.1.0",
-  "description": "Compliance checks for the code your AI writes. CLI.",
+  "description": "Readiness checks for the code your AI writes: EU AI Act, GDPR, SOC 2, ISO 27001. Runs locally. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
-  "bin": { "lintsure": "dist/src/index.js" },
-  "files": ["dist/src"],
-  "dependencies": { "@lintsure/core": "0.1.0" }
+  "bin": {
+    "lintsure": "dist/src/index.js"
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@lintsure/core": "0.1.0"
+  },
+  "author": "Lintsure <hello@lintsure.com>",
+  "homepage": "https://lintsure.com/docs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lintsure/lintsure.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lintsure/lintsure/issues",
+    "email": "support@lintsure.com"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "compliance",
+    "gdpr",
+    "soc2",
+    "iso27001",
+    "eu-ai-act",
+    "mcp",
+    "static-analysis",
+    "readiness"
+  ],
+  "scripts": {
+    "prepublishOnly": "cd ../.. && npm test"
+  }
 }
