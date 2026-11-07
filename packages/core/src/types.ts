@@ -27,6 +27,20 @@ export interface Rule {
   reviewedAt: string;
 }
 
+/** A change Lintsure suggests. It is only ever a proposal: a person must approve it first. */
+export interface Proposal {
+  /** Exactly where: "file:line". */
+  where: string;
+  /** What would change. */
+  what: string;
+  /** Why: the problem and the controls it relates to. */
+  why: string;
+  /** What the person gains if they approve it. */
+  benefit: string;
+  /** Always true. Nothing changes without an explicit yes. */
+  needsApproval: true;
+}
+
 export interface Finding {
   ruleId: string;
   file: string;
@@ -37,6 +51,8 @@ export interface Finding {
   controls: Control[];
   fix: string;
   note: string;
+  /** The suggested change, laid out for a person to approve or decline. */
+  proposal: Proposal;
 }
 
 export interface OutsideItem { framework: FrameworkId; control: string; title: string; evidence: string }

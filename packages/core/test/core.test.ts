@@ -176,3 +176,25 @@ test("ignore list, build output and minified files are skipped", async () => {
   const r = await scan(dir);
   assert.deepEqual(r.findings.map((f) => f.file), ["src/a.ts"]);
 });
+
+import { AGENT_GUIDANCE, APPROVAL_RULES, PROPOSAL_HEADING } from "../src/index.js";
+
+test("guardrail: every finding is a proposal with where, what, why and benefit, and needs approval", async () => {
+  const r = await scan(root);
+  assert.ok(r.findings.length > 0);
+  for (const f of r.findings) {
+    const p = f.proposal;
+    assert.equal(p.where, `${f.file}:${f.line}`, `${f.ruleId}: proposal must point at the exact line`);
+    for (const k of ["what", "why", "benefit"] as const) assert.ok(p[k].length > 10, `${f.ruleId}: proposal.${k} is empty`);
+    assert.equal(p.needsApproval, true);
+    assert.ok(f.controls.every((c) => p.why.includes(c.id)), `${f.ruleId}: why must name every control`);
+  }
+  const md = toMarkdown(r);
+  assert.equal(md.split(PROPOSAL_HEADING).length - 1, r.findings.length, "every finding in the report needs the approval heading");
+});
+
+test("guardrail: agents are told to explain, point, show the benefit, ask and wait", () => {
+  for (const part of ["What you plan to do", "Why", "Where, exactly", "benefit", "wait", "Only a clear yes is approval", "One proposal at a time"])
+    assert.ok(APPROVAL_RULES.includes(part), `approval rules miss: ${part}`);
+  assert.ok(AGENT_GUIDANCE.includes(APPROVAL_RULES), "server instructions must carry the approval rules");
+});

@@ -5,13 +5,17 @@ import { extname, join, relative, sep } from "node:path";
 import { outsideFor } from "./knowledge/index.js";
 import { rules } from "./rules/index.js";
 import type { Finding, FrameworkId, Report } from "./types.js";
+import { proposalFor } from "./guidance.js";
+
+/** Heading above every proposed change, in every report. Tests check it is there for each finding. */
+export const PROPOSAL_HEADING = "Proposed change. Nothing changes until you approve it.";
 
 export * from "./types.js";
 export { rules };
 export * from "./guidance.js";
 export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
-export const RULES_VERSION = "0.1.1";
+export const RULES_VERSION = "0.1.3";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -99,10 +103,13 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     const lines = buf.toString("utf8").split(/\r?\n/);
     if (lines.some((l) => l.length > MAX_LINE)) continue; // minified or generated
     filesChecked++;
-    const add = (r: (typeof relevant)[number], line: number) => findings.push({
-      ruleId: r.id, file, line, status: r.status, severity: r.severity, title: r.title,
-      controls: r.controls.filter((c) => frameworks.includes(c.framework)), fix: r.fix, note: r.note,
-    });
+    const add = (r: (typeof relevant)[number], line: number) => {
+      const controls = r.controls.filter((c) => frameworks.includes(c.framework));
+      findings.push({
+        ruleId: r.id, file, line, status: r.status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
+        proposal: proposalFor({ file, line, title: r.title, fix: r.fix, note: r.note, controls }),
+      });
+    };
     for (const r of relevant) {
       if (r.test) lines.forEach((text, i) => { if (r.test!(text)) add(r, i + 1); });
       if (r.fileTest) for (const n of r.fileTest(lines)) add(r, n);
@@ -136,7 +143,11 @@ export function toMarkdown(r: Report): string {
     `## Findings (${r.findings.length})`, "",
   ];
   if (!r.findings.length) lines.push("No issues found by the current rules.", "");
-  for (const f of r.findings) lines.push(`### ${LABEL[f.status]} · \`${f.file}:${f.line}\``, `**${f.title}** (${f.severity})`, "", `- Rules: ${ctl(f.controls)}`, `- Fix: ${f.fix}`, `- Auditor note: ${f.note}`, "");
+  for (const f of r.findings) lines.push(
+    `### ${LABEL[f.status]} · \`${f.file}:${f.line}\``, `**${f.title}** (${f.severity})`, "", `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, "",
+    `**${PROPOSAL_HEADING}**`, "",
+    `- Where: \`${f.proposal.where}\``, `- What: ${f.proposal.what}`, `- Why: ${f.proposal.why}`, `- Benefit: ${f.proposal.benefit}`, "",
+  );
   lines.push(`## Met (${r.met.length})`, "", ...r.met.map((m) => `- ${m.title} · ${ctl(m.controls)}`), "");
   lines.push(`## Outside code (${r.outside.length})`, "", "Code can't prove these. They still need to be done before a full review.", "", ...r.outside.map((o) => `- ${o.framework.toUpperCase()} ${o.control} · ${o.title}: ${o.evidence}`), "");
   lines.push("## What to do next", "", ...nextSteps(r).map((s, i) => `${i + 1}. ${s}`), "");
