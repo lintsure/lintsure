@@ -1,61 +1,98 @@
-# Lintsure
+<p align="center">
+  <img src="https://lintsure.com/apple-touch-icon.png" width="72" height="72" alt="Lintsure logo">
+</p>
 
-Compliance checks for the code your AI writes.
+<h1 align="center">Lintsure</h1>
 
-Lintsure checks your repo against the rules that apply to you (GDPR, SOC 2, ISO/IEC 27001, the EU AI Act) and shows the **file and line**, **which rules it breaks across every framework**, **a fix**, and **an auditor note** for each finding.
+<p align="center"><strong>Compliance checks for the code your AI writes.</strong><br>
+Open source · Runs on your machine · Same input, same result</p>
 
-- **Never uploads your code.** The engine makes no network calls. A test enforces it.
-- **Same input, same result.** The Checker is a fixed rule engine, not a language model.
-- **No fake green ticks.** Only the Checker can mark a control Met. What code can't prove is listed as Outside code.
+<p align="center">
+  <a href="https://github.com/lintsure/lintsure/actions/workflows/ci.yml"><img src="https://github.com/lintsure/lintsure/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-141413" alt="License: Apache-2.0"></a>
+  <a href="https://lintsure.com/docs"><img src="https://img.shields.io/badge/docs-lintsure.com%2Fdocs-0B6E4F" alt="Docs"></a>
+</p>
 
-> A readiness tool, not an audit or legal advice.
+> **Important: Lintsure is a readiness tool, not an audit, a certification or legal advice.**
+> Its rules reflect our reading of the publicly available text of each framework, and they check **code only**. Work outside code, such as policies, training, contracts and evidence, still has to be done. Have a qualified person review the results before any audit, certification or decision. See [DISCLAIMER.md](DISCLAIMER.md).
 
-> **Status: early (v0.1).** 16 draft rules across GDPR, SOC 2, ISO/IEC 27001 and the EU AI Act. Rule mappings are pending auditor review. Not published to npm yet.
+## What it does
 
-## Use it
+Lintsure reads your repository and checks it against the EU AI Act, GDPR, SOC 2 and ISO/IEC 27001. Every finding shows:
 
-```bash
-# terminal
-npx lintsure scan
-npx lintsure scan ./my-app --framework gdpr,soc2 --json --fail-on gap
+- the **file and line**
+- a **status**: Gap, Partial, Met or Outside code
+- **every control it touches**, across all four frameworks at once
+- a **suggested fix** and a plain **auditor note**
 
-# Claude Code
-claude mcp add lintsure -- npx -y @lintsure/mcp
+It also lists what code can't prove (access reviews, training records, contracts) and the evidence an auditor will ask for.
+
+```text
+✓ 3 findings · 2 gap · 1 partial · 13 rules met · 22 outside code
+partial  src/billing.ts:4  Data sent over plain HTTP
+gap      src/config.ts:2   Secret or private key committed to source
+gap      src/users.ts:5    Personal data written to logs
 ```
 
-Then ask your agent: *"check this repo for compliance"*.
+## Built to inform, not to decide
 
-## Repo layout
+- **Never uploads your code.** The engine has no network code. A test fails the build if any appears.
+- **Same input, same result.** The Checker is a fixed rule engine, not a language model.
+- **No fake green ticks.** Only the Checker can mark a control Met, and Met only means the rules found no problem in the files they read.
+- **Never decides for you.** Every report and every MCP reply ends with the disclaimer and the next steps a person still needs to take. The MCP server tells coding agents not to call you compliant, certified or ready, not to make decisions, and to ask before changing anything. Tests check that Lintsure's own wording never claims a verdict.
+
+## Try it
+
+> **Status: v0.1.** Not on npm yet. Run it from source:
+
+```bash
+git clone https://github.com/lintsure/lintsure.git
+cd lintsure
+npm install
+npm test                                              # build + tests
+node packages/cli/dist/src/index.js scan /path/to/your-app
+```
+
+Use it inside Claude Code (from source):
+
+```bash
+claude mcp add lintsure -- node /path/to/lintsure/packages/mcp/dist/src/index.js
+```
+
+Then ask: *check this repo for compliance*. Setup for Cursor, Codex and Windsurf, every CLI flag, the report format and the full rules reference are in the **[docs](https://lintsure.com/docs)**.
+
+Run it on every pull request with **[lintsure/action](https://github.com/lintsure/action)**.
+
+## What's inside
 
 | Path | What |
 |---|---|
-| `packages/core` | Finding schema, rules, Scout (file walk), Checker, Auditor (dedupe, sort), Officer (outside-code list) |
-| `packages/cli` | `lintsure scan` |
-| `packages/mcp` | MCP server over stdio: `scan`, `classify`, `explain_framework`, `explain_rule` |
-| `fixtures/sample-app` | A tiny app with planted issues, used by tests |
+| `packages/core` | Finding schema, 16 rules, framework knowledge, scan, config reader, report writer, safety wording |
+| `packages/cli` | The `lintsure` command |
+| `packages/mcp` | MCP server: `scan`, `classify`, `explain_framework`, `explain_rule` |
+| `fixtures/` | Planted problems, near misses and a config example used by the tests |
+| `scripts/mcp-smoke.mjs` | Starts the MCP server and checks every reply carries the disclaimer |
 
-## Develop
+## Help Lintsure grow
 
-```bash
-npm install
-npm test            # build + tests
-npm run scan:sample # run the CLI on the sample app
-```
+Lintsure is free and built in the open. If it helped you:
 
-## What the agents know
+- ⭐ **Star this repo**, so more teams can find it
+- **Share it** with a founder or engineer who's facing an audit
+- **[Send a review](https://lintsure.com/review)** if you run it at your company. Good or bad, we read every one
+- **[Request a demo](https://lintsure.com/demo)** of the team platform (history, PR checks, evidence log, expert review)
 
-`packages/core/src/knowledge/` holds a plain-English summary of each framework: who it applies to, key dates, each obligation, whether code can prove it (`yes`, `partly`, `no`), which rules check it, and what evidence an auditor will ask for. The Classifier uses it to suggest frameworks (`classify`), the Officer uses it to list what code can't prove, and the MCP server explains it (`explain_framework`).
+## Get help
 
-House rules for this folder:
-- **Our own words only.** Never paste text from a law, standard or guide.
-- **ISO/IEC and AICPA texts are licensed.** Reference control and criterion IDs only, and describe intent in our words.
-- **EU law and regulator guidance** inform the summaries but are not copied.
-- Update `checkedOn` whenever a framework is re-checked. EU AI Act dates reflect the Digital Omnibus on AI (Regulation (EU) 2026/1744).
+- Questions: [hello@lintsure.com](mailto:hello@lintsure.com)
+- Support: [support@lintsure.com](mailto:support@lintsure.com)
+- Security issues: see [SECURITY.md](SECURITY.md). Please don't open a public issue.
+- Bugs and ideas: [open an issue](https://github.com/lintsure/lintsure/issues)
 
-## Writing a rule
+## Contributing
 
-Rules live in `packages/core/src/rules/`. Each rule must have an id, title, status (`gap` or `partial`), severity, the controls it maps to in every framework, a fix, an auditor note, `mappedBy` and `reviewedAt`. Tests fail if any field is missing or if a rule tries to return `met`. A rule's `test(line)` must be pure: same line, same answer.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Every rule needs a planted example, a near miss, and a link from the framework knowledge; `npm test` checks all of it.
 
 ## License
 
-Apache-2.0. Contributions are accepted under the [DCO](https://developercertificate.org/): sign off your commits with `git commit -s`.
+[Apache-2.0](LICENSE). Contributions are accepted under the [DCO](https://developercertificate.org/): sign off your commits with `git commit -s`.

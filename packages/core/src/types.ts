@@ -49,4 +49,6 @@ export interface Report {
   /** Rule ids that ran and found nothing: those controls are Met for the code checked. */
   met: { ruleId: string; title: string; controls: Control[] }[];
   outside: OutsideItem[];
+  /** Always present: what the report is and isn't. */
+  disclaimer: string;
 }

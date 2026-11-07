@@ -93,3 +93,28 @@ test("reads lintsure.config.yaml and skips frameworks not checked yet", async ()
   assert.deepEqual(c.skipped, ["hipaa"]);
   assert.deepEqual(await readConfig(root), { frameworks: null, skipped: [] });
 });
+
+import { DISCLAIMER, FORBIDDEN_CLAIMS, NOT_A_VERDICT, toMarkdown } from "../src/index.js";
+
+test("every report carries the disclaimer, outside-code reminder and next steps", async () => {
+  for (const dir of [root, clean]) {
+    const r = await scan(dir);
+    assert.equal(r.disclaimer, DISCLAIMER);
+    const md = toMarkdown(r);
+    assert.ok(md.includes(DISCLAIMER));
+    assert.ok(md.includes(NOT_A_VERDICT));
+    assert.match(md, /## What to do next/);
+    assert.match(md, /outside code\. Code checks alone are not enough for a full review/);
+    assert.match(md, /qualified compliance professional/);
+  }
+});
+
+test("no output claims a verdict, even when everything is Met", async () => {
+  const texts = [
+    toMarkdown(await scan(clean)), toMarkdown(await scan(root)),
+    ...rules.flatMap((r) => [r.title, r.fix, r.note]),
+    ...knowledge.flatMap((k) => [k.summary, ...k.obligations.map((o) => o.plain), ...k.watchOut]),
+  ];
+  // The fixed disclaimer sentences are negations ("do not mean you are compliant"), so they are excluded.
+  for (const t of texts.map((x) => x.split(NOT_A_VERDICT).join("").split(DISCLAIMER).join(""))) for (const bad of FORBIDDEN_CLAIMS) assert.doesNotMatch(t, bad, `verdict-like wording: ${t.slice(0, 80)}`);
+});

@@ -8,8 +8,33 @@ import type { Finding, FrameworkId, Report } from "./types.js";
 
 export * from "./types.js";
 export { rules };
+export * from "./guidance.js";
 export * from "./knowledge/index.js";
 export const RULES_VERSION = "0.1.0";
+
+/** Shown with every result, in every interface. Lintsure prepares; people decide. */
+export const DISCLAIMER =
+  "Lintsure is a readiness tool, not an audit, a certification or legal advice. " +
+  "Its rules reflect our reading of the publicly available text of each framework, and they check code only. " +
+  "Work outside code, such as policies, training, contracts and evidence, still has to be done. " +
+  "Have a qualified person review the results before any audit, certification or decision.";
+
+/** What a report must never be read as. Used in the report and by the MCP server. */
+export const NOT_A_VERDICT =
+  "These results do not mean you are compliant, certified or ready for an audit. A control marked Met means only that " +
+  "Lintsure's rules found no problem in the files they read.";
+
+/** Plain next steps, so a report always ends with what a person still needs to do. */
+export function nextSteps(r: Report): string[] {
+  const gaps = r.findings.filter((f) => f.status === "gap").length;
+  const partial = r.findings.filter((f) => f.status === "partial").length;
+  return [
+    gaps ? `Review the ${gaps} gap${gaps === 1 ? "" : "s"} and decide how to fix each one. Approve any change before it is made.` : "No gaps were found by the current rules. Keep checking as the code changes.",
+    partial ? `Check the ${partial} partial finding${partial === 1 ? "" : "s"}: each depends on context only you can confirm.` : "",
+    `Work through the ${r.outside.length} item${r.outside.length === 1 ? "" : "s"} that live outside code. Code checks alone are not enough for a full review.`,
+    "Ask a qualified compliance professional to review the results before you rely on them.",
+  ].filter(Boolean);
+}
 export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "soc2", "iso-27001", "eu-ai-act"];
 
 /** Reads the frameworks list from lintsure.config.yaml in the repo root, if there is one.
@@ -80,6 +105,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     // Only the Checker sets Met: a rule that ran and found nothing.
     met: active.filter((r) => !hit.has(r.id)).map((r) => ({ ruleId: r.id, title: r.title, controls: r.controls.filter((c) => frameworks.includes(c.framework)) })),
     outside: outsideFor(frameworks),
+    disclaimer: DISCLAIMER,
   };
 }
 
@@ -90,12 +116,14 @@ export function toMarkdown(r: Report): string {
   const lines = [
     "# Lintsure report", "",
     `Frameworks: ${r.frameworks.join(", ")} · Rules v${r.rulesVersion}`, "",
-    "> A readiness check, not an audit or legal advice.", "",
+    `> ${DISCLAIMER}`, "",
     `## Findings (${r.findings.length})`, "",
   ];
   if (!r.findings.length) lines.push("No issues found by the current rules.", "");
   for (const f of r.findings) lines.push(`### ${LABEL[f.status]} · \`${f.file}:${f.line}\``, `**${f.title}** (${f.severity})`, "", `- Rules: ${ctl(f.controls)}`, `- Fix: ${f.fix}`, `- Auditor note: ${f.note}`, "");
   lines.push(`## Met (${r.met.length})`, "", ...r.met.map((m) => `- ${m.title} · ${ctl(m.controls)}`), "");
-  lines.push(`## Outside code (${r.outside.length})`, "", ...r.outside.map((o) => `- ${o.framework.toUpperCase()} ${o.control} · ${o.title}: ${o.evidence}`), "");
+  lines.push(`## Outside code (${r.outside.length})`, "", "Code can't prove these. They still need to be done before a full review.", "", ...r.outside.map((o) => `- ${o.framework.toUpperCase()} ${o.control} · ${o.title}: ${o.evidence}`), "");
+  lines.push("## What to do next", "", ...nextSteps(r).map((s, i) => `${i + 1}. ${s}`), "");
+  lines.push("## What this report is not", "", NOT_A_VERDICT, "");
   return lines.join("\n");
 }

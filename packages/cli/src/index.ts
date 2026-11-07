@@ -3,7 +3,7 @@
 // Writes lintsure-report.md (and .json with --json). Exit code 1 when --fail-on matches.
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { ALL_FRAMEWORKS, readConfig, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
+import { ALL_FRAMEWORKS, DISCLAIMER, nextSteps, readConfig, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
 const HELP = `lintsure scan [path] [options]
 
@@ -12,7 +12,8 @@ const HELP = `lintsure scan [path] [options]
   --json              Also write lintsure-report.json
   --fail-on <status>  Exit 1 if any finding is "gap" or "partial" (for CI)
 
-A readiness check, not an audit or legal advice. Lintsure never uploads your code.`;
+${DISCLAIMER}
+Lintsure never uploads your code.`;
 
 async function main(argv: string[]) {
   const [cmd, ...rest] = argv;
@@ -33,6 +34,9 @@ async function main(argv: string[]) {
   console.log(`✓ ${report.findings.length} findings · ${n("gap")} gap · ${n("partial")} partial · ${report.met.length} rules met · ${report.outside.length} outside code`);
   for (const f of report.findings) console.log(`${f.status.padEnd(8)} ${f.file}:${f.line}  ${f.title}`);
   console.log("Report saved to lintsure-report.md");
+  console.log("\nNext steps:");
+  nextSteps(report).forEach((x, i) => console.log(`  ${i + 1}. ${x}`));
+  console.log(`\n${DISCLAIMER}`);
 
   const failOn = flag("--fail-on");
   if (failOn === "gap" && n("gap")) return 1;
