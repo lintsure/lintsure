@@ -1,6 +1,7 @@
 {
   "name": "@lintsure/mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "mcpName": "io.github.lintsure/lintsure",
   "description": "Lintsure MCP server for Claude Code, Cursor, Codex and Windsurf. Readiness checks, not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
