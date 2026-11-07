@@ -2,3 +2,5 @@ frameworks:
   - gdpr
   - soc2   # comment
   - hipaa
+ignore:
+  - ./vendor/

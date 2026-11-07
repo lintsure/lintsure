@@ -1,0 +1,5 @@
+# Lintsure scanning itself. These paths hold planted problems or the rule patterns on purpose.
+ignore:
+  - fixtures/
+  - packages/core/src/rules/
+  - packages/core/test/

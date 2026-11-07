@@ -16,7 +16,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const NAME: Record<FrameworkId, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", soc2: "SOC 2", "iso-27001": "ISO/IEC 27001" };
 const STATUS: Record<string, string> = { gap: "Gap", partial: "Partial", met: "Met", outside: "Outside code" };
 const SEV = ["high", "medium", "low"] as const;
-const SKIPPED = "node_modules, .git, dist, build, .next, venv, .venv, __pycache__, coverage";
+const SKIPPED = "node_modules, .git, dist, build, out, .output, .next, .nuxt, .svelte-kit, .astro, .vercel, .netlify, .wrangler, .turbo, .cache, venv, .venv, __pycache__, coverage";
 
 function page(title: string, body: string, n: number, total: number, project: string) {
   return `<section class="page"><header><span>Lintsure readiness assessment · ${esc(project)}</span><span>Draft until reviewed by a person</span></header>
@@ -66,7 +66,7 @@ ${fws.map((f) => `<tr><td>${NAME[f]}</td><td>${r.findings.filter((x) => x.status
 <div class="callout"><b>What this summary does not mean.</b> ${esc(NOT_A_VERDICT)}</div>`;
 
   const method = `<h3>What was checked</h3>
-<p>Lintsure read ${r.filesChecked} files in the project folder on the computer or CI runner where it ran. Nothing was uploaded. It skipped these folders: ${SKIPPED}, and any file over 1 MB or binary.</p>
+<p>Lintsure read ${r.filesChecked} files in the project folder on the computer or CI runner where it ran. Nothing was uploaded. It skipped these folders: ${SKIPPED}, any paths listed under ignore in lintsure.config.yaml, minified files, and any file over 1 MB or binary.</p>
 <h3>How results are produced</h3>
 <ul><li>A fixed set of rules (version ${esc(r.rulesVersion)}) looks for known patterns, line by line or file by file. It does not use a language model to decide results, so the same code gives the same findings.</li>
 <li><b>Gap</b>: a rule found code that may break a control. <b>Partial</b>: a likely problem that depends on context only you can confirm. <b>Met</b>: the rule ran and found nothing in the files it read. <b>Outside code</b>: work that code cannot show.</li>

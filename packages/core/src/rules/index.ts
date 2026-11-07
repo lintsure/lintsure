@@ -8,6 +8,8 @@ const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 
 const LOG_CALL = /\b(console\.(log|info|warn|error|debug)|logger\.\w+|log\.(info|warn|error|debug)|logging\.\w+|print)\s*\(/;
+// Drops the text of string literals but keeps interpolations, so "email error" is ignored and `${user.email}` or f"{user.email}" is not.
+const codeOnly = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1).)*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
 const PII = /\b(e-?mail|phone|ssn|social_?security|passport|date_?of_?birth|dob|password|passwd|credit_?card|card_?number|iban)\b/i;
 
 export const rules: Rule[] = [
@@ -23,7 +25,7 @@ export const rules: Rule[] = [
     fix: "Mask or remove the personal field before logging, for example mask(user.email).",
     note: "Logs are copied to many places and kept for a long time. Personal data in them is hard to find and delete.",
     extensions: CODE,
-    test: (l) => LOG_CALL.test(l) && PII.test(l),
+    test: (l) => LOG_CALL.test(l) && PII.test(codeOnly(l)),
     ...DRAFT,
   },
   {
@@ -114,7 +116,7 @@ export const rules: Rule[] = [
     fix: "Remove the override and trust a proper certificate. For self-signed certs in tests, scope it to the test only.",
     note: "With checks off, anyone on the network path can read or change the traffic.",
     extensions: [...CODE, ".env"],
-    test: (l) => /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|CERT_NONE/.test(l),
+    test: (l) => /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|\b(requests|httpx|session|client|Client|AsyncClient|urlopen)\b.*\bverify\s*=\s*False|InsecureSkipVerify\s*:\s*true|CERT_NONE/.test(l),
     ...DRAFT,
   },
   {

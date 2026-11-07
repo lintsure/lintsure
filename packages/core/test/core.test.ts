@@ -91,7 +91,8 @@ test("reads lintsure.config.yaml and skips frameworks not checked yet", async ()
   const c = await readConfig(fileURLToPath(new URL("../../../../fixtures/config-app", import.meta.url)));
   assert.deepEqual(c.frameworks, ["gdpr", "soc2"]);
   assert.deepEqual(c.skipped, ["hipaa"]);
-  assert.deepEqual(await readConfig(root), { frameworks: null, skipped: [] });
+  assert.deepEqual(c.ignore, ["vendor"]);
+  assert.deepEqual(await readConfig(root), { frameworks: null, skipped: [], ignore: [] });
 });
 
 import { DISCLAIMER, FORBIDDEN_CLAIMS, NOT_A_VERDICT, toMarkdown } from "../src/index.js";
@@ -142,4 +143,36 @@ test("assessment report on clean code still asks for human review and outside-co
   assert.match(html, /found no possible issues/);
   assert.match(html, /That is not the same as having none/);
   assert.match(html, /Human review is required/);
+});
+
+test("logs: words inside strings are not personal data, interpolated fields are", () => {
+  const r = rules.find((x) => x.id === "pii.logged")!;
+  assert.equal(r.test!('console.error("Transactional email error:", error);'), false);
+  assert.equal(r.test!('logger.warning("Model returned text instead of an email.")'), false);
+  assert.equal(r.test!('logger.info(f"reply to {prospect.email} sent")'), true);
+  assert.equal(r.test!("console.log(`user ${user.email}`)"), true);
+  assert.equal(r.test!("console.log(user.email)"), true);
+});
+
+test("TLS rule ignores verify=False on non-HTTP calls", () => {
+  const r = rules.find((x) => x.id === "transport.tls-verify-off")!;
+  assert.equal(r.test!('find_email("Jane", "Doe", verify=False)'), false);
+  assert.equal(r.test!('requests.get(url, verify=False)'), true);
+});
+
+test("ignore list, build output and minified files are skipped", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os"); const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ls-"));
+  const bad = "console.log(user.email);\n";
+  for (const d of ["src", "tests", ".output", "dist"]) await mkdir(join(dir, d));
+  await writeFile(join(dir, "src/a.ts"), bad);
+  await writeFile(join(dir, "src/b.ts"), "x".repeat(2000) + "\n" + bad);
+  await writeFile(join(dir, "src/c.min.js"), bad);
+  await writeFile(join(dir, "tests/a.ts"), bad);
+  await writeFile(join(dir, ".output/a.js"), bad);
+  await writeFile(join(dir, "dist/a.js"), bad);
+  await writeFile(join(dir, "lintsure.config.yaml"), "ignore:\n  - tests/\n");
+  const r = await scan(dir);
+  assert.deepEqual(r.findings.map((f) => f.file), ["src/a.ts"]);
 });

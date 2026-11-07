@@ -42,31 +42,42 @@ export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "soc2", "iso-27001", "eu-a
  *  Only the simple list form is supported:
  *    frameworks:
  *      - gdpr
- *  Ids Lintsure doesn't check yet (for example "hipaa") are returned in `skipped`. */
-export async function readConfig(root: string): Promise<{ frameworks: FrameworkId[] | null; skipped: string[] }> {
+ *  Ids Lintsure doesn't check yet (for example "hipaa") are returned in `skipped`.
+ *  An `ignore:` list of paths (relative to the root, for example tests/ or fixtures/) is skipped by scan(). */
+export async function readConfig(root: string): Promise<{ frameworks: FrameworkId[] | null; skipped: string[]; ignore: string[] }> {
   let text: string;
-  try { text = await readFile(join(root, "lintsure.config.yaml"), "utf8"); } catch { return { frameworks: null, skipped: [] }; }
-  const ids: string[] = []; let inList = false;
+  try { text = await readFile(join(root, "lintsure.config.yaml"), "utf8"); } catch { return { frameworks: null, skipped: [], ignore: [] }; }
+  const lists: Record<string, string[]> = { frameworks: [], ignore: [] }; let key = ""; let emptyFw = false;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.replace(/#.*$/, "").trimEnd();
-    if (/^frameworks\s*:\s*\[\s*\]\s*$/.test(line)) return { frameworks: [], skipped: [] };
-    if (/^frameworks\s*:\s*$/.test(line)) { inList = true; continue; }
-    if (inList) { const m = line.match(/^\s+-\s*([\w-]+)\s*$/); if (m) ids.push(m[1]); else if (line.trim()) inList = false; }
+    if (/^frameworks\s*:\s*\[\s*\]\s*$/.test(line)) { emptyFw = true; key = ""; continue; }
+    const head = line.match(/^(frameworks|ignore)\s*:\s*$/);
+    if (head) { key = head[1]; continue; }
+    if (key) { const m = line.match(/^\s+-\s*["']?([^"'\s]+)["']?\s*$/); if (m) lists[key].push(m[1]); else if (line.trim()) key = ""; }
   }
+  const ignore = lists.ignore.map((p) => p.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, ""));
+  if (emptyFw) return { frameworks: [], skipped: [], ignore };
+  const ids = lists.frameworks;
+  if (!ids.length) return { frameworks: null, skipped: [], ignore };
   const known = ids.filter((i): i is FrameworkId => (ALL_FRAMEWORKS as string[]).includes(i));
-  return { frameworks: known, skipped: ids.filter((i) => !known.includes(i as FrameworkId)) };
+  return { frameworks: known, skipped: ids.filter((i) => !known.includes(i as FrameworkId)), ignore };
 }
 
-const SKIP = new Set(["node_modules", ".git", "dist", "build", ".next", "venv", ".venv", "__pycache__", "coverage"]);
+// Dependencies, build output and caches: generated code, not code you wrote.
+export const SKIP_DIRS = ["node_modules", ".git", "dist", "build", "out", ".output", ".next", ".nuxt", ".svelte-kit", ".astro", ".vercel", ".netlify", ".wrangler", ".turbo", ".cache", "venv", ".venv", "__pycache__", "coverage"];
+const SKIP = new Set(SKIP_DIRS);
+const MAX_LINE = 1000; // a line this long means minified or generated code
 const MAX_BYTES = 1_000_000;
 
 /** Scout: list files to check, sorted so output order never depends on the file system. */
-export async function listFiles(root: string): Promise<string[]> {
+export async function listFiles(root: string, ignore: string[] = []): Promise<string[]> {
   const out: string[] = [];
+  const ignored = (p: string) => { const r = relative(root, p).split(sep).join("/"); return ignore.some((i) => r === i || r.startsWith(i + "/")); };
   async function walk(dir: string) {
     for (const e of await readdir(dir, { withFileTypes: true })) {
-      if (SKIP.has(e.name)) continue;
+      if (SKIP.has(e.name) || /\.min\.(js|css)$/.test(e.name)) continue;
       const p = join(dir, e.name);
+      if (ignored(p)) continue;
       if (e.isDirectory()) await walk(p); else if (e.isFile()) out.push(p);
     }
   }
@@ -78,15 +89,16 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const active = rules.filter((r) => r.controls.some((c) => frameworks.includes(c.framework)));
   const findings: Finding[] = [];
   let filesChecked = 0;
-  for (const abs of await listFiles(root)) {
+  for (const abs of await listFiles(root, (await readConfig(root)).ignore)) {
     const ext = extname(abs) || (abs.endsWith(".env") ? ".env" : "");
     const relevant = active.filter((r) => r.extensions.includes(ext));
     if (!relevant.length) continue;
     const buf = await readFile(abs);
     if (buf.length > MAX_BYTES || buf.includes(0)) continue; // skip big or binary files
-    filesChecked++;
     const file = relative(root, abs).split(sep).join("/");
     const lines = buf.toString("utf8").split(/\r?\n/);
+    if (lines.some((l) => l.length > MAX_LINE)) continue; // minified or generated
+    filesChecked++;
     const add = (r: (typeof relevant)[number], line: number) => findings.push({
       ruleId: r.id, file, line, status: r.status, severity: r.severity, title: r.title,
       controls: r.controls.filter((c) => frameworks.includes(c.framework)), fix: r.fix, note: r.note,
