@@ -51,4 +51,6 @@ export interface Report {
   outside: OutsideItem[];
   /** Always present: what the report is and isn't. */
   disclaimer: string;
+  /** Files the rules actually read (after skipping folders, large and binary files). */
+  filesChecked: number;
 }

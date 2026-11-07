@@ -9,6 +9,7 @@ import type { Finding, FrameworkId, Report } from "./types.js";
 export * from "./types.js";
 export { rules };
 export * from "./guidance.js";
+export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export const RULES_VERSION = "0.1.0";
 
@@ -76,12 +77,14 @@ export async function listFiles(root: string): Promise<string[]> {
 export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWORKS): Promise<Report> {
   const active = rules.filter((r) => r.controls.some((c) => frameworks.includes(c.framework)));
   const findings: Finding[] = [];
+  let filesChecked = 0;
   for (const abs of await listFiles(root)) {
     const ext = extname(abs) || (abs.endsWith(".env") ? ".env" : "");
     const relevant = active.filter((r) => r.extensions.includes(ext));
     if (!relevant.length) continue;
     const buf = await readFile(abs);
     if (buf.length > MAX_BYTES || buf.includes(0)) continue; // skip big or binary files
+    filesChecked++;
     const file = relative(root, abs).split(sep).join("/");
     const lines = buf.toString("utf8").split(/\r?\n/);
     const add = (r: (typeof relevant)[number], line: number) => findings.push({
@@ -105,6 +108,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     // Only the Checker sets Met: a rule that ran and found nothing.
     met: active.filter((r) => !hit.has(r.id)).map((r) => ({ ruleId: r.id, title: r.title, controls: r.controls.filter((c) => frameworks.includes(c.framework)) })),
     outside: outsideFor(frameworks),
+    filesChecked,
     disclaimer: DISCLAIMER,
   };
 }
