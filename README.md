@@ -25,7 +25,7 @@ Lintsure reads your repository and checks it against the EU AI Act, GDPR, SOC 2 
 - **every control it touches**, across all four frameworks at once
 - a **suggested fix** and a plain **auditor note**
 
-It also lists what code can't prove (access reviews, training records, contracts) and the evidence an auditor will ask for.
+It also lists what code can't prove (access reviews, training records, contracts) and the evidence an auditor will ask for, and can write a multi-page **assessment report** with a human review and sign-off page (`--report`).
 
 ```text
 ✓ 3 findings · 2 gap · 1 partial · 13 rules met · 22 outside code
@@ -88,6 +88,10 @@ Lintsure is free and built in the open. If it helped you:
 - Support: [support@lintsure.com](mailto:support@lintsure.com)
 - Security issues: see [SECURITY.md](SECURITY.md). Please don't open a public issue.
 - Bugs and ideas: [open an issue](https://github.com/lintsure/lintsure/issues)
+
+## What's new
+
+See [CHANGELOG.md](CHANGELOG.md) or [lintsure.com/changelog](https://lintsure.com/changelog).
 
 ## Contributing
 

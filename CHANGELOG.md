@@ -1,0 +1,30 @@
+# Changelog
+
+All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
+
+## 0.1.0 · 2026-11-07 · First public release
+
+The engine, CLI, MCP server and [GitHub Action](https://github.com/lintsure/action) are open source. 16 draft rules across the EU AI Act, GDPR, SOC 2 and ISO/IEC 27001, with a human review step built into every result.
+
+> Lintsure is a readiness tool, not an audit, a certification or legal advice. See [DISCLAIMER.md](DISCLAIMER.md).
+
+### Engine and rules
+- Core engine, CLI and MCP server, with tests that run the same input twice and expect the same result (e0d5cae)
+- 8 GDPR and SOC 2 rules, each with a planted example and a near miss that must not be flagged (d4c2de7)
+- 5 EU AI Act rules, and rules that can read a whole file (e6da1be)
+- Plain-English knowledge of each framework, used to suggest frameworks and list work outside code (54bf93d)
+- Choose frameworks with `lintsure.config.yaml` (dcfbe9c)
+
+### Human in the loop
+- Every report and every MCP reply carries the disclaimer, the work outside code and the next steps for a person (9a7860d)
+- The MCP server tells coding agents not to give verdicts, not to decide, and to ask before any change (9a7860d)
+- Tests fail if Lintsure's own wording claims you are compliant, certified or ready (9a7860d)
+
+### Reports
+- Multi-page assessment report with findings, possible fixes, an outside-code checklist and a human sign-off page: `lintsure scan --report` (0465c6a)
+- Clearer CLI summary line (1a55089)
+
+### Not yet
+- Packages on npm
+- Auditor-reviewed rule mappings
+- The team platform
