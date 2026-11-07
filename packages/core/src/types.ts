@@ -18,8 +18,11 @@ export interface Rule {
   note: string;
   /** Files this rule reads, by extension. */
   extensions: string[];
-  /** Returns true when the line breaks the rule. Must be pure: same line, same answer. */
-  test(line: string): boolean;
+  /** Line rule: true when the line breaks the rule. Must be pure: same line, same answer. */
+  test?(line: string): boolean;
+  /** File rule, for checks that need context (e.g. "an AI call with no logging in this file").
+   *  Returns 1-based line numbers to flag. Must be pure. */
+  fileTest?(lines: string[]): number[];
   mappedBy: string;
   reviewedAt: string;
 }

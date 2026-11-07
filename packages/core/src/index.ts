@@ -37,12 +37,15 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     const buf = await readFile(abs);
     if (buf.length > MAX_BYTES || buf.includes(0)) continue; // skip big or binary files
     const file = relative(root, abs).split(sep).join("/");
-    buf.toString("utf8").split(/\r?\n/).forEach((text, i) => {
-      for (const r of relevant) if (r.test(text)) findings.push({
-        ruleId: r.id, file, line: i + 1, status: r.status, severity: r.severity, title: r.title,
-        controls: r.controls.filter((c) => frameworks.includes(c.framework)), fix: r.fix, note: r.note,
-      });
+    const lines = buf.toString("utf8").split(/\r?\n/);
+    const add = (r: (typeof relevant)[number], line: number) => findings.push({
+      ruleId: r.id, file, line, status: r.status, severity: r.severity, title: r.title,
+      controls: r.controls.filter((c) => frameworks.includes(c.framework)), fix: r.fix, note: r.note,
     });
+    for (const r of relevant) {
+      if (r.test) lines.forEach((text, i) => { if (r.test!(text)) add(r, i + 1); });
+      if (r.fileTest) for (const n of r.fileTest(lines)) add(r, n);
+    }
   }
   // Auditor: one finding per rule per line; stable order.
   const seen = new Set<string>();

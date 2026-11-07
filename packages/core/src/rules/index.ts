@@ -175,6 +175,83 @@ export const rules: Rule[] = [
   },
 ];
 
+// --- EU AI Act -------------------------------------------------------------
+// Code can show *signals* for the AI Act, not the legal risk tier itself. These rules
+// flag what an auditor would ask about; the Classifier and the user decide the tier.
+
+const AI_CALL = /\b(openai|anthropic|client)\.(chat\.completions|responses|messages|completions)\.create\s*\(|\bgenerateText\s*\(|\bstreamText\s*\(|\b(model|clf|classifier|pipeline)\.(predict|predict_proba|invoke|generate)\s*\(/;
+const DECISION = /\b(approv|reject|deny|denied|declin|eligib|hire|hiring|shortlist|credit|loan|underwrit|admit|admission|ban|suspend)\w*/i;
+const LOGGED = /\b(logger|log|logging|audit|auditLog|console)\.\w+\s*\(|\binsert\w*\s*\(|\.save\s*\(/;
+
+rules.push(
+  {
+    id: "ai.automated-decision",
+    title: "AI makes a decision about a person with no human check in the code",
+    status: "partial", severity: "high",
+    controls: [
+      { framework: "eu-ai-act", id: "Art. 14", title: "Human oversight" },
+      { framework: "gdpr", id: "Art. 22", title: "Automated individual decisions" },
+    ],
+    fix: "Route the result to a review step where a person can confirm or override it, and record who did.",
+    note: "Credit, hiring, admission and similar decisions about people are high-risk under Annex III. Marked Partial: a review step may exist elsewhere.",
+    extensions: CODE,
+    // A model's output and a decision word on the same line, e.g. status = model.predict(x) > 0.5 ? "approved" : "rejected".
+    test: (l) => /\b(predict|predict_proba|score|classify|completion|generateText|invoke)\w*\s*\(/.test(l) && DECISION.test(l),
+    ...DRAFT,
+  },
+  {
+    id: "ai.call-not-logged",
+    title: "AI call with no record kept in this file",
+    status: "partial", severity: "medium",
+    controls: [
+      { framework: "eu-ai-act", id: "Art. 12", title: "Record-keeping" },
+      { framework: "soc2", id: "CC7.2", title: "Monitoring of system components" },
+    ],
+    fix: "Log each AI call: time, model and version, input reference and output, without raw personal data.",
+    note: "High-risk systems must keep logs that let you trace what the AI did. Marked Partial: logging may happen in another file.",
+    extensions: CODE,
+    fileTest: (lines) => lines.some((l) => LOGGED.test(l)) ? [] : lines.flatMap((l, i) => (AI_CALL.test(l) ? [i + 1] : [])),
+    ...DRAFT,
+  },
+  {
+    id: "ai.hides-being-ai",
+    title: "AI told to hide that it is an AI",
+    status: "gap", severity: "high",
+    controls: [{ framework: "eu-ai-act", id: "Art. 50(1)", title: "Transparency for AI interacting with people" }],
+    fix: "Remove the instruction and tell users they are talking to an AI.",
+    note: "People must be told when they interact with an AI system, unless it is obvious.",
+    extensions: [...CODE, ".md", ".txt", ".yaml", ".yml", ".json"],
+    test: (l) => /\b(pretend|act|behave|pose)\s+(to\s+be\s+|as\s+|like\s+)(a\s+)?(real\s+)?(human|person)\b|\bnever\s+(say|reveal|mention|admit|disclose)\b.{0,40}\b(ai|a\.i\.|bot|language model|assistant)\b/i.test(l),
+    ...DRAFT,
+  },
+  {
+    id: "ai.synthetic-media",
+    title: "AI-generated images, audio or video",
+    status: "partial", severity: "medium",
+    controls: [{ framework: "eu-ai-act", id: "Art. 50(2)", title: "Marking AI-generated content" }],
+    fix: "Mark generated media as AI-made in a machine-readable way (for example C2PA metadata) and label deepfakes for viewers.",
+    note: "Marked Partial: you may already add marking after this call. Confirm it does.",
+    extensions: CODE,
+    test: (l) => /\bimages\.(generate|edit)\s*\(|\baudio\.speech\.create\s*\(|\b(textToSpeech|text_to_speech|generateImage|generate_image|generateVideo|generate_video)\s*\(|\b(StableDiffusion\w*|DiffusionPipeline)\b/.test(l),
+    ...DRAFT,
+  },
+  {
+    id: "ai.emotion-or-biometric",
+    title: "Emotion recognition or biometric categorisation",
+    status: "gap", severity: "high",
+    controls: [
+      { framework: "eu-ai-act", id: "Art. 5(1)(f)", title: "Prohibited: emotion recognition at work and in education" },
+      { framework: "eu-ai-act", id: "Annex III(1)", title: "High-risk: biometrics" },
+      { framework: "gdpr", id: "Art. 9", title: "Special categories of personal data" },
+    ],
+    fix: "Check whether this use is banned or high-risk before shipping. Remove it if it infers emotions of staff or students.",
+    note: "Some uses are banned outright since February 2025. Others are high-risk. This needs a human decision, not a code fix.",
+    extensions: CODE,
+    test: (l) => /\b(detect|recogni[sz]e|analy[sz]e|infer|predict)\w*_?(emotion|sentiment_from_face|facial_expression)|\bemotion(s)?\s*[:=]\s*\w*\.(detect|analy)|\bDeepFace\.analyze\s*\(|\bdetect_faces?\b.*\bemotion|\b(face_recognition|FaceAttributes|DetectFaces)\b/i.test(l),
+    ...DRAFT,
+  },
+);
+
 // What code can't prove. The Officer lists these as "Outside code".
 export const outside: OutsideItem[] = [
   { framework: "gdpr", control: "Art. 30", title: "Records of processing activities", evidence: "A written register of what personal data you process and why." },
@@ -185,4 +262,7 @@ export const outside: OutsideItem[] = [
   { framework: "iso-27001", control: "A.6.3", title: "Awareness and training", evidence: "Training plan and completion records." },
   { framework: "eu-ai-act", control: "Art. 9", title: "Risk management system", evidence: "A documented, maintained AI risk management process." },
   { framework: "eu-ai-act", control: "Art. 11", title: "Technical documentation", evidence: "Technical documentation of the AI system, per Annex IV." },
+  { framework: "eu-ai-act", control: "Art. 4", title: "AI literacy", evidence: "Records that staff who build or use the AI system have suitable training." },
+  { framework: "eu-ai-act", control: "Art. 13", title: "Instructions for use", evidence: "Clear instructions telling deployers what the system does, its limits and how to oversee it." },
+  { framework: "eu-ai-act", control: "Art. 17", title: "Quality management system", evidence: "A documented quality management system for high-risk AI." },
 ];

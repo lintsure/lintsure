@@ -30,6 +30,12 @@ test("known findings stay put", async () => {
   const r = await scan(root);
   const got = r.findings.filter((f) => f.file !== "src/more.ts").map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
+    "ai.call-not-logged@src/ai.ts:3",
+    "ai.automated-decision@src/ai.ts:4",
+    "ai.call-not-logged@src/ai.ts:4",
+    "ai.hides-being-ai@src/ai.ts:5",
+    "ai.synthetic-media@src/ai.ts:6",
+    "ai.emotion-or-biometric@src/ai.ts:7",
     "transport.plain-http@src/billing.ts:4",
     "secret.in-source@src/config.ts:2",
     "config.debug-on@src/settings.py:2",
@@ -41,6 +47,7 @@ test("every rule fills every field the site promises", () => {
   for (const r of rules) {
     for (const k of ["id", "title", "fix", "note", "mappedBy", "reviewedAt"] as const) assert.ok(r[k], `${r.id} missing ${k}`);
     assert.ok(r.controls.length > 0, `${r.id} has no controls`);
+    assert.ok(r.test || r.fileTest, `${r.id} has no test`);
     assert.notEqual(r.status as string, "met", `${r.id}: only the Checker may mark Met`);
   }
 });
