@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { rules, scan } from "../src/index.js";
+import { classify, knowledge, outsideFor, rules, scan } from "../src/index.js";
 
 const root = fileURLToPath(new URL("../../../../fixtures/sample-app", import.meta.url));
 
@@ -65,4 +65,24 @@ test("core makes no network calls", async () => {
     const text = await readFile(join(src, f), "utf8");
     assert.doesNotMatch(text, /\bfetch\(|from "node:(http|https|net|dgram)"|require\("(http|https|net)"\)/, `${f} looks like it uses the network`);
   }
+});
+
+test("knowledge only points at rules that exist, and every rule is explained somewhere", () => {
+  const ids = new Set(rules.map((r) => r.id));
+  const used = new Set<string>();
+  for (const k of knowledge) for (const o of k.obligations) for (const id of o.rules ?? []) { assert.ok(ids.has(id), `${k.id} ${o.ref} points at missing rule ${id}`); used.add(id); }
+  for (const id of ids) assert.ok(used.has(id), `rule ${id} isn't linked from any framework obligation`);
+});
+
+test("outside-code items come from obligations code can't prove", () => {
+  const items = outsideFor(["eu-ai-act"]);
+  assert.ok(items.some((i) => i.control === "Art. 9"));
+  assert.ok(items.every((i) => i.evidence.length > 0));
+});
+
+test("classifier suggests, with reasons", () => {
+  const s = classify({ euUsers: true, personalData: true, usesAI: true, decisionArea: "credit", b2bCustomers: true, usMarket: true });
+  assert.deepEqual(s.map((x) => x.framework), ["eu-ai-act", "gdpr", "soc2"]);
+  assert.match(s[0].reason, /high-risk/);
+  assert.deepEqual(classify({ usesAI: true }), []);
 });

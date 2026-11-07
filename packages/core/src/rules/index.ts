@@ -1,7 +1,7 @@
 // v0 rule set. Pattern-based, deterministic, no network. Each rule maps to every
 // framework it touches. Mappings are a first draft: the auditor must review each
 // one (mappedBy / reviewedAt) before a framework is called "Available".
-import type { OutsideItem, Rule } from "../types.js";
+import type { Rule } from "../types.js";
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 const DRAFT = { mappedBy: "draft", reviewedAt: "pending" };
@@ -252,17 +252,3 @@ rules.push(
   },
 );
 
-// What code can't prove. The Officer lists these as "Outside code".
-export const outside: OutsideItem[] = [
-  { framework: "gdpr", control: "Art. 30", title: "Records of processing activities", evidence: "A written register of what personal data you process and why." },
-  { framework: "gdpr", control: "Art. 28", title: "Agreements with processors", evidence: "Signed data processing agreements with each vendor that handles personal data." },
-  { framework: "soc2", control: "CC6.2", title: "Access reviews", evidence: "A dated record of who has access, reviewed each quarter." },
-  { framework: "soc2", control: "CC1.4", title: "Security training", evidence: "Training records for everyone with access to systems." },
-  { framework: "iso-27001", control: "A.5.20", title: "Supplier security agreements", evidence: "Security terms in supplier contracts." },
-  { framework: "iso-27001", control: "A.6.3", title: "Awareness and training", evidence: "Training plan and completion records." },
-  { framework: "eu-ai-act", control: "Art. 9", title: "Risk management system", evidence: "A documented, maintained AI risk management process." },
-  { framework: "eu-ai-act", control: "Art. 11", title: "Technical documentation", evidence: "Technical documentation of the AI system, per Annex IV." },
-  { framework: "eu-ai-act", control: "Art. 4", title: "AI literacy", evidence: "Records that staff who build or use the AI system have suitable training." },
-  { framework: "eu-ai-act", control: "Art. 13", title: "Instructions for use", evidence: "Clear instructions telling deployers what the system does, its limits and how to oversee it." },
-  { framework: "eu-ai-act", control: "Art. 17", title: "Quality management system", evidence: "A documented quality management system for high-risk AI." },
-];

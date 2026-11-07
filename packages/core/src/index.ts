@@ -2,11 +2,13 @@
 // No network calls anywhere in this package: a test enforces it.
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
-import { outside, rules } from "./rules/index.js";
+import { outsideFor } from "./knowledge/index.js";
+import { rules } from "./rules/index.js";
 import type { Finding, FrameworkId, Report } from "./types.js";
 
 export * from "./types.js";
-export { rules, outside };
+export { rules };
+export * from "./knowledge/index.js";
 export const RULES_VERSION = "0.1.0";
 export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "soc2", "iso-27001", "eu-ai-act"];
 
@@ -58,7 +60,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     findings: deduped,
     // Only the Checker sets Met: a rule that ran and found nothing.
     met: active.filter((r) => !hit.has(r.id)).map((r) => ({ ruleId: r.id, title: r.title, controls: r.controls.filter((c) => frameworks.includes(c.framework)) })),
-    outside: outside.filter((o) => frameworks.includes(o.framework)),
+    outside: outsideFor(frameworks),
   };
 }
 
