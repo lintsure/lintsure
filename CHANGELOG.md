@@ -25,6 +25,5 @@ The engine, CLI, MCP server and [GitHub Action](https://github.com/lintsure/acti
 - Clearer CLI summary line (1a55089)
 
 ### Not yet
-- Packages on npm
 - Auditor-reviewed rule mappings
 - The team platform

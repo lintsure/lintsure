@@ -43,21 +43,19 @@ gap      src/users.ts:5    Personal data written to logs
 
 ## Try it
 
-> **Status: v0.1, Beta.** All rules are in Beta until their mappings are reviewed by a qualified compliance professional. Not on npm yet. Run it from source:
+> **Status: v0.1, Beta.** All rules are in Beta until their mappings are reviewed by a qualified compliance professional. 
 
 ```bash
-git clone https://github.com/lintsure/lintsure.git
-cd lintsure
-npm install
-npm test                                              # build + tests
-node packages/cli/dist/src/index.js scan /path/to/your-app
+npx lintsure scan
 ```
 
-Use it inside Claude Code (from source):
+Use it inside Claude Code:
 
 ```bash
-claude mcp add lintsure -- node /path/to/lintsure/packages/mcp/dist/src/index.js
+claude mcp add lintsure -- npx -y @lintsure/mcp
 ```
+
+From source: `git clone`, `npm install`, `npm test`, then `node packages/cli/dist/src/index.js scan /path/to/your-app`.
 
 Then ask: *check this repo for compliance*. Setup for Cursor, Codex and Windsurf, every CLI flag, the report format and the full rules reference are in the **[docs](https://lintsure.com/docs)**.
 
