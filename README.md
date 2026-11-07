@@ -11,6 +11,11 @@ Open source · Runs on your machine · Same input, same result</p>
   <a href="https://github.com/lintsure/lintsure/actions/workflows/ci.yml"><img src="https://github.com/lintsure/lintsure/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-141413" alt="License: Apache-2.0"></a>
   <a href="https://lintsure.com/docs"><img src="https://img.shields.io/badge/docs-lintsure.com%2Fdocs-0B6E4F" alt="Docs"></a>
+  <a href="https://www.npmjs.com/package/lintsure"><img src="https://img.shields.io/npm/v/lintsure?label=npm&color=141413" alt="npm version"></a>
+  <a href="https://github.com/lintsure/lintsure/releases"><img src="https://img.shields.io/github/v/release/lintsure/lintsure?color=141413" alt="Latest release"></a>
+  <a href="https://www.npmjs.com/package/@lintsure/mcp"><img src="https://img.shields.io/badge/MCP-@lintsure%2Fmcp-0B6E4F" alt="MCP server"></a>
+  <img src="https://img.shields.io/node/v/lintsure?color=141413" alt="Node version">
+  <img src="https://img.shields.io/badge/rules-Beta-B45309" alt="Rules: Beta">
 </p>
 
 > **Important: Lintsure is a readiness tool, not an audit, a certification or legal advice.**

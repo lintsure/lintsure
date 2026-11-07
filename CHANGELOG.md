@@ -2,6 +2,15 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.1.1 · 2026-11-07 · Less noise
+
+Fewer false alarms on real projects. Running on a folder of seven projects, findings dropped from 153 to 68 with no real problem lost.
+
+- Skips build output and caches (`.output`, `out`, `.nuxt`, `.svelte-kit`, `.astro`, `.vercel`, `.wrangler`, `.turbo`, `.cache`) and minified files (b936098)
+- New `ignore:` list in `lintsure.config.yaml` to skip paths such as tests or fixtures (b936098)
+- "Personal data written to logs" no longer flags words inside a message, like "email error", but still flags values put into it, like `{user.email}` (b936098)
+- "TLS certificate checks turned off" only flags `verify=False` on HTTP client calls (b936098)
+
 ## 0.1.0 · 2026-11-07 · First public release
 
 The engine, CLI, MCP server and [GitHub Action](https://github.com/lintsure/action) are open source. 16 draft rules across the EU AI Act, GDPR, SOC 2 and ISO/IEC 27001, with a human review step built into every result.

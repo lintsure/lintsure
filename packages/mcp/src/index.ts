@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { AGENT_GUIDANCE, ALL_FRAMEWORKS, DISCLAIMER, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
-const server = new McpServer({ name: "lintsure", version: "0.1.0" }, { instructions: AGENT_GUIDANCE });
+const server = new McpServer({ name: "lintsure", version: "0.1.1" }, { instructions: AGENT_GUIDANCE });
 const fw = z.array(z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]])).optional()
   .describe("Frameworks to check. Default: lintsure.config.yaml in the repo, else all available.");
 // Every answer ends with the same disclaimer, so no tool output can be read as a verdict.
