@@ -11,12 +11,28 @@ test("same input, same result", async () => {
   assert.deepEqual(await scan(root), await scan(root));
 });
 
-test("finds the planted issues in the sample app", async () => {
+const clean = fileURLToPath(new URL("../../../../fixtures/clean-app", import.meta.url));
+
+test("every rule fires on its planted example", async () => {
   const r = await scan(root);
-  const got = r.findings.map((f) => `${f.ruleId}@${f.file}:${f.line}`);
+  const fired = new Set(r.findings.map((f) => f.ruleId));
+  for (const rule of rules) assert.ok(fired.has(rule.id), `${rule.id} did not fire`);
+  assert.equal(r.met.length, 0);
+});
+
+test("near misses in clean code are not flagged", async () => {
+  const r = await scan(clean);
+  assert.deepEqual(r.findings.map((f) => `${f.ruleId}@${f.file}:${f.line}`), []);
+  assert.equal(r.met.length, rules.length);
+});
+
+test("known findings stay put", async () => {
+  const r = await scan(root);
+  const got = r.findings.filter((f) => f.file !== "src/more.ts").map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
     "transport.plain-http@src/billing.ts:4",
     "secret.in-source@src/config.ts:2",
+    "config.debug-on@src/settings.py:2",
     "pii.logged@src/users.ts:5",
   ]);
 });
