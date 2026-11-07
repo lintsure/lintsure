@@ -3,11 +3,12 @@
 // Writes lintsure-report.md (and .json with --json). Exit code 1 when --fail-on matches.
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { ALL_FRAMEWORKS, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
+import { ALL_FRAMEWORKS, readConfig, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
 const HELP = `lintsure scan [path] [options]
 
-  --framework <ids>   Comma list: ${ALL_FRAMEWORKS.join(", ")} (default: all)
+  --framework <ids>   Comma list: ${ALL_FRAMEWORKS.join(", ")}
+                      (default: lintsure.config.yaml if present, else all)
   --json              Also write lintsure-report.json
   --fail-on <status>  Exit 1 if any finding is "gap" or "partial" (for CI)
 
@@ -22,7 +23,9 @@ async function main(argv: string[]) {
   const bad = wanted?.filter((f) => !ALL_FRAMEWORKS.includes(f));
   if (bad?.length) { console.error(`Unknown framework: ${bad.join(", ")}`); return 2; }
 
-  const report = await scan(path, wanted ?? ALL_FRAMEWORKS);
+  const config = wanted ? null : await readConfig(path);
+  if (config?.skipped.length) console.log(`Skipping, not checked yet: ${config.skipped.join(", ")}`);
+  const report = await scan(path, wanted ?? config?.frameworks ?? ALL_FRAMEWORKS);
   await writeFile("lintsure-report.md", toMarkdown(report));
   if (rest.includes("--json")) await writeFile("lintsure-report.json", JSON.stringify(report, null, 2));
 

@@ -5,16 +5,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { ALL_FRAMEWORKS, classify, getKnowledge, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
+import { ALL_FRAMEWORKS, classify, getKnowledge, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
 const server = new McpServer({ name: "lintsure", version: "0.1.0" });
 const fw = z.array(z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]])).optional()
-  .describe("Frameworks to check. Default: all available.");
+  .describe("Frameworks to check. Default: lintsure.config.yaml in the repo, else all available.");
 
 server.tool("scan", "Check a repo for compliance gaps. Returns findings with file, line, rules broken, fix and auditor note.",
   { path: z.string().default(".").describe("Repo path"), frameworks: fw },
   async ({ path, frameworks }) => {
-    const report = await scan(resolve(path), frameworks ?? ALL_FRAMEWORKS);
+    const root = resolve(path);
+    const report = await scan(root, frameworks ?? (await readConfig(root)).frameworks ?? ALL_FRAMEWORKS);
     return { content: [{ type: "text", text: toMarkdown(report) }, { type: "text", text: JSON.stringify(report) }] };
   });
 

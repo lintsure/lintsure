@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { classify, knowledge, outsideFor, rules, scan } from "../src/index.js";
+import { classify, knowledge, outsideFor, readConfig, rules, scan } from "../src/index.js";
 
 const root = fileURLToPath(new URL("../../../../fixtures/sample-app", import.meta.url));
 
@@ -85,4 +85,11 @@ test("classifier suggests, with reasons", () => {
   assert.deepEqual(s.map((x) => x.framework), ["eu-ai-act", "gdpr", "soc2"]);
   assert.match(s[0].reason, /high-risk/);
   assert.deepEqual(classify({ usesAI: true }), []);
+});
+
+test("reads lintsure.config.yaml and skips frameworks not checked yet", async () => {
+  const c = await readConfig(fileURLToPath(new URL("../../../../fixtures/config-app", import.meta.url)));
+  assert.deepEqual(c.frameworks, ["gdpr", "soc2"]);
+  assert.deepEqual(c.skipped, ["hipaa"]);
+  assert.deepEqual(await readConfig(root), { frameworks: null, skipped: [] });
 });

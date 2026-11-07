@@ -12,6 +12,25 @@ export * from "./knowledge/index.js";
 export const RULES_VERSION = "0.1.0";
 export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "soc2", "iso-27001", "eu-ai-act"];
 
+/** Reads the frameworks list from lintsure.config.yaml in the repo root, if there is one.
+ *  Only the simple list form is supported:
+ *    frameworks:
+ *      - gdpr
+ *  Ids Lintsure doesn't check yet (for example "hipaa") are returned in `skipped`. */
+export async function readConfig(root: string): Promise<{ frameworks: FrameworkId[] | null; skipped: string[] }> {
+  let text: string;
+  try { text = await readFile(join(root, "lintsure.config.yaml"), "utf8"); } catch { return { frameworks: null, skipped: [] }; }
+  const ids: string[] = []; let inList = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trimEnd();
+    if (/^frameworks\s*:\s*\[\s*\]\s*$/.test(line)) return { frameworks: [], skipped: [] };
+    if (/^frameworks\s*:\s*$/.test(line)) { inList = true; continue; }
+    if (inList) { const m = line.match(/^\s+-\s*([\w-]+)\s*$/); if (m) ids.push(m[1]); else if (line.trim()) inList = false; }
+  }
+  const known = ids.filter((i): i is FrameworkId => (ALL_FRAMEWORKS as string[]).includes(i));
+  return { frameworks: known, skipped: ids.filter((i) => !known.includes(i as FrameworkId)) };
+}
+
 const SKIP = new Set(["node_modules", ".git", "dist", "build", ".next", "venv", ".venv", "__pycache__", "coverage"]);
 const MAX_BYTES = 1_000_000;
 
