@@ -4,6 +4,14 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 
 ## 0.2.0 · 2026-11-08 · Reports you can act on, rules you can measure
 
+### Readiness check record
+- Every run produces a dated record: record id, date and time (UTC), tool and rules version, the branch and commit checked, and where it ran (CLI, MCP or CI).
+- It lists what applies and why (chosen on the command line, listed in `lintsure.config.yaml`, chosen in the agent, or checked by default).
+- It counts check points (one rule applied to one file), findings (Gaps), observations (Partials), accepted and fixed items, outside-code items, and open items by risk level.
+- A results-by-control table shows, for every control the rules cover, which rules ran, how many check points, the result and the items behind it.
+- Findings are numbered (F-001, F-002) and show their risk level. The record appears in the Markdown, JSON and HTML reports, and `--save-record` keeps a copy in `.lintsure/records/` to build a dated history.
+- It is called a readiness record, not an audit, and it is a draft until a person reviews it. A test checks that audit-only terms never appear.
+
 ### Reports
 - `lintsure baseline` saves today's findings to `.lintsure/baseline.json`. Every later report says what is new, fixed or unchanged.
 - Accept a finding after review in `.lintsure/accepted.yaml`, with a reason, a name, a date and an optional review date. Accepted findings stay in the report but don't fail CI; past the review date they count as open again.
@@ -23,6 +31,8 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 
 ## 0.1.3 · 2026-11-08 · Ask first, every time
 
+Commit 37dd1f5.
+
 A hard rule for every agent that uses Lintsure: explain, point, show the benefit, ask, and wait.
 
 - Every finding now carries a proposal with four parts: where (the exact file and line), what would change, why (the problem and the controls it relates to) and the benefit. It is marked as needing approval.
@@ -30,6 +40,11 @@ A hard rule for every agent that uses Lintsure: explain, point, show the benefit
 - The MCP server tells agents to present a proposal and wait for a clear yes before any action: editing, creating or deleting files, running commands, installing packages, or treating a framework as applying. One proposal at a time.
 - Every MCP tool is marked read-only for clients.
 - Tests fail if a finding lacks any part of its proposal, if a report misses the approval heading, or if a scan reply misses the approval rules.
+
+## 0.1.2 · 2026-11-07 · Listed in the MCP Registry
+
+- `@lintsure/mcp` gains the `mcpName` field the official MCP Registry uses to confirm ownership (9617924).
+- `server.json` added, and Lintsure is listed in the registry as `io.github.lintsure/lintsure`.
 
 ## 0.1.1 · 2026-11-07 · Less noise
 

@@ -9,6 +9,8 @@ import { proposalFor } from "./guidance.js";
 import { applyReview, fingerprint, isOpen } from "./review.js";
 export * from "./review.js";
 export { toSarif } from "./sarif.js";
+import { buildRecord, type RecordOptions } from "./record.js";
+export * from "./record.js";
 
 /** Heading above every proposed change, in every report. Tests check it is there for each finding. */
 export const PROPOSAL_HEADING = "Proposed change. Nothing changes until you approve it.";
@@ -95,11 +97,13 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
   return out.sort();
 }
 
-export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWORKS): Promise<Report> {
+export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWORKS, opts: RecordOptions = {}): Promise<Report> {
   const active = rules.filter((r) => r.controls.some((c) => frameworks.includes(c.framework)));
   const findings: Finding[] = [];
-  let filesChecked = 0;
-  for (const abs of await listFiles(root, (await readConfig(root)).ignore)) {
+  let filesChecked = 0, checkPoints = 0;
+  const perRule: Record<string, number> = {};
+  const { ignore } = await readConfig(root);
+  for (const abs of await listFiles(root, ignore)) {
     const ext = extname(abs) || (abs.endsWith(".env") ? ".env" : "");
     const relevant = active.filter((r) => r.extensions.includes(ext));
     if (!relevant.length) continue;
@@ -109,10 +113,12 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     const lines = buf.toString("utf8").split(/\r?\n/);
     if (lines.some((l) => l.length > MAX_LINE)) continue; // minified or generated
     filesChecked++;
+    checkPoints += relevant.length; // one rule applied to one file is one check point
+    for (const r of relevant) perRule[r.id] = (perRule[r.id] ?? 0) + 1;
     const add = (r: (typeof relevant)[number], line: number, status: Finding["status"] = r.status) => {
       const controls = r.controls.filter((c) => frameworks.includes(c.framework));
       findings.push({
-        ruleId: r.id, file, line, status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
+        id: "", ruleId: r.id, file, line, status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
         proposal: proposalFor({ file, line, title: r.title, fix: r.fix, note: r.note, controls }),
         fingerprint: fingerprint(r.id, file, lines[line - 1] ?? ""),
       });
@@ -126,8 +132,10 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const seen = new Set<string>();
   const deduped = findings.filter((f) => { const k = `${f.ruleId}|${f.file}|${f.line}`; return seen.has(k) ? false : (seen.add(k), true); })
     .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.ruleId.localeCompare(b.ruleId));
+  deduped.forEach((f, i) => { f.id = `F-${String(i + 1).padStart(3, "0")}`; });
   const hit = new Set(deduped.map((f) => f.ruleId));
-  return applyReview({
+  const now = opts.now ?? new Date();
+  const report = await applyReview({
     rulesVersion: RULES_VERSION,
     frameworks: [...frameworks].sort(),
     findings: deduped,
@@ -136,7 +144,9 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     outside: outsideFor(frameworks),
     filesChecked,
     disclaimer: DISCLAIMER,
-  }, root, new Date().toISOString().slice(0, 10));
+  }, root, now.toISOString().slice(0, 10));
+  report.record = await buildRecord(report, root, checkPoints, perRule, active.map((r) => r.id), active, ignore, { ...opts, now });
+  return report;
 }
 
 const LABEL = { gap: "Gap", partial: "Partial", met: "Met", outside: "Outside code" } as const;
@@ -144,17 +154,45 @@ const acceptedLine = (a: NonNullable<Finding["accepted"]>) =>
   `> Accepted by ${a.by} on ${a.date}: ${a.reason}` + (a.expired ? ` (review date ${a.reviewBy} has passed: look at it again)` : a.reviewBy ? ` (review by ${a.reviewBy})` : "");
 const ctl = (c: { framework: string; id: string }[]) => c.map((x) => `${x.framework.toUpperCase()} ${x.id}`).join(" · ");
 
+const RESULT = { finding: "Finding", observation: "Observation", "no issue found": "No issue found" } as const;
+
+/** The record block: identification, scope, what applies and why, counts, and results by control. */
+function recordLines(r: Report): string[] {
+  const c = r.record; if (!c) return [];
+  const n = c.counts;
+  return [
+    "## Readiness check record", "",
+    "This is a readiness record of an automated code check, not an audit. It is a draft until a person reviews and signs it.", "",
+    "| | |", "|---|---|",
+    `| Record | ${c.id} |`, `| Date and time (UTC) | ${c.createdAt.replace("T", " ").slice(0, 19)} |`,
+    `| Tool | ${c.tool.name} ${c.tool.version}, run from ${c.source} |`,
+    `| Scope | \`${c.scope.folder}\`${c.scope.branch ? `, branch \`${c.scope.branch}\`` : ""}${c.scope.commit ? `, commit \`${c.scope.commit}\`` : ""} |`,
+    `| Files read | ${c.scope.filesRead}${c.scope.ignored.length ? ` (ignored by config: ${c.scope.ignored.map((x) => `\`${x}\``).join(", ")})` : ""} |`,
+    `| Check points | ${n.checkPoints} (${n.rulesRun} rules, each applied to every file it reads) |`,
+    `| Results | ${n.findings} finding${n.findings === 1 ? "" : "s"}, ${n.observations} observation${n.observations === 1 ? "" : "s"}, ${n.accepted} accepted, ${n.fixedSinceBaseline} fixed since baseline, ${n.outsideCode} outside-code items |`,
+    `| Risk levels | ${n.byRisk.high} high, ${n.byRisk.medium} medium, ${n.byRisk.low} low |`,
+    `| Reviewed by | ${c.review.reviewer ?? "Not yet reviewed"} |`, "",
+    "### What applies, and why", "",
+    ...c.applies.map((a) => `- **${a.framework}**: ${a.why}`), "",
+    "### Results by control", "",
+    "A finding is a Gap the code itself shows. An observation is a Partial that depends on context a person must confirm. No issue found means the rules found nothing in the files they read, not that the control is met.", "",
+    "| Framework | Control | Rules | Check points | Result | Items |", "|---|---|---|---|---|---|",
+    ...c.byControl.map((b) => `| ${b.framework} | ${b.control} ${b.title} | ${b.rules.join(", ")} | ${b.checkPoints} | ${RESULT[b.result]} | ${b.findingIds.join(", ") || "-"} |`), "",
+  ];
+}
+
 export function toMarkdown(r: Report): string {
   const lines = [
     "# Lintsure report", "",
     `Frameworks: ${r.frameworks.join(", ")} · Rules v${r.rulesVersion}`, "",
     `> ${DISCLAIMER}`, "",
+    ...recordLines(r),
     `## Findings (${r.findings.length})`, "",
   ];
   if (r.baseline) lines.splice(lines.length - 2, 0, `Since the baseline of ${r.baseline.created}: ${r.baseline.newCount} new, ${r.baseline.fixed.length} fixed, ${r.baseline.unchangedCount} unchanged.`, "");
   if (!r.findings.length) lines.push("No issues found by the current rules.", "");
   for (const f of r.findings) lines.push(
-    `### ${LABEL[f.status]} · \`${f.file}:${f.line}\`${f.change === "new" ? " · New since baseline" : ""}`, `**${f.title}** (${f.severity})`, "",
+    `### ${f.id} · ${f.status === "gap" ? "Finding" : "Observation"} (${LABEL[f.status]}) · \`${f.file}:${f.line}\`${f.change === "new" ? " · New since baseline" : ""}`, `**${f.title}** · Risk level: ${f.severity}`, "",
     ...(f.accepted ? [acceptedLine(f.accepted), ""] : []),
     `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, "",
     `**${PROPOSAL_HEADING}**`, "",

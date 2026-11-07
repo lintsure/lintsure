@@ -8,7 +8,8 @@ import { classify, knowledge, outsideFor, readConfig, rules, scan } from "../src
 const root = fileURLToPath(new URL("../../../../fixtures/sample-app", import.meta.url));
 
 test("same input, same result", async () => {
-  assert.deepEqual(await scan(root), await scan(root));
+  const now = new Date("2026-11-08T10:00:00Z");
+  assert.deepEqual(await scan(root, undefined, { now }), await scan(root, undefined, { now }));
 });
 
 const clean = fileURLToPath(new URL("../../../../fixtures/clean-app", import.meta.url));
@@ -246,4 +247,24 @@ test("SARIF output has locations and fingerprints but never source code", async 
   assert.ok(sarif.includes("\"startLine\""));
   assert.ok(sarif.includes("lintsure/v1"));
   assert.doesNotMatch(sarif, /sk_live_|logger\.info\(|md5\(user/, "SARIF must not include code from the flagged lines");
+});
+
+test("readiness check record: dated, scoped, explains what applies, counts check points, never called an audit", async () => {
+  const now = new Date("2026-11-08T10:00:00Z");
+  const r = await scan(root, undefined, { now, why: "Listed in lintsure.config.yaml.", source: "cli" });
+  const c = r.record!;
+  assert.match(c.id, /^LS-20261108-[0-9a-f]{6}$/);
+  assert.equal(c.createdAt, "2026-11-08T10:00:00.000Z");
+  assert.equal(c.kind, "readiness check record");
+  assert.ok(c.counts.checkPoints >= c.scope.filesRead, "every file read gets at least one check point");
+  assert.equal(c.counts.findings + c.counts.observations, r.findings.filter((f) => !f.accepted).length);
+  assert.ok(c.applies.every((a) => a.why === "Listed in lintsure.config.yaml."));
+  assert.ok(r.findings.every((f, i) => f.id === `F-${String(i + 1).padStart(3, "0")}`));
+  const logged = c.byControl.find((b) => b.framework === "gdpr" && b.control === "Art. 32")!;
+  assert.equal(logged.result, "finding");
+  assert.ok(logged.findingIds.length > 0);
+  const md = toMarkdown(r);
+  assert.match(md, /Readiness check record/);
+  assert.match(md, /not an audit/);
+  assert.doesNotMatch(md, /\b(deficienc|nonconformit|audit report)/i, "audit-only terms must not appear");
 });

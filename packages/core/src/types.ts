@@ -42,6 +42,8 @@ export interface Proposal {
 }
 
 export interface Finding {
+  /** Finding number within this run, for example F-003. */
+  id: string;
   ruleId: string;
   file: string;
   line: number;
@@ -83,4 +85,6 @@ export interface Report {
   filesChecked: number;
   /** Present when the repo has a .lintsure/baseline.json. */
   baseline?: BaselineDiff;
+  /** The dated record of this run: scope, what applies and why, check points, results by control, counts. */
+  record?: import("./record.js").CheckRecord;
 }

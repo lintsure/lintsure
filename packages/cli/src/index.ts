@@ -20,6 +20,8 @@ scan options:
   --new-only          With --fail-on: count only findings that are new since
                       .lintsure/baseline.json
   --github            Print GitHub Actions annotations, so findings show on the lines
+  --save-record       Also save this run's readiness check record to
+                      .lintsure/records/<id>.json, building a dated history (no code inside)
 
 baseline:
   Saves the current open findings to .lintsure/baseline.json in the scanned folder.
@@ -45,7 +47,9 @@ async function main(argv: string[]) {
 
   const config = wanted ? null : await readConfig(path);
   if (config?.skipped.length) console.log(`Skipping, not checked yet: ${config.skipped.join(", ")}`);
-  const report = await scan(path, wanted ?? config?.frameworks ?? ALL_FRAMEWORKS);
+  const why = wanted ? "Chosen with --framework on the command line." : config?.frameworks ? "Listed in lintsure.config.yaml." : undefined;
+  const source = process.env.GITHUB_ACTIONS || process.env.CI ? "ci" : "cli";
+  const report = await scan(path, wanted ?? config?.frameworks ?? ALL_FRAMEWORKS, { why, source });
   const date = new Date().toISOString().slice(0, 10);
 
   if (cmd === "baseline") {
@@ -61,11 +65,18 @@ async function main(argv: string[]) {
   await writeFile("lintsure-report.md", toMarkdown(report));
   if (rest.includes("--json")) await writeFile("lintsure-report.json", JSON.stringify(report, null, 2));
   if (rest.includes("--sarif")) await writeFile("lintsure.sarif", JSON.stringify(toSarif(report, RULES_VERSION), null, 2));
+  if (rest.includes("--save-record") && report.record) {
+    const file = join(path, ".lintsure", "records", `${report.record.id}.json`);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify({ record: report.record, findings: report.findings.map(({ id, ruleId, file, line, status, severity, fingerprint, change, accepted }) => ({ id, ruleId, file, line, status, severity, fingerprint, change, accepted })) }, null, 2) + "\n");
+    console.log(`Record saved to .lintsure/records/${report.record.id}.json (no code inside).`);
+  }
   if (rest.includes("--report")) await writeFile("lintsure-assessment.html", toAssessmentHtml(report, { project: flag("--project") ?? basename(path), date }));
 
   const open = report.findings.filter(isOpen);
   const n = (s: string) => open.filter((f) => f.status === s).length;
   const accepted = report.findings.length - open.length;
+  if (report.record) console.log(`Record ${report.record.id} · ${report.record.createdAt.replace("T", " ").slice(0, 16)} UTC · ${report.record.counts.checkPoints} check points`);
   console.log(`✓ ${open.length} open findings · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
   if (report.baseline) console.log(`  Since the baseline of ${report.baseline.created}: ${report.baseline.newCount} new, ${report.baseline.fixed.length} fixed, ${report.baseline.unchangedCount} unchanged`);
   for (const f of report.findings) console.log(`${(f.accepted && !f.accepted.expired ? "accepted" : f.status).padEnd(8)} ${f.file}:${f.line}  ${f.title}${f.change === "new" ? "  (new)" : ""}`);

@@ -20,7 +20,9 @@ server.tool("scan", "Check a repo's code for compliance gaps. Returns findings w
   { path: z.string().default(".").describe("Repo path"), frameworks: fw }, RO,
   async ({ path, frameworks }) => {
     const root = resolve(path);
-    const report = await scan(root, frameworks ?? (await readConfig(root)).frameworks ?? ALL_FRAMEWORKS);
+    const cfg = (await readConfig(root)).frameworks;
+    const why = frameworks ? "Chosen by the user through their coding agent." : cfg ? "Listed in lintsure.config.yaml." : undefined;
+    const report = await scan(root, frameworks ?? cfg ?? ALL_FRAMEWORKS, { why, source: "mcp" });
     const steps = nextSteps(report).map((s, i) => `${i + 1}. ${s}`).join("\n");
     return reply(toMarkdown(report), JSON.stringify(report),
       `${APPROVAL_RULES}\n\nEach finding above already has its proposal (where, what, why, benefit). Ask the user which one to work on first.\n\nNext steps for the user:\n${steps}`);

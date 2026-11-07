@@ -25,8 +25,8 @@ function page(title: string, body: string, n: number, total: number, project: st
 
 function findingCard(f: Finding, i: number) {
   return `<article class="finding ${f.status}">
-  <p class="meta"><b class="st">${STATUS[f.status]}</b> · ${f.severity} severity · <code>${esc(f.ruleId)}</code></p>
-  <h3>${i}. ${esc(f.title)}</h3>
+  <p class="meta"><b class="st">${f.id} · ${f.status === "gap" ? "Finding" : "Observation"} (${STATUS[f.status]})</b> · risk level ${f.severity} · <code>${esc(f.ruleId)}</code></p>
+  <h3>${esc(f.title)}</h3>
   <p class="where"><code>${esc(f.file)}:${f.line}</code></p>
   <dl>
     <dt>Rules it may affect</dt><dd>${f.controls.map((c) => `${NAME[c.framework]} ${esc(c.id)} (${esc(c.title)})`).join("<br>")}</dd>
@@ -43,14 +43,26 @@ export function toAssessmentHtml(r: Report, opts: AssessmentOptions): string {
   const fws = r.frameworks as FrameworkId[];
   const sorted = [...r.findings].sort((a, b) => SEV.indexOf(a.severity) - SEV.indexOf(b.severity));
 
+  const rec = r.record;
+  const RESULT = { finding: "Finding", observation: "Observation", "no issue found": "No issue found" } as const;
+  const recordBody = rec ? `<p>A dated record of what this run checked and what it saw. It is a readiness record of an automated code check, not an audit.</p>
+<table class="counts"><tr><th>Check points</th><th>Findings</th><th>Observations</th><th>Accepted</th><th>Fixed since baseline</th></tr>
+<tr><td>${rec.counts.checkPoints}</td><td>${rec.counts.findings}</td><td>${rec.counts.observations}</td><td>${rec.counts.accepted}</td><td>${rec.counts.fixedSinceBaseline}</td></tr></table>
+<p>Risk levels of open items: ${rec.counts.byRisk.high} high, ${rec.counts.byRisk.medium} medium, ${rec.counts.byRisk.low} low. A check point is one rule applied to one file (${rec.counts.rulesRun} rules ran).</p>
+<h3>What applies, and why</h3><ul>${rec.applies.map((a) => `<li><b>${NAME[a.framework]}</b>: ${esc(a.why)}</li>`).join("")}</ul>
+<h3>Results by control</h3><p class="small">Finding: a Gap the code itself shows. Observation: a Partial that depends on context a person must confirm. No issue found: the rules found nothing in the files they read, which does not mean the control is met.</p>
+<table><tr><th>Framework</th><th>Control</th><th>Rules</th><th>Check points</th><th>Result</th><th>Items</th></tr>
+${rec.byControl.map((b) => `<tr><td>${NAME[b.framework]}</td><td><code>${esc(b.control)}</code> ${esc(b.title)}</td><td>${b.rules.map((x) => `<code>${esc(x)}</code>`).join(" ")}</td><td>${b.checkPoints}</td><td>${RESULT[b.result]}</td><td>${b.findingIds.join(", ") || "-"}</td></tr>`).join("")}</table>` : "";
   const cover = `<section class="page cover">
   <p class="brand">Lintsure</p>
   <h1>Readiness assessment</h1>
   <p class="sub">${esc(project)}</p>
   <table class="facts">
     <tr><th>Date produced</th><td>${esc(opts.date)}</td></tr>
+    ${rec ? `<tr><th>Record</th><td>${esc(rec.id)}, checked ${esc(rec.createdAt.replace("T", " ").slice(0, 19))} UTC</td></tr>` : ""}
+    ${rec?.scope.commit ? `<tr><th>Code checked</th><td>${rec.scope.branch ? `branch <code>${esc(rec.scope.branch)}</code>, ` : ""}commit <code>${esc(rec.scope.commit)}</code></td></tr>` : ""}
     <tr><th>Frameworks checked</th><td>${fws.map((f) => NAME[f]).join(", ") || "None"}</td></tr>
-    <tr><th>Files checked</th><td>${r.filesChecked}</td></tr>
+    <tr><th>Files checked</th><td>${r.filesChecked}${rec ? `, ${rec.counts.checkPoints} check points` : ""}</td></tr>
     <tr><th>Rules version</th><td>${esc(r.rulesVersion)}</td></tr>
     <tr><th>Status of this report</th><td><b>Draft.</b> Not complete until a qualified person reviews it and signs the review page.</td></tr>
   </table>
@@ -105,7 +117,7 @@ ${r.outside.map((o) => `<tr><td>${NAME[o.framework]} <code>${esc(o.control)}</co
 <p class="small">By signing, the reviewer confirms they reviewed this report. Signing does not turn it into an audit or certification.</p>`;
 
   const pages: [string, string][] = [
-    ["Summary", summary], ["Scope and method", method], ["Possible issues and fixes", findingsBody],
+    ["Summary", summary], ...(recordBody ? [["Readiness check record", recordBody] as [string, string]] : []), ["Scope and method", method], ["Possible issues and fixes", findingsBody],
     ["Framework by framework", byFramework || "<p>No frameworks were checked.</p>"], ["Work outside code", outside],
     ["What to do next", next], ["Human review and sign-off", signoff], ["Disclaimer", `<p>${esc(DISCLAIMER)}</p><p>${esc(NOT_A_VERDICT)}</p><p>Lintsure does not decide whether a framework applies to you or whether you meet it. A person makes the final call. Full disclaimer: https://lintsure.com/disclaimer</p>`],
   ];
