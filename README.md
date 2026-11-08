@@ -62,7 +62,7 @@ claude mcp add lintsure -- npx -y @lintsure/mcp
 
 From source: `git clone`, `npm install`, `npm test`, then `node packages/cli/dist/src/index.js scan /path/to/your-app`.
 
-Then ask: *check this repo for compliance*. Setup for Cursor, Codex and Windsurf, every CLI flag, the report format and the full rules reference are in the **[docs](https://lintsure.com/docs)**.
+Then ask: *check this repo for compliance*. Setup for Cursor, Codex and Devin Desktop (formerly Windsurf), every CLI flag, the report format and the full rules reference are in the **[docs](https://lintsure.com/docs)**.
 
 Run it on every pull request with **[lintsure/action](https://github.com/lintsure/action)**.
 
