@@ -2,6 +2,27 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.1 · 2026-11-09 · Tested on 18 real repos
+
+We ran Lintsure on 15 public apps built with Lovable, Bolt, v0 and Claude Code, and on three large AI apps (Dify, Open WebUI, LobeHub). The first run produced about 1,600 findings on the 15 small apps, and over 90% were our mistakes. This release fixes them, and every fix has a new test or benchmark case.
+
+### Fewer false alarms
+- Package rules read only `package.json`, and skip `peerDependencies`. Lockfiles and peer ranges use `"*"` on purpose (d320369, e94fdfb).
+- Comments, block comments and Python docstrings aren't read as code. A real secret pasted into a comment still counts (d320369).
+- Test files and fixtures are only checked for secrets, and obvious placeholders like `password="test_password"` are skipped (d320369, e94fdfb).
+- Lines marked `# noqa`, `# nosec`, `// NOSONAR` or `lintsure-ignore` are treated as already reviewed (e94fdfb).
+- Safe log lines such as `{ hasToken: !!token }` and `token[:8]` aren't flagged as leaking secrets (d320369).
+- A JWT whose `exp` is set a few lines above `jwt.encode` isn't flagged (3e64e86).
+- `CERT_NONE` listed as a settings option, a method named `eval`, `self.secret = secret`, and `pull_request_target` jobs that only run after merge are no longer flagged (e94fdfb).
+
+### EU AI Act rules find more
+- AI calls are recognised in the forms real apps use: any `*.chat.completions.create`, Gemini `generateContent`, Vercel `generateObject` and `streamObject`, LangChain `chain.invoke`, and direct calls to the OpenAI, Anthropic, Gemini, OpenRouter, Groq, Mistral and DeepSeek APIs (c8c1a9c).
+- "AI call with no record" needs a log or save near the call, not anywhere in the file, and reports once per file (c8c1a9c).
+- "AI-generated images, audio or video" also flags AI calls in files that name an image, voice or video model (c8c1a9c).
+
+### Also
+- `glama.json` and a Dockerfile for MCP directories that run servers in a container (108c26e).
+
 ## 0.3.0 · 2026-11-09 · OWASP Top 10:2025
 
 A fifth framework, in Beta: the OWASP Top 10:2025, covering all ten categories in our own words.

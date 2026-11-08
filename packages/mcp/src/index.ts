@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { AGENT_GUIDANCE, APPROVAL_RULES, ALL_FRAMEWORKS, DISCLAIMER, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
-const server = new McpServer({ name: "lintsure", version: "0.3.0" }, { instructions: AGENT_GUIDANCE });
+const server = new McpServer({ name: "lintsure", version: "0.3.1" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const fw = z.array(z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]])).optional()
