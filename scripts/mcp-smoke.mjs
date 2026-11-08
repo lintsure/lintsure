@@ -22,7 +22,6 @@ const calls = [
   ["classify", {}],
   ["explain_framework", { framework: "gdpr" }],
   ["explain_rule", { ruleId: "pii.logged" }],
-  ["data_map", { path: "fixtures/sample-app" }],
 ];
 for (const [name, args] of calls) {
   const r = await call("tools/call", { name, arguments: args });

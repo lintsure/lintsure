@@ -11,7 +11,6 @@ export * from "./review.js";
 export { toSarif } from "./sarif.js";
 import { buildRecord, type RecordOptions } from "./record.js";
 export * from "./record.js";
-export * from "./datamap.js";
 
 /** Heading above every proposed change, in every report. Tests check it is there for each finding. */
 export const PROPOSAL_HEADING = "Proposed change. Nothing changes until you approve it.";
@@ -21,7 +20,7 @@ export { rules };
 export * from "./guidance.js";
 export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
-export const RULES_VERSION = "0.4.0";
+export const RULES_VERSION = "0.3.0";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
