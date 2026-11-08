@@ -2,6 +2,7 @@
 // framework it touches. Mappings are a first draft: the auditor must review each
 // one (mappedBy / reviewedAt) before a framework leaves Beta.
 import type { Rule } from "../types.js";
+import { owaspForExisting, owaspRules } from "./owasp.js";
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 // Beta: mapped by us, awaiting review by a qualified compliance professional.
@@ -271,3 +272,6 @@ rules.push(
   },
 );
 
+// OWASP Top 10:2025: map the rules above, then add the OWASP rules.
+for (const r of rules) r.controls.push(...(owaspForExisting[r.id] ?? []));
+rules.push(...owaspRules);

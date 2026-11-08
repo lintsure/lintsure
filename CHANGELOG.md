@@ -2,6 +2,29 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.0 · 2026-11-09 · OWASP Top 10:2025
+
+A fifth framework, in Beta: the OWASP Top 10:2025, covering all ten categories in our own words.
+
+### New rules (31)
+- A01 Broken Access Control: file paths from request data, open redirects, server-side request forgery, CSRF switched off, world-writable files, permissions read from cookies.
+- A02 Security Misconfiguration: Django accepting any host, default or placeholder secret keys, XML parsers that load external entities.
+- A03 Software Supply Chain Failures: dependencies with no version limit, install scripts that download code, unpinned third-party GitHub Actions, pull_request_target workflows that check out untrusted code.
+- A04 Cryptographic Failures: predictable random numbers for secrets, weak ciphers and ECB mode, JWTs accepted without checking the signature.
+- A05 Injection: shell commands built from strings, eval and new Function, HTML inserted without escaping, templates built from request data, query objects taken straight from the request.
+- A06 Insecure Design: uploads with no type or size limit, whole request bodies saved to a model.
+- A07 Authentication Failures: passwords in code, JWTs with no expiry.
+- A08 Software or Data Integrity Failures: unsafe deserialisation, third-party scripts without integrity checks.
+- A09 Security Logging and Alerting Failures: secrets in logs, raw request data in logs.
+- A10 Mishandling of Exceptional Conditions: errors caught and ignored, error details sent to users.
+
+### Also
+- Eleven existing rules now also map to the OWASP categories they relate to.
+- Each category lists what code can't show (for example ownership checks between users, known vulnerable dependencies, login protections, alerting) under work outside code.
+- Rules that depend on request data are a Gap when request data is on the same line, and Partial otherwise.
+- Every new rule has a planted example, a near miss and benchmark cases. 45 rules are now scored in the benchmark.
+- Mapped to the OWASP Top 10:2025 in our own words. Not affiliated with or endorsed by the OWASP Foundation.
+
 ## 0.2.0 · 2026-11-08 · Reports you can act on, rules you can measure
 
 ### Readiness check record

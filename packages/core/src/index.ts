@@ -20,7 +20,7 @@ export { rules };
 export * from "./guidance.js";
 export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
-export const RULES_VERSION = "0.2.0";
+export const RULES_VERSION = "0.3.0";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -48,7 +48,7 @@ export function nextSteps(r: Report): string[] {
     "Ask a qualified compliance professional to review the results before you rely on them.",
   ].filter(Boolean);
 }
-export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "soc2", "iso-27001", "eu-ai-act"];
+export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "soc2", "iso-27001", "eu-ai-act", "owasp-top10"];
 
 /** Reads the frameworks list from lintsure.config.yaml in the repo root, if there is one.
  *  Only the simple list form is supported:

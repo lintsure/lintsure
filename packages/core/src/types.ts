@@ -3,7 +3,7 @@
 
 export type Status = "met" | "partial" | "gap" | "outside";
 export type Severity = "high" | "medium" | "low";
-export type FrameworkId = "gdpr" | "soc2" | "iso-27001" | "eu-ai-act";
+export type FrameworkId = "gdpr" | "soc2" | "iso-27001" | "eu-ai-act" | "owasp-top10";
 
 export interface Control { framework: FrameworkId; id: string; title: string }
 

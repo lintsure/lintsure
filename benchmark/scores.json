@@ -73,5 +73,155 @@
     "precision": 100,
     "recall": 100,
     "cases": 4
+  },
+  "path.user-input": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "redirect.open": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "ssrf.user-url": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "csrf.disabled": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "fs.world-writable": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "config.allowed-hosts-any": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 3
+  },
+  "config.default-secret-key": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "xml.external-entities": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "deps.unpinned-version": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "deps.install-script": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "ci.action-unpinned": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "crypto.weak-random-token": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6
+  },
+  "crypto.weak-cipher": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6
+  },
+  "jwt.unverified": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "cmd.shell-built": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7
+  },
+  "code.eval": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6
+  },
+  "xss.raw-html": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7
+  },
+  "template.user-string": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 3
+  },
+  "nosql.operator-input": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "upload.unrestricted": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "mass-assignment": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "auth.hardcoded-password": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7
+  },
+  "jwt.no-expiry": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "deserialize.unsafe": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7
+  },
+  "html.script-no-sri": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 3
+  },
+  "cookie.trusted-role": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "log.secret": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
+  },
+  "log.injection": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4
+  },
+  "error.empty-catch": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6
+  },
+  "error.stack-to-client": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5
   }
 }

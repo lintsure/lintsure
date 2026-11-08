@@ -103,12 +103,30 @@
   },
   "sql.string-built": {
     "flag": [
-      { "line": "db.query(`SELECT * FROM users WHERE id = ${req.params.id}`);", "status": "gap" },
-      { "line": "cursor.execute(f\"SELECT * FROM orders WHERE user_id = {request.args['id']}\")", "status": "gap" },
-      { "line": "db.query(\"DELETE FROM sessions WHERE token = '\" + body.token + \"'\");", "status": "gap" },
-      { "line": "rows = await query_db(f\"SELECT {_USAGE_SUM} FROM usage_events WHERE {where}\")", "status": "partial" },
-      { "line": "with_site = await _scalar(f\"SELECT COUNT(*) FROM companies WHERE {has_site}\")", "status": "partial" },
-      { "line": "db.query(`SELECT * FROM ${TABLE} WHERE active = 1`);", "status": "partial" }
+      {
+        "line": "db.query(`SELECT * FROM users WHERE id = ${req.params.id}`);",
+        "status": "gap"
+      },
+      {
+        "line": "cursor.execute(f\"SELECT * FROM orders WHERE user_id = {request.args['id']}\")",
+        "status": "gap"
+      },
+      {
+        "line": "db.query(\"DELETE FROM sessions WHERE token = '\" + body.token + \"'\");",
+        "status": "gap"
+      },
+      {
+        "line": "rows = await query_db(f\"SELECT {_USAGE_SUM} FROM usage_events WHERE {where}\")",
+        "status": "partial"
+      },
+      {
+        "line": "with_site = await _scalar(f\"SELECT COUNT(*) FROM companies WHERE {has_site}\")",
+        "status": "partial"
+      },
+      {
+        "line": "db.query(`SELECT * FROM ${TABLE} WHERE active = 1`);",
+        "status": "partial"
+      }
     ],
     "pass": [
       "db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);",
@@ -193,6 +211,363 @@
     "pass": [
       "const sentiment = analyzeSentiment(reviewText);",
       "faces = detect_faces(photo)"
+    ]
+  },
+  "path.user-input": {
+    "flag": [
+      "fs.readFile(req.query.file, cb);",
+      "return send_file(request.args[\"path\"])",
+      "res.sendFile(req.params.name);"
+    ],
+    "pass": [
+      "fs.readFile(path.join(BASE, \"readme.md\"), cb);",
+      "res.sendFile(\"index.html\", { root: PUBLIC });"
+    ]
+  },
+  "redirect.open": {
+    "flag": [
+      "res.redirect(req.query.next);",
+      "return redirect(request.args.get(\"next\"))"
+    ],
+    "pass": [
+      "res.redirect(\"/dashboard\");",
+      "return redirect(url_for(\"home\"))"
+    ]
+  },
+  "ssrf.user-url": {
+    "flag": [
+      "await fetch(req.body.url);",
+      "r = requests.get(request.args[\"url\"])",
+      "axios.get(req.query.target)"
+    ],
+    "pass": [
+      "await fetch(\"https://api.example.com/rates\");",
+      "axios.get(`${API}/users`)"
+    ]
+  },
+  "csrf.disabled": {
+    "flag": [
+      "@csrf_exempt",
+      "WTF_CSRF_ENABLED = False",
+      "const opts = { csrf: false };"
+    ],
+    "pass": [
+      "const opts = { csrf: true };",
+      "WTF_CSRF_ENABLED = True"
+    ]
+  },
+  "fs.world-writable": {
+    "flag": [
+      "fs.chmodSync(\"/tmp/x\", 0o777);",
+      "os.chmod(path, 0o777)"
+    ],
+    "pass": [
+      "fs.chmodSync(\"/tmp/x\", 0o600);",
+      "os.chmod(path, 0o755)"
+    ]
+  },
+  "config.allowed-hosts-any": {
+    "flag": [
+      "ALLOWED_HOSTS = [\"*\"]"
+    ],
+    "pass": [
+      "ALLOWED_HOSTS = [\"lintsure.com\"]",
+      "ALLOWED_HOSTS = os.environ[\"HOSTS\"].split(\",\")"
+    ]
+  },
+  "config.default-secret-key": {
+    "flag": [
+      "SECRET_KEY = \"django-insecure-abc123\"",
+      "app.use(session({ secret: \"keyboard cat\" }));",
+      "JWT_SECRET=changeme"
+    ],
+    "pass": [
+      "SECRET_KEY = os.environ[\"SECRET_KEY\"]",
+      "app.use(session({ secret: process.env.SESSION_SECRET }));"
+    ]
+  },
+  "xml.external-entities": {
+    "flag": [
+      "parser = etree.XMLParser(resolve_entities=True)",
+      "libxmljs.parseXml(xml, { noent: true })",
+      "root = xml.etree.ElementTree.fromstring(body)"
+    ],
+    "pass": [
+      "root = defusedxml.ElementTree.fromstring(body)",
+      "parser = etree.XMLParser(resolve_entities=False)"
+    ]
+  },
+  "deps.unpinned-version": {
+    "flag": [
+      "    \"left-pad\": \"*\",",
+      "    \"@scope/pkg\": \"latest\""
+    ],
+    "pass": [
+      "    \"left-pad\": \"^1.3.0\",",
+      "  \"version\": \"1.0.0\","
+    ]
+  },
+  "deps.install-script": {
+    "flag": [
+      "    \"postinstall\": \"curl -s https://x.sh | sh\"",
+      "    \"preinstall\": \"wget https://x/setup\""
+    ],
+    "pass": [
+      "    \"postinstall\": \"node scripts/setup.js\"",
+      "    \"build\": \"tsc\""
+    ]
+  },
+  "ci.action-unpinned": {
+    "flag": [
+      "      - uses: some-org/deploy-action@v2",
+      "  - uses: someone/thing@main"
+    ],
+    "pass": [
+      "      - uses: actions/checkout@v4",
+      "      - uses: some-org/deploy-action@8f4b7f84864484a7bf31766abe9204da3cbe65b3 # v2",
+      "      - uses: ./local-action"
+    ]
+  },
+  "crypto.weak-random-token": {
+    "flag": [
+      "const resetToken = Math.random().toString(36);",
+      "otp = random.randint(100000, 999999)",
+      "const sessionId = Math.random();"
+    ],
+    "pass": [
+      "const resetToken = crypto.randomBytes(32).toString(\"hex\");",
+      "const jitter = Math.random() * 100;",
+      "otp = secrets.randbelow(1000000)"
+    ]
+  },
+  "crypto.weak-cipher": {
+    "flag": [
+      "const c = crypto.createCipher(\"aes192\", key);",
+      "cipher = AES.new(key, AES.MODE_ECB)",
+      "crypto.createCipheriv(\"des-ede3\", key, iv);",
+      "cipher = DES.new(key, DES.MODE_CBC, iv)"
+    ],
+    "pass": [
+      "crypto.createCipheriv(\"aes-256-gcm\", key, iv);",
+      "SELECT * FROM users ORDER BY created_at DESC"
+    ]
+  },
+  "jwt.unverified": {
+    "flag": [
+      {
+        "line": "payload = jwt.decode(token, options={\"verify_signature\": False})",
+        "status": "gap"
+      },
+      {
+        "line": "jwt.decode(token, key, algorithms=[\"none\"])",
+        "status": "gap"
+      },
+      {
+        "line": "const claims = jwt.decode(token);",
+        "status": "partial"
+      }
+    ],
+    "pass": [
+      "const claims = jwt.verify(token, key, { algorithms: [\"RS256\"] });",
+      "payload = jwt.decode(token, key, algorithms=[\"RS256\"])"
+    ]
+  },
+  "cmd.shell-built": {
+    "flag": [
+      {
+        "line": "exec(`convert ${req.body.file} out.png`);",
+        "status": "gap"
+      },
+      {
+        "line": "subprocess.run(f\"ls {request.args['dir']}\", shell=True)",
+        "status": "gap"
+      },
+      {
+        "line": "execSync(`git log ${branch}`);",
+        "status": "partial"
+      },
+      {
+        "line": "os.system(\"rm -rf \" + folder)",
+        "status": "partial"
+      }
+    ],
+    "pass": [
+      "execFile(\"convert\", [input, \"out.png\"]);",
+      "subprocess.run([\"ls\", directory])",
+      "const m = pattern.exec(text);"
+    ]
+  },
+  "code.eval": {
+    "flag": [
+      {
+        "line": "eval(req.query.code);",
+        "status": "gap"
+      },
+      {
+        "line": "const fn = new Function(\"a\", body);",
+        "status": "partial"
+      },
+      {
+        "line": "result = eval(expression)",
+        "status": "partial"
+      }
+    ],
+    "pass": [
+      "model.eval()",
+      "const data = JSON.parse(text);",
+      "evaluate(expression)"
+    ]
+  },
+  "xss.raw-html": {
+    "flag": [
+      "el.innerHTML = userBio;",
+      "<div dangerouslySetInnerHTML={{ __html: html }} />",
+      "<div v-html=\"bio\"></div>",
+      "{{ bio | safe }}",
+      "document.write(msg);"
+    ],
+    "pass": [
+      "el.textContent = userBio;",
+      "<div>{bio}</div>"
+    ]
+  },
+  "template.user-string": {
+    "flag": [
+      "return render_template_string(request.args.get(\"t\"))",
+      "render_template_string(f\"<h1>{name}</h1>\")"
+    ],
+    "pass": [
+      "return render_template(\"page.html\", name=name)"
+    ]
+  },
+  "nosql.operator-input": {
+    "flag": [
+      "User.find(req.body);",
+      "db.users.findOne(req.query)",
+      "{ $where: \"this.age > \" + age }"
+    ],
+    "pass": [
+      "User.find({ email: String(req.body.email) });"
+    ]
+  },
+  "upload.unrestricted": {
+    "flag": [
+      "const upload = multer({ dest: \"uploads/\" });",
+      "const upload = multer();"
+    ],
+    "pass": [
+      "const upload = multer({ dest: \"uploads/\", limits: { fileSize: 1e6 } });",
+      "const upload = multer({ storage, fileFilter });"
+    ]
+  },
+  "mass-assignment": {
+    "flag": [
+      "await User.create(req.body);",
+      "Object.assign(user, req.body);",
+      "user = User(**request.json)"
+    ],
+    "pass": [
+      "await User.create({ name: req.body.name });",
+      "user = User(name=data[\"name\"])"
+    ]
+  },
+  "auth.hardcoded-password": {
+    "flag": [
+      "const dbConfig = { password: \"Hunter2024\" };",
+      "DB_PASS = \"s3cretPass\"",
+      "pwd = \"admin123\""
+    ],
+    "pass": [
+      "const field = { type: \"password\", label: \"Password\" };",
+      "password = os.environ[\"DB_PASSWORD\"]",
+      "password: process.env.DB_PASSWORD,",
+      "<input placeholder=\"your-password\" />"
+    ]
+  },
+  "jwt.no-expiry": {
+    "flag": [
+      "const t = jwt.sign({ id: 1 }, secret);",
+      "token = jwt.encode({\"sub\": uid}, key)"
+    ],
+    "pass": [
+      "const t = jwt.sign({ id: 1 }, secret, { expiresIn: \"15m\" });",
+      "token = jwt.encode({\"sub\": uid, \"exp\": exp}, key)"
+    ]
+  },
+  "deserialize.unsafe": {
+    "flag": [
+      "data = pickle.loads(request.data)",
+      "cfg = yaml.load(text)",
+      "obj = marshal.loads(blob)",
+      "const o = serialize.unserialize(body);"
+    ],
+    "pass": [
+      "data = json.loads(text)",
+      "cfg = yaml.safe_load(text)",
+      "cfg = yaml.load(text, Loader=yaml.SafeLoader)"
+    ]
+  },
+  "html.script-no-sri": {
+    "flag": [
+      "<script src=\"https://cdn.example.com/lib.js\"></script>"
+    ],
+    "pass": [
+      "<script src=\"https://cdn.example.com/lib.js\" integrity=\"sha384-abc\" crossorigin=\"anonymous\"></script>",
+      "<script src=\"/app.js\"></script>"
+    ]
+  },
+  "cookie.trusted-role": {
+    "flag": [
+      "if (req.cookies.isAdmin) grantAll();",
+      "role = request.COOKIES.get(\"role\")"
+    ],
+    "pass": [
+      "if (req.user.isAdmin) grantAll();",
+      "const theme = req.cookies.theme;"
+    ]
+  },
+  "log.secret": {
+    "flag": [
+      "logger.info(\"auth header\", req.headers.authorization);",
+      "console.log(`token ${token}`);",
+      "logging.debug(\"key %s\", api_key)"
+    ],
+    "pass": [
+      "logger.info(\"token refreshed\", { userId });",
+      "console.log(\"Missing API key\");"
+    ]
+  },
+  "log.injection": {
+    "flag": [
+      "logger.info(\"search\", req.query);",
+      "logging.info(request.args)"
+    ],
+    "pass": [
+      "logger.info(\"search\", { q: req.query.q });",
+      "logger.info(\"search done\");"
+    ]
+  },
+  "error.empty-catch": {
+    "flag": [
+      "try { risky(); } catch (e) {}",
+      "} catch {}",
+      "except Exception: pass",
+      "    except: pass"
+    ],
+    "pass": [
+      "} catch (e) { logger.error(e); }",
+      "except ValueError:"
+    ]
+  },
+  "error.stack-to-client": {
+    "flag": [
+      "res.status(500).send(err.stack);",
+      "res.json({ error: err.stack });",
+      "return traceback.format_exc()"
+    ],
+    "pass": [
+      "res.status(500).json({ error: \"Something went wrong\" });",
+      "logger.error(traceback.format_exc())"
     ]
   }
 }

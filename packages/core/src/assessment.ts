@@ -13,7 +13,7 @@ export interface AssessmentOptions {
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const NAME: Record<FrameworkId, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", soc2: "SOC 2", "iso-27001": "ISO/IEC 27001" };
+const NAME: Record<FrameworkId, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", soc2: "SOC 2", "iso-27001": "ISO/IEC 27001", "owasp-top10": "OWASP Top 10:2025" };
 const STATUS: Record<string, string> = { gap: "Gap", partial: "Partial", met: "Met", outside: "Outside code" };
 const SEV = ["high", "medium", "low"] as const;
 const SKIPPED = "node_modules, .git, dist, build, out, .output, .next, .nuxt, .svelte-kit, .astro, .vercel, .netlify, .wrangler, .turbo, .cache, venv, .venv, __pycache__, coverage";

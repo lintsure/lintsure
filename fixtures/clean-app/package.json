@@ -1,0 +1,5 @@
+{
+  "name": "clean-app",
+  "scripts": { "build": "tsc" },
+  "dependencies": { "left-pad": "^1.3.0" }
+}

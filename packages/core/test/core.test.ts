@@ -29,7 +29,7 @@ test("near misses in clean code are not flagged", async () => {
 
 test("known findings stay put", async () => {
   const r = await scan(root);
-  const got = r.findings.filter((f) => f.file !== "src/more.ts").map((f) => `${f.ruleId}@${f.file}:${f.line}`);
+  const got = r.findings.filter((f) => !/^(src\/(more|owasp|page)\.|package\.json|\.github\/)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
     "ai.call-not-logged@src/ai.ts:3",
     "ai.automated-decision@src/ai.ts:4",
@@ -83,7 +83,7 @@ test("outside-code items come from obligations code can't prove", () => {
 
 test("classifier suggests, with reasons", () => {
   const s = classify({ euUsers: true, personalData: true, usesAI: true, decisionArea: "credit", b2bCustomers: true, usMarket: true });
-  assert.deepEqual(s.map((x) => x.framework), ["eu-ai-act", "gdpr", "soc2"]);
+  assert.deepEqual(s.map((x) => x.framework), ["eu-ai-act", "gdpr", "soc2", "owasp-top10"]);
   assert.match(s[0].reason, /high-risk/);
   assert.deepEqual(classify({ usesAI: true }), []);
 });

