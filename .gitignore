@@ -3,3 +3,7 @@ dist/
 *.tsbuildinfo
 lintsure-report.*
 lintsure-assessment.html
+
+browser-smoke.png
+lintsure-browser-check.*
+lintsure-data-map.*
