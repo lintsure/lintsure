@@ -14,10 +14,12 @@
     "build": "tsc -b packages/core packages/cli packages/mcp",
     "test": "npm run build && node --test \"packages/core/dist/test/**/*.test.js\" && node scripts/mcp-smoke.mjs && node scripts/benchmark.mjs",
     "scan:sample": "node packages/cli/dist/src/index.js scan fixtures/sample-app",
-    "benchmark": "npm run build && node scripts/benchmark.mjs"
+    "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "test:browser": "npm run build && node scripts/browser-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "playwright": "^1.65.0",
     "typescript": "^5.7.0"
   }
 }

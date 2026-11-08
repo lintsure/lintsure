@@ -6,9 +6,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { AGENT_GUIDANCE, APPROVAL_RULES, ALL_FRAMEWORKS, DISCLAIMER, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
+import { AGENT_GUIDANCE, APPROVAL_RULES, ALL_FRAMEWORKS, DISCLAIMER, buildDataMap, toDataMapMarkdown, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
-const server = new McpServer({ name: "lintsure", version: "0.3.0" }, { instructions: AGENT_GUIDANCE });
+const server = new McpServer({ name: "lintsure", version: "0.4.0" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const fw = z.array(z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]])).optional()
@@ -27,6 +27,10 @@ server.tool("scan", "Check a repo's code for compliance gaps. Returns findings w
     return reply(toMarkdown(report), JSON.stringify(report),
       `${APPROVAL_RULES}\n\nEach finding above already has its proposal (where, what, why, benefit). Ask the user which one to work on first.\n\nNext steps for the user:\n${steps}`);
   });
+
+server.tool("data_map", "Map where personal data goes in a repo: each place a personal data field (email, phone, name, address...) reaches logs, analytics, a database, an email or payment provider, an AI model or an outside API, with the file and line. A starting point for a record of processing, not the record itself.",
+  { path: z.string().default(".").describe("Repo path") }, RO,
+  async ({ path }) => reply(toDataMapMarkdown(await buildDataMap(resolve(path))), "Present this as a map to check, not a complete record. Ask the user before changing anything."));
 
 server.tool("explain_rule", "Explain a Lintsure rule: what it checks, which controls it maps to, and how to fix it.",
   { ruleId: z.string() }, RO,

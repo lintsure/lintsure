@@ -1,6 +1,6 @@
 {
   "name": "lintsure",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Readiness checks for the code your AI writes: EU AI Act, GDPR, SOC 2, ISO 27001. Runs locally. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
@@ -13,7 +13,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@lintsure/core": "0.3.0"
+    "@lintsure/core": "0.4.0"
   },
   "author": "Lintsure <hello@lintsure.com>",
   "homepage": "https://lintsure.com/docs",

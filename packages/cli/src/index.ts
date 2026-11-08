@@ -3,10 +3,13 @@
 // Writes reports into the current folder. Never sends anything over the network.
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
+import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, buildDataMap, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toDataMapHtml, toDataMapMarkdown, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
+import { browserCheck, toBrowserMarkdown } from "./browser.js";
 
 const HELP = `lintsure scan [path] [options]
 lintsure baseline [path]
+lintsure map [path]           Map where personal data goes in your code
+lintsure browser <url>        Open your app in a browser and check trackers, consent and headers
 
 scan options:
   --framework <ids>   Comma list: ${ALL_FRAMEWORKS.join(", ")}
@@ -23,6 +26,17 @@ scan options:
   --save-record       Also save this run's readiness check record to
                       .lintsure/records/<id>.json, building a dated history (no code inside)
 
+map:
+  Writes lintsure-data-map.html (a diagram) and lintsure-data-map.md: each place a
+  personal data field reaches logs, analytics, a database, email, payments, an AI
+  model or an outside API, with the file and line.
+
+browser:
+  Needs Playwright: npm i -D playwright && npx playwright install chromium
+  Opens the URL as a new visitor, records trackers and tracking cookies before any
+  choice, clicks Reject if it finds it, and checks security headers. Writes
+  lintsure-browser-check.md, .json and .png. Only visits the URL you give it.
+
 baseline:
   Saves the current open findings to .lintsure/baseline.json in the scanned folder.
   Later scans show what is new, fixed or unchanged. The file holds rule ids, file
@@ -38,6 +52,34 @@ const VALUE_FLAGS = ["--framework", "--fail-on", "--project"];
 
 async function main(argv: string[]) {
   const [cmd, ...rest] = argv;
+  if (cmd === "browser") {
+    const url = argv[1];
+    if (!url || !/^https?:\/\//.test(url)) { console.error("Give the full address of your app, for example: lintsure browser http://localhost:3000"); return 2; }
+    const r = await browserCheck(url, { screenshot: "lintsure-browser-check.png" });
+    await writeFile("lintsure-browser-check.md", toBrowserMarkdown(r));
+    await writeFile("lintsure-browser-check.json", JSON.stringify(r, null, 2));
+    console.log(`✓ ${r.findings.length} findings for ${url}`);
+    console.log(`  Before any choice: ${r.beforeConsent.trackers.join(", ") || "no known trackers"}`);
+    console.log(`  Reject button: ${r.rejectButton ? `"${r.rejectButton}", clicked` : "not found"}`);
+    if (r.afterReject) console.log(`  After rejecting: ${r.afterReject.trackers.join(", ") || "no known trackers"}`);
+    for (const f of r.findings) console.log(`${f.severity.padEnd(7)} ${f.title}`);
+    console.log("Report saved to lintsure-browser-check.md (screenshot: lintsure-browser-check.png)");
+    console.log("\nLintsure is a readiness tool, not an audit, a certification or legal advice. This check looked at one page as a new visitor and recognises well-known trackers only. Have a qualified person review the results before any decision.");
+    return 0;
+  }
+  if (cmd === "map") {
+    const path = resolve(argv[1] && !argv[1].startsWith("--") ? argv[1] : ".");
+    const m = await buildDataMap(path);
+    await writeFile("lintsure-data-map.html", toDataMapHtml(m, basename(path)));
+    await writeFile("lintsure-data-map.md", toDataMapMarkdown(m));
+    const by = new Map<string, number>();
+    for (const f of m.flows) by.set(`${f.field} → ${f.destination}`, (by.get(`${f.field} → ${f.destination}`) ?? 0) + 1);
+    console.log(`✓ ${m.flows.length} places where personal data reaches a destination, in ${m.filesRead} files`);
+    for (const [k, n] of [...by].sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(3)}  ${k}`);
+    console.log("Map saved to lintsure-data-map.html (open it in a browser) and lintsure-data-map.md");
+    console.log("It reads code call by call and can miss data passed between files. Check each flow. Not legal advice.");
+    return 0;
+  }
   if (cmd !== "scan" && cmd !== "baseline") { console.log(HELP); return cmd ? 2 : 0; }
   const flag = (n: string) => { const i = rest.indexOf(n); return i >= 0 ? rest[i + 1] : undefined; };
   const path = resolve(rest.find((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1])) ?? ".");

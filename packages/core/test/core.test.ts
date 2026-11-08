@@ -268,3 +268,20 @@ test("readiness check record: dated, scoped, explains what applies, counts check
   assert.match(md, /not an audit/);
   assert.doesNotMatch(md, /\b(deficienc|nonconformit|audit report)/i, "audit-only terms must not appear");
 });
+
+import { buildDataMap, flowsInLine, callSpan, toDataMapHtml } from "../src/index.js";
+
+test("data map: finds personal data reaching destinations, across a multi-line call, and ignores plain text", async () => {
+  assert.deepEqual(flowsInLine("posthog.identify(user.id, { email: user.email });").map((f) => f.destination), ["PostHog"]);
+  assert.deepEqual(flowsInLine("console.error(\"email failed\", err)"), [], "the word email in a message is not data");
+  const lines = ["await supabase.from(\"leads\").insert({", "  name: body.full_name,", "  email: body.email,", "});"];
+  const f = flowsInLine(lines[0], callSpan(lines, 0));
+  assert.deepEqual(f.map((x) => x.field).sort(), ["Email", "Full name"]);
+  assert.equal(f[0].destination, "Database");
+  assert.equal(flowsInLine("await fetch(\"https://api.resend.com/emails\", { body: JSON.stringify({ to: user.email }) })")[0].destination, "Resend");
+  const m = await buildDataMap(root);
+  assert.ok(m.flows.some((x) => x.field === "Email" && x.destination === "PostHog"));
+  const html = toDataMapHtml(m, "sample");
+  assert.match(html, /Where personal data goes/);
+  assert.match(html, /not the record itself/);
+});

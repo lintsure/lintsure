@@ -2,6 +2,19 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.4.0 · 2026-11-09 · Data map and browser check
+
+### Data map
+- `lintsure map` draws where personal data goes: each call to logs, analytics, a database, an email or payment provider, an AI model, file storage or an outside API that contains a personal data field, with the file and line.
+- Reads whole calls up to the closing bracket, so multi-line calls count. Names well-known services (Resend, Stripe, OpenAI and others) from the request URL.
+- Writes an HTML diagram and a Markdown list. Also available to coding agents as the `data_map` MCP tool.
+
+### Browser check
+- `lintsure browser <url>` opens your app in a real browser on your machine, as a new visitor.
+- Reports well-known trackers and tracking cookies that load before any choice on the cookie banner, finds and clicks Reject, and reports trackers that still load afterwards.
+- Checks security headers: Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options, Referrer-Policy and X-Frame-Options.
+- Uses Playwright, an optional add-on found in your own project. Only visits the address you give it.
+
 ## 0.3.0 · 2026-11-09 · OWASP Top 10:2025
 
 A fifth framework, in Beta: the OWASP Top 10:2025, covering all ten categories in our own words.
