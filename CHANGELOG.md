@@ -2,7 +2,7 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
-## 0.3.1 · 2026-11-09 · Tested on 18 real repos
+## 0.3.1 · 2026-11-08 · Tested on 18 real repos
 
 We ran Lintsure on 15 public apps built with Lovable, Bolt, v0 and Claude Code, and on three large AI apps (Dify, Open WebUI, LobeHub). The first run produced about 1,600 findings on the 15 small apps, and over 90% were our mistakes. This release fixes them, and every fix has a new test or benchmark case.
 
@@ -23,7 +23,7 @@ We ran Lintsure on 15 public apps built with Lovable, Bolt, v0 and Claude Code, 
 ### Also
 - `glama.json` and a Dockerfile for MCP directories that run servers in a container (108c26e).
 
-## 0.3.0 · 2026-11-09 · OWASP Top 10:2025
+## 0.3.0 · 2026-11-08 · OWASP Top 10:2025
 
 A fifth framework, in Beta: the OWASP Top 10:2025, covering all ten categories in our own words.
 

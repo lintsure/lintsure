@@ -91,5 +91,5 @@ export const owaspTop10: FrameworkKnowledge = {
     "Lintsure reads one line or one file at a time. Data passed through helpers in other files won't be followed, so some problems will be missed.",
     "Saying an app is 'OWASP compliant' isn't meaningful. Describe what was checked and what wasn't.",
   ],
-  checkedOn: "2026-11-09",
+  checkedOn: "2026-11-08",
 };
