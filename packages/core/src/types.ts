@@ -23,6 +23,9 @@ export interface Rule {
   /** Optional: a line hit is dropped when this appears within 8 lines above or 3 below
    *  (e.g. an exp claim set in the payload just before jwt.encode). */
   unlessNear?: RegExp;
+  /** Optional: a hit is dropped when the nearest enclosing JSON key above it matches
+   *  (e.g. "peerDependencies", where "*" is the normal range). */
+  unlessInKey?: RegExp;
   /** Line rule: true when the line breaks the rule. Must be pure: same line, same answer. */
   test?(line: string): boolean | "partial";
   /** File rule, for checks that need context (e.g. "an AI call with no logging in this file").

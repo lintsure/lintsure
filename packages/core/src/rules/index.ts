@@ -127,7 +127,7 @@ export const rules: Rule[] = [
     fix: "Remove the override and trust a proper certificate. For self-signed certs in tests, scope it to the test only.",
     note: "With checks off, anyone on the network path can read or change the traffic.",
     extensions: [...CODE, ".env"],
-    test: (l) => /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|\b(requests|httpx|session|client|Client|AsyncClient|urlopen)\b.*\bverify\s*=\s*False|InsecureSkipVerify\s*:\s*true|CERT_NONE/.test(l),
+    test: (l) => /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|\b(requests|httpx|session|client|Client|AsyncClient|urlopen)\b.*\bverify\s*=\s*False|InsecureSkipVerify\s*:\s*true|verify_mode\s*=\s*ssl\.CERT_NONE|cert_reqs\s*=\s*ssl\.CERT_NONE/.test(l), // naming CERT_NONE in a settings map isn't switching it on
     ...DRAFT,
   },
   {

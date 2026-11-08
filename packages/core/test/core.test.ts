@@ -286,3 +286,27 @@ test("a JWT whose exp is set a few lines above is not flagged", async () => {
     assert.deepEqual(hits, [18]);
   } finally { await rm(dir, { recursive: true }); }
 });
+
+test("peer dependencies and placeholder secrets in tests are not flagged", async () => {
+  const { mkdtemp, writeFile, mkdir, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-peer-"));
+  await writeFile(join(dir, "package.json"), JSON.stringify({ dependencies: { a: "latest" }, peerDependencies: { react: "*" } }, null, 2));
+  await mkdir(join(dir, "tests"));
+  await writeFile(join(dir, "tests", "test_db.py"), 'conn = connect(password="test_password")\n');
+  try {
+    const f = (await scan(dir)).findings.map((x) => `${x.ruleId}@${x.file}:${x.line}`);
+    assert.deepEqual(f, ["deps.unpinned-version@package.json:3"]);
+  } finally { await rm(dir, { recursive: true }); }
+});
+
+test("lines marked noqa, nosec or lintsure-ignore are treated as reviewed", async () => {
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-noqa-"));
+  await writeFile(join(dir, "m.py"), ["v = pickle.loads(blob)  # noqa: S301", "w = pickle.loads(blob)  # nosec", "x = pickle.loads(blob)"].join("\n"));
+  try {
+    const hits = (await scan(dir)).findings.filter((f) => f.ruleId === "deserialize.unsafe").map((f) => f.line);
+    assert.deepEqual(hits, [3]);
+  } finally { await rm(dir, { recursive: true }); }
+});

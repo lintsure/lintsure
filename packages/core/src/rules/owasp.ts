@@ -58,7 +58,9 @@ export const owaspRules: Rule[] = [
   rule({ id: "config.default-secret-key", title: "Default or placeholder secret key", status: "gap", severity: "high", controls: [A02, A07],
     fix: "Generate a long random secret per environment and load it from an environment variable or secret manager.",
     note: "With a known secret key, attackers can forge sessions, cookies or signed tokens (CWE-1394).", extensions: [...CODE, ".env"],
-    test: (l) => /\b(SECRET_KEY|JWT_SECRET|SESSION_SECRET|secret)\s*[:=]\s*["']?(django-insecure-|changeme|change-me|secret\b|mysecret|keyboard cat|dev-secret|supersecret)/i.test(l) }),
+    // The value must be a quoted literal, or an env-style KEY=value line: `self.secret = secret` is a variable.
+    test: (l) => /\b(SECRET_KEY|JWT_SECRET|SESSION_SECRET|secret)\s*[:=]\s*["'](django-insecure-|changeme|change-me|secret\b|mysecret|keyboard cat|dev-secret|supersecret)/i.test(l)
+      || /^\s*(SECRET_KEY|JWT_SECRET|SESSION_SECRET)\s*=\s*(django-insecure-|changeme|change-me|secret\b|mysecret|dev-secret|supersecret)/i.test(l) }),
   rule({ id: "xml.external-entities", title: "XML parser may load external entities", status: "partial", severity: "high", controls: [A02],
     fix: "Use defusedxml in Python, or turn off entity resolution and DTD loading in your parser.",
     note: "A crafted XML file can read local files or call internal URLs (XML external entities, CWE-611).", extensions: CODE,
@@ -67,11 +69,11 @@ export const owaspRules: Rule[] = [
   // A03 Software Supply Chain Failures
   rule({ id: "deps.unpinned-version", title: "Dependency with no version limit", status: "gap", severity: "medium", controls: [A03],
     fix: "Pin a version or a range in package.json and commit the lockfile, so every install gets the code you tested.",
-    note: "\"*\" or \"latest\" installs whatever is published next, including a compromised release (CWE-1357).", extensions: [".json"], fileName: /^package.json$/, // lockfiles list peer ranges like "*" on purpose
+    note: "\"*\" or \"latest\" installs whatever is published next, including a compromised release (CWE-1357).", extensions: [".json"], fileName: /^package\.json$/, unlessInKey: /^peerDependencies/, // lockfiles and peer deps use "*" on purpose
     test: (l) => /^\s*"(@?[\w.-]+\/)?[\w.-]+"\s*:\s*"(\*|latest|x)"\s*,?\s*$/.test(l) }),
   rule({ id: "deps.install-script", title: "Install script downloads code", status: "partial", severity: "medium", controls: [A03],
     fix: "Avoid downloading and running code in preinstall or postinstall. Vendor the file or document a manual step.",
-    note: "Code fetched at install time isn't pinned or reviewed and runs with the installer's permissions (CWE-829).", extensions: [".json"], fileName: /^package.json$/,
+    note: "Code fetched at install time isn't pinned or reviewed and runs with the installer's permissions (CWE-829).", extensions: [".json"], fileName: /^package\.json$/,
     test: (l) => /"(pre|post)?install"\s*:\s*"[^"]*\b(curl|wget|Invoke-WebRequest)\b/.test(l) }),
   rule({ id: "ci.action-unpinned", title: "Third-party GitHub Action not pinned to a commit", status: "partial", severity: "medium", controls: [A03],
     fix: "Pin third-party actions to a full commit SHA, with the version as a comment, for example uses: owner/action@<40-character sha> # v2.",
@@ -80,7 +82,8 @@ export const owaspRules: Rule[] = [
   rule({ id: "ci.prt-checkout-head", title: "pull_request_target workflow checks out untrusted code", status: "gap", severity: "high", controls: [A03, A08],
     fix: "Use the pull_request trigger for workflows that build or run code from a pull request. If you need pull_request_target, never check out the pull request's code in it.",
     note: "pull_request_target runs with your repository's secrets; checking out the contributor's code lets a pull request run with them (CWE-829).", extensions: YAML,
-    fileTest: (lines) => lines.some((l) => /\bpull_request_target\b/.test(l))
+    // A job that only runs once the PR is merged checks out code that is already on the base branch.
+    fileTest: (lines) => lines.some((l) => /\bpull_request_target\b/.test(l)) && !lines.some((l) => /pull_request\.merged\s*==\s*true/.test(l))
       ? lines.flatMap((l, i) => (/github\.event\.pull_request\.head\.(sha|ref)|refs\/pull\/.*\/(head|merge)/.test(l) ? [i + 1] : [])) : [] }),
 
   // A04 Cryptographic Failures
@@ -108,7 +111,8 @@ export const owaspRules: Rule[] = [
   rule({ id: "code.eval", title: "Code run from a string", status: "gap", severity: "high", controls: [A05],
     fix: "Avoid eval and new Function. Parse data with JSON.parse or a real parser, and map names to functions with a lookup table.",
     note: "If any part of the string comes from outside, it runs as your code (code injection, CWE-94). Partial when the input isn't visible on the line.", extensions: CODE,
-    test: (l) => /(^|[^.\w])eval\s*\(|\bnew Function\s*\(/.test(l) ? byInput(l) : false }),
+    test: (l) => /\b(def|function|async)\s+eval\s*\(/.test(l) ? false // a method named eval is a definition, not a call
+      : /(^|[^.\w])eval\s*\(|\bnew Function\s*\(/.test(l) ? byInput(l) : false }),
   rule({ id: "xss.raw-html", title: "HTML inserted without escaping", status: "partial", severity: "high", controls: [A05],
     fix: "Set text with textContent, let your framework escape values, or sanitise with DOMPurify before inserting HTML.",
     note: "If the HTML contains user input, attackers can run scripts in your users' browsers (cross-site scripting, CWE-79). Partial because fixed HTML from your own code is safe.", extensions: MARKUP,

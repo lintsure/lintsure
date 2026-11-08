@@ -99,6 +99,19 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
 
 const TEST_PATH = /(^|\/)(tests?|__tests__|__mocks__|spec|fixtures?|e2e)\/|\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/i;
 const SECRET_RULES = new Set(["secret.in-source", "config.default-secret-key", "auth.hardcoded-password"]);
+// Lines a person already reviewed and marked for a linter or security scanner.
+const REVIEWED = /#\s*(noqa|nosec)\b|\/\/\s*NOSONAR\b|lintsure-ignore/;
+const PLACEHOLDER =/test|fake|dummy|example|sample|placeholder|sanitized|mock|xxx|changeme|localhost|["'](password|pass|secret|elastic|admin)["']/i;
+/** The JSON object key that opens the block a line sits in, e.g. "peerDependencies". Pure. */
+export function enclosingKey(lines: string[], i: number): string {
+  let depth = 0;
+  for (let j = i - 1; j >= 0; j--) {
+    const l = lines[j];
+    depth += (l.match(/\}/g) ?? []).length - (l.match(/\{/g) ?? []).length;
+    if (depth < 0) return l.match(/"([^"]+)"\s*:\s*\{/)?.[1] ?? "";
+  }
+  return "";
+}
 const HASH_COMMENTS = new Set([".py", ".rb", ".sh", ".yml", ".yaml", ".toml", ".env"]);
 
 /** Marks lines that are only a comment or sit inside a block comment or Python docstring. Pure. */
@@ -153,6 +166,9 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         if (skip?.[i]) return;
         const hit = r.test!(text);
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
+        if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
+        if (inTests && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."
+        if (REVIEWED.test(text)) return; // someone already looked at this line and marked it
         add(r, i + 1, hit === "partial" ? "partial" : r.status);
       });
       if (r.fileTest) for (const n of r.fileTest(lines)) add(r, n);
