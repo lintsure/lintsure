@@ -268,3 +268,10 @@ test("readiness check record: dated, scoped, explains what applies, counts check
   assert.match(md, /not an audit/);
   assert.doesNotMatch(md, /\b(deficienc|nonconformit|audit report)/i, "audit-only terms must not appear");
 });
+
+test("comments, docstrings and test files are not read as code", async () => {
+  const { commentLines } = await import("../src/index.js");
+  assert.deepEqual(commentLines(["// eval(x)", "const a = 1;", "/* start", "md5(p)", "*/", " * note"], ".ts"), [true, false, true, true, true, true]);
+  assert.deepEqual(commentLines(['"""', "hmac-sha1 docs", '"""', "x = 1", "# md5"], ".py"), [true, true, true, false, true]);
+  assert.deepEqual(commentLines(["#private = 1"], ".ts"), [false]); // JS private field, not a comment
+});

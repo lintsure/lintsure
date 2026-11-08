@@ -1,7 +1,7 @@
 // Scout (file walk) + Checker (rules) + Auditor (dedupe, sort) + Officer (outside code).
 // No network calls anywhere in this package: a test enforces it.
 import { readdir, readFile } from "node:fs/promises";
-import { extname, join, relative, sep } from "node:path";
+import { basename, extname, join, relative, sep } from "node:path";
 import { outsideFor } from "./knowledge/index.js";
 import { rules } from "./rules/index.js";
 import type { Finding, FrameworkId, Report } from "./types.js";
@@ -97,6 +97,24 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
   return out.sort();
 }
 
+const TEST_PATH = /(^|\/)(tests?|__tests__|__mocks__|spec|fixtures?|e2e)\/|\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/i;
+const SECRET_RULES = new Set(["secret.in-source", "config.default-secret-key", "auth.hardcoded-password"]);
+const HASH_COMMENTS = new Set([".py", ".rb", ".sh", ".yml", ".yaml", ".toml", ".env"]);
+
+/** Marks lines that are only a comment or sit inside a block comment or Python docstring. Pure. */
+export function commentLines(lines: string[], ext: string): boolean[] {
+  const hash = HASH_COMMENTS.has(ext), py = ext === ".py";
+  let block = false, doc = false;
+  return lines.map((raw) => {
+    const t = raw.trim();
+    if (block) { if (t.includes("*/")) block = false; return true; }
+    if (doc) { if (/"""|'''/.test(t)) doc = false; return true; }
+    if (py && /^[rbuf]*("""|''')/i.test(t)) { const q = t.match(/"""|'''/)![0]; if (t.split(q).length - 1 === 1) doc = true; return true; }
+    if (t.startsWith("/*")) { if (!t.includes("*/")) block = true; return true; }
+    return t.startsWith("//") || t.startsWith("*") || t.startsWith("<!--") || (hash && t.startsWith("#"));
+  });
+}
+
 export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWORKS, opts: RecordOptions = {}): Promise<Report> {
   const active = rules.filter((r) => r.controls.some((c) => frameworks.includes(c.framework)));
   const findings: Finding[] = [];
@@ -105,7 +123,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const { ignore } = await readConfig(root);
   for (const abs of await listFiles(root, ignore)) {
     const ext = extname(abs) || (abs.endsWith(".env") ? ".env" : "");
-    const relevant = active.filter((r) => r.extensions.includes(ext));
+    const name = basename(abs);
+    const relevant = active.filter((r) => r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)));
     if (!relevant.length) continue;
     const buf = await readFile(abs);
     if (buf.length > MAX_BYTES || buf.includes(0)) continue; // skip big or binary files
@@ -123,8 +142,14 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         fingerprint: fingerprint(r.id, file, lines[line - 1] ?? ""),
       });
     };
+    // Tests and fixtures are full of fake tokens and planted examples: only secret rules look at them.
+    const inTests = TEST_PATH.test(file);
+    const comment = commentLines(lines, ext);
     for (const r of relevant) {
-      if (r.test) lines.forEach((text, i) => { const hit = r.test!(text); if (hit) add(r, i + 1, hit === "partial" ? "partial" : r.status); });
+      if (inTests && !SECRET_RULES.has(r.id)) continue;
+      // Comments describe code, they don't run. A real secret pasted into a comment still counts.
+      const skip = SECRET_RULES.has(r.id) ? null : comment;
+      if (r.test) lines.forEach((text, i) => { if (skip?.[i]) return; const hit = r.test!(text); if (hit) add(r, i + 1, hit === "partial" ? "partial" : r.status); });
       if (r.fileTest) for (const n of r.fileTest(lines)) add(r, n);
     }
   }

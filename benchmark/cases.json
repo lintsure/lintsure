@@ -534,7 +534,9 @@
     ],
     "pass": [
       "logger.info(\"token refreshed\", { userId });",
-      "console.log(\"Missing API key\");"
+      "console.log(\"Missing API key\");",
+      "logger.debug('Got token:', { hasToken: !!token?.accessToken });",
+      "logger.warning(f\"Invalid public access token: {token[:8]}...\")"
     ]
   },
   "log.injection": {

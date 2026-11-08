@@ -18,6 +18,8 @@ export interface Rule {
   note: string;
   /** Files this rule reads, by extension. */
   extensions: string[];
+  /** Optional: only files whose name matches, e.g. /^package\.json$/ so lockfiles are skipped. */
+  fileName?: RegExp;
   /** Line rule: true when the line breaks the rule. Must be pure: same line, same answer. */
   test?(line: string): boolean | "partial";
   /** File rule, for checks that need context (e.g. "an AI call with no logging in this file").

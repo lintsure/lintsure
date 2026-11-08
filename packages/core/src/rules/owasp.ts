@@ -67,11 +67,11 @@ export const owaspRules: Rule[] = [
   // A03 Software Supply Chain Failures
   rule({ id: "deps.unpinned-version", title: "Dependency with no version limit", status: "gap", severity: "medium", controls: [A03],
     fix: "Pin a version or a range in package.json and commit the lockfile, so every install gets the code you tested.",
-    note: "\"*\" or \"latest\" installs whatever is published next, including a compromised release (CWE-1357).", extensions: [".json"],
+    note: "\"*\" or \"latest\" installs whatever is published next, including a compromised release (CWE-1357).", extensions: [".json"], fileName: /^package.json$/, // lockfiles list peer ranges like "*" on purpose
     test: (l) => /^\s*"(@?[\w.-]+\/)?[\w.-]+"\s*:\s*"(\*|latest|x)"\s*,?\s*$/.test(l) }),
   rule({ id: "deps.install-script", title: "Install script downloads code", status: "partial", severity: "medium", controls: [A03],
     fix: "Avoid downloading and running code in preinstall or postinstall. Vendor the file or document a manual step.",
-    note: "Code fetched at install time isn't pinned or reviewed and runs with the installer's permissions (CWE-829).", extensions: [".json"],
+    note: "Code fetched at install time isn't pinned or reviewed and runs with the installer's permissions (CWE-829).", extensions: [".json"], fileName: /^package.json$/,
     test: (l) => /"(pre|post)?install"\s*:\s*"[^"]*\b(curl|wget|Invoke-WebRequest)\b/.test(l) }),
   rule({ id: "ci.action-unpinned", title: "Third-party GitHub Action not pinned to a commit", status: "partial", severity: "medium", controls: [A03],
     fix: "Pin third-party actions to a full commit SHA, with the version as a comment, for example uses: owner/action@<40-character sha> # v2.",
@@ -160,7 +160,10 @@ export const owaspRules: Rule[] = [
   rule({ id: "log.secret", title: "Secret or token written to logs", status: "gap", severity: "high", controls: [A09],
     fix: "Remove the value from the log call, or log only that it was present.",
     note: "Logs are copied to many tools and people; a token in a log is a token anyone with log access can use (CWE-532).", extensions: CODE,
-    test: (l) => { const a = logArgs(l); return a !== null && /\b(token|secret|authorization|api_?key|apiKey|bearer|access_token|refresh_token|private_?key|client_secret)\b/i.test(stripStrings(a)); } }),
+    test: (l) => { const a = logArgs(l); if (a === null) return false;
+      // Logging only whether a token exists (!!token) or a short prefix (token[:8], token.slice(0, 8)) is safe.
+      const safe = stripStrings(a).replace(/!!\s*[\w.?]+/g, "").replace(/[\w.?]+\s*\[\s*:\s*\d+\s*\]/g, "").replace(/[\w.?]+\.slice\(\s*0\s*,\s*\d+\s*\)/g, "");
+      return /\b(token|secret|authorization|api_?key|apiKey|bearer|access_token|refresh_token|private_?key|client_secret)\b/i.test(safe); } }),
   rule({ id: "log.injection", title: "Raw request data written to logs", status: "partial", severity: "low", controls: [A09],
     fix: "Log specific, validated fields, and strip line breaks from user input before logging it.",
     note: "Line breaks in user input can forge fake log entries and mislead an investigation (CWE-117).", extensions: CODE,
