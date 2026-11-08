@@ -275,3 +275,14 @@ test("comments, docstrings and test files are not read as code", async () => {
   assert.deepEqual(commentLines(['"""', "hmac-sha1 docs", '"""', "x = 1", "# md5"], ".py"), [true, true, true, false, true]);
   assert.deepEqual(commentLines(["#private = 1"], ".ts"), [false]); // JS private field, not a comment
 });
+
+test("a JWT whose exp is set a few lines above is not flagged", async () => {
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-jwt-"));
+  await writeFile(join(dir, "auth.py"), ['payload = {', '  "sub": uid,', '  "exp": now + ttl,', '}', 'return jwt.encode(payload, key)', ...Array(12).fill(''), 'bad = jwt.encode({"sub": uid}, key)'].join("\n"));
+  try {
+    const hits = (await scan(dir)).findings.filter((f) => f.ruleId === "jwt.no-expiry").map((f) => f.line);
+    assert.deepEqual(hits, [18]);
+  } finally { await rm(dir, { recursive: true }); }
+});

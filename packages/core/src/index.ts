@@ -149,7 +149,12 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       if (inTests && !SECRET_RULES.has(r.id)) continue;
       // Comments describe code, they don't run. A real secret pasted into a comment still counts.
       const skip = SECRET_RULES.has(r.id) ? null : comment;
-      if (r.test) lines.forEach((text, i) => { if (skip?.[i]) return; const hit = r.test!(text); if (hit) add(r, i + 1, hit === "partial" ? "partial" : r.status); });
+      if (r.test) lines.forEach((text, i) => {
+        if (skip?.[i]) return;
+        const hit = r.test!(text);
+        if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
+        add(r, i + 1, hit === "partial" ? "partial" : r.status);
+      });
       if (r.fileTest) for (const n of r.fileTest(lines)) add(r, n);
     }
   }

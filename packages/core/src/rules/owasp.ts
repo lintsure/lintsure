@@ -140,7 +140,7 @@ export const owaspRules: Rule[] = [
   rule({ id: "jwt.no-expiry", title: "JWT signed without an expiry", status: "partial", severity: "medium", controls: [A07],
     fix: "Add expiresIn (Node) or an exp claim (Python), and keep access tokens short-lived.",
     note: "A stolen token without an expiry works forever (insufficient session expiration, CWE-613). Partial because the expiry may be set in a payload built elsewhere.", extensions: CODE,
-    test: (l) => /\bjwt\.(sign|encode)\(/.test(l) && !/expiresIn|\bexp\b/.test(l) }),
+    test: (l) => /\bjwt\.(sign|encode)\(/.test(l) && !/expiresIn|\bexp\b/.test(l), unlessNear: /expiresIn|["']exp["']|\bexp\s*[:=]/ }),
 
   // A08 Software or Data Integrity Failures
   rule({ id: "deserialize.unsafe", title: "Unsafe deserialisation", status: "gap", severity: "high", controls: [A08],
