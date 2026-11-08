@@ -203,7 +203,9 @@
     ],
     "pass": [
       "const img = await fetch('/static/logo.png');",
-      "const text = await openai.chat.completions.create({ model, messages });"
+      "const text = await openai.chat.completions.create({ model, messages });",
+      "model: 'gemini-2.5-flash',",
+      "const prompt = 'Describe this image';"
     ]
   },
   "ai.emotion-or-biometric": {

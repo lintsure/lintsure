@@ -33,7 +33,6 @@ test("known findings stay put", async () => {
   assert.deepEqual(got, [
     "ai.call-not-logged@src/ai.ts:3",
     "ai.automated-decision@src/ai.ts:4",
-    "ai.call-not-logged@src/ai.ts:4",
     "ai.hides-being-ai@src/ai.ts:5",
     "ai.synthetic-media@src/ai.ts:6",
     "ai.emotion-or-biometric@src/ai.ts:7",
@@ -309,4 +308,25 @@ test("lines marked noqa, nosec or lintsure-ignore are treated as reviewed", asyn
     const hits = (await scan(dir)).findings.filter((f) => f.ruleId === "deserialize.unsafe").map((f) => f.line);
     assert.deepEqual(hits, [3]);
   } finally { await rm(dir, { recursive: true }); }
+});
+
+test("AI calls are recognised in the forms real apps use, and need a record nearby", async () => {
+  const { unloggedAiCalls } = await import("../src/rules/index.js");
+  const calls = [
+    "const r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST' });",
+    "const result = await chain.invoke({ input });",
+    "const response = await ai.models.generateContent({ model, contents });",
+    "const c = await openAi.chat.completions.create({ model });",
+    "const { object } = await generateObject({ model, schema });",
+  ];
+  for (const c of calls) assert.deepEqual(unloggedAiCalls([c]), [1], c);
+  assert.deepEqual(unloggedAiCalls(["const { data } = await supabase.functions.invoke('generate-title');"]), []);
+  assert.deepEqual(unloggedAiCalls(["const r = await chain.invoke({ input });", "await db.insert(aiLogs).values({ output: r });"]), []);
+  // A log far away in the same file no longer hides the call; one finding per file, at the first unrecorded call.
+  assert.deepEqual(unloggedAiCalls(["console.log('boot');", ...Array(40).fill(""), "const r = await chain.invoke({ input });", "const s = await chain.invoke({ more });"]), [42]);
+  // A provider URL in a constant is not a call.
+  assert.deepEqual(unloggedAiCalls(['OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"']), []);
+  const { mediaModelCalls } = await import("../src/rules/index.js");
+  assert.deepEqual(mediaModelCalls(["const MODEL = 'gemini-2.5-flash-image';", "const r = await ai.models.generateContent({ model: MODEL });"]), [2]);
+  assert.deepEqual(mediaModelCalls(['DEEPGRAM_TTS_MODELS = ("aura-2", "flux")', "r = client.chat.completions.create(model=m)"]), []);
 });

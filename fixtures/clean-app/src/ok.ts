@@ -15,3 +15,4 @@ const res = await openai.chat.completions.create({ model: "gpt", messages: [] })
 const label = classifier.predict(x);
 const system = "You are an AI assistant. Tell users you are an AI.";
 const sentiment = analyzeSentiment(text);
+logger.info({ model: "gpt", label, at: Date.now() }); // record of the AI calls above

@@ -199,7 +199,30 @@ export const rules: Rule[] = [
 // Code can show *signals* for the AI Act, not the legal risk tier itself. These rules
 // flag what an auditor would ask about; the Classifier and the user decide the tier.
 
-const AI_CALL = /\b(openai|anthropic|client)\.(chat\.completions|responses|messages|completions)\.create\s*\(|\bgenerateText\s*\(|\bstreamText\s*\(|\b(model|clf|classifier|pipeline)\.(predict|predict_proba|invoke|generate)\s*\(/;
+// How apps call models in practice (field test, 18 repos): SDK clients under any name, Gemini's generateContent,
+// the Vercel AI SDK, LangChain chains, and plain fetch calls to the provider's API. supabase.functions.invoke is not AI.
+const AI_CALL = new RegExp([
+  /\b(openai|anthropic|client)\.(chat\.completions|responses|messages|completions)\.create\s*\(/.source,
+  /\b\w+\.chat\.completions\.create\s*\(/.source,
+  /\.generateContent(Stream)?\s*\(/.source,
+  /\b(generateText|streamText|generateObject|streamObject)\s*\(/.source,
+  /\b(model|clf|classifier|pipeline)\.(predict|predict_proba|invoke|generate)\s*\(/.source,
+  /\b(chain|llm|chatModel|agent|runnable)\w*\.(invoke|stream|batch)\s*\(/.source,
+  // A provider URL counts only inside a request call, not where it's stored in a constant.
+  /\b(fetch|axios(\.\w+)?|requests\.\w+|httpx\.\w+|ky(\.\w+)?)\s*\(\s*[`"'][^`"']*(api\.openai\.com\/v1\/(chat|responses|completions|images|audio)|api\.anthropic\.com\/v1\/messages|generativelanguage\.googleapis\.com|openrouter\.ai\/api|api\.groq\.com|api\.mistral\.ai|api\.deepseek\.com)/.source,
+].join("|"), "i");
+const NOT_AI = /\bfunctions\.invoke\s*\(/;
+const isAiCall = (l: string) => AI_CALL.test(l) && !NOT_AI.test(l);
+/** The first AI call in a file with no log or save between 10 lines above and 30 below (one finding per file). Pure. */
+export const unloggedAiCalls = (lines: string[]) => {
+  const i = lines.findIndex((l, i) => isAiCall(l) && !lines.slice(Math.max(0, i - 10), i + 31).some((x) => LOGGED.test(x)));
+  return i < 0 ? [] : [i + 1];
+};
+// Image, voice and video models. "flux" alone is left out: Deepgram uses it for speech-to-text.
+const MEDIA_MODEL = /["'`](dall-e-\d|gpt-image-[\w.]+|imagen-[\w.-]+|gemini-[\w.-]*-image[\w.-]*|tts-1[\w-]*|gpt-4o[\w-]*-tts|veo-[\w.-]+|sora-[\w.-]+|eleven_[\w]+|black-forest-labs\/flux[\w./-]*|stable-diffusion[\w./-]*)["'`]/i;
+/** AI calls in a file that names an image, voice or video model. Pure. */
+export const mediaModelCalls = (lines: string[]) =>
+  lines.some((l) => MEDIA_MODEL.test(l)) ? lines.flatMap((l, i) => (isAiCall(l) ? [i + 1] : [])) : [];
 const DECISION = /\b(approv|reject|deny|denied|declin|eligib|hire|hiring|shortlist|credit|loan|underwrit|admit|admission|ban|suspend)\w*/i;
 const LOGGED = /\b(logger|log|logging|audit|auditLog|console)\.\w+\s*\(|\binsert\w*\s*\(|\.save\s*\(/;
 
@@ -221,16 +244,16 @@ rules.push(
   },
   {
     id: "ai.call-not-logged",
-    title: "AI call with no record kept in this file",
+    title: "AI call with no record kept near it",
     status: "partial", severity: "medium",
     controls: [
       { framework: "eu-ai-act", id: "Art. 12", title: "Record-keeping" },
       { framework: "soc2", id: "CC7.2", title: "Monitoring of system components" },
     ],
     fix: "Log each AI call: time, model and version, input reference and output, without raw personal data.",
-    note: "High-risk systems must keep logs that let you trace what the AI did. Marked Partial: logging may happen in another file.",
+    note: "High-risk systems must keep logs that let you trace what the AI did. Marked Partial: logging may happen in a wrapper or another file.",
     extensions: CODE,
-    fileTest: (lines) => lines.some((l) => LOGGED.test(l)) ? [] : lines.flatMap((l, i) => (AI_CALL.test(l) ? [i + 1] : [])),
+    fileTest: unloggedAiCalls,
     ...DRAFT,
   },
   {
@@ -253,6 +276,8 @@ rules.push(
     note: "Marked Partial: you may already add marking after this call. Confirm it does.",
     extensions: CODE,
     test: (l) => /\bimages\.(generate|edit)\s*\(|\baudio\.speech\.create\s*\(|\b(textToSpeech|text_to_speech|generateImage|generate_image|generateVideo|generate_video)\s*\(|\b(StableDiffusion\w*|DiffusionPipeline)\b/.test(l),
+    // Also: a generic AI call (e.g. generateContent) in a file that names an image, voice or video model.
+    fileTest: mediaModelCalls,
     ...DRAFT,
   },
   {
