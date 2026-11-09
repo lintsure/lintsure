@@ -301,5 +301,5 @@ rules.push(
 // OWASP Top 10:2025: map the rules above, then add the OWASP rules.
 for (const r of rules) r.controls.push(...(owaspForExisting[r.id] ?? []));
 rules.push(...owaspRules);
-// Supabase, Next.js and Vite: the issues developers report most in AI-built apps.
+// Supabase, Next.js and Vite: open databases and secrets reaching the browser.
 rules.push(...stackRules);

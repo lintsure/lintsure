@@ -2,6 +2,28 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.4 · 2026-11-09 · Supabase and frontend secret checks
+
+Five new rules (52 in total) for two of the most damaging mistakes in AI-built apps, open databases and secrets in the browser, and clearer MCP tool definitions (4bb46a0).
+
+### New rules
+- `supabase.rls-disabled` (Partial): a table created in a `supabase/` migration with no `enable row level security` for it in the same file. System schemas (auth, storage and so on) are skipped.
+- `supabase.policy-allows-all` (Partial): `using (true)` or `with check (true)` in a Supabase policy.
+- `supabase.service-key-in-client` (Gap): the service-role key referenced in a `"use client"` file.
+- `secret.public-env` (Gap): secrets, or keys for AI, email, payment and database services, in browser-exposed variables (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`, `REACT_APP_`, `NUXT_PUBLIC_`). Keys that are public by design (Supabase anon, Stripe publishable, Firebase, Maps) are allowed.
+- `build.sourcemaps-public` (Partial): `productionBrowserSourceMaps: true` in a Next.js config.
+- Tested on the 18 field-test repos before release: the first version produced 290 false alarms (Prisma and Drizzle migrations, widget and analytics keys, Vite source maps in libraries). After tightening, 4 hits, all correct.
+- Rules can now be limited to a path (`pathMatch`).
+
+### MCP tools
+- Descriptions start with what the tool does, say what it returns and which tool to call first.
+- Every input has a description and an example, including all ten `classify` questions.
+- `explain_framework` marks each date as already applying or upcoming.
+
+### Knowledge
+- GDPR: start date (25 May 2018) added.
+- OWASP Top 10: the `classify` reason no longer assumes a web app.
+
 ## 0.3.3 · 2026-11-09 · Cleaner packages
 
 - Removes two unused files that shipped by mistake in 0.3.1 and 0.3.2: `datamap.js` in `@lintsure/core` and `browser.js` in `lintsure`. They were left over from features we've set aside for now, and nothing loaded them. The build now empties its output folders first, so old files can't slip in again (a8ef8d6).

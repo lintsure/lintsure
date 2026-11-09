@@ -1,5 +1,5 @@
-// Rules for the stacks AI app builders use most (Supabase, Next.js, Vite). Chosen from what developers
-// report breaking most often in vibe-coded apps: open databases and secrets shipped to the browser.
+// Rules for the stacks AI app builders use most (Supabase, Next.js, Vite): open databases and secrets
+// shipped to the browser, two of the most damaging mistakes in apps built quickly.
 // Pattern-based and single-file like the rest, so each rule says when it may be wrong. Beta.
 import type { Control, Rule } from "../types.js";
 
