@@ -2,6 +2,11 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.2 · 2026-11-09 · Security update
+
+- Upgrades zod to 4.6.7. Versions before 4.6.6 can use up memory when validating oversized input (GHSA-mrhx-c7xc-m3w5). Lintsure's inputs are small, so the real risk was low, but `npm audit` is now clean (4b8a19d).
+- Corrects the OWASP Top 10 "checked on" date to 2026-11-08 (e16ea59).
+
 ## 0.3.1 · 2026-11-08 · Tested on 18 real repos
 
 We ran Lintsure on 15 public apps built with Lovable, Bolt, v0 and Claude Code, and on three large AI apps (Dify, Open WebUI, LobeHub). The first run produced about 1,600 findings on the 15 small apps, and over 90% were our mistakes. This release fixes them, and every fix has a new test or benchmark case.
