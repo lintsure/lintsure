@@ -11,10 +11,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -b packages/core packages/cli packages/mcp",
+    "build": "npm run clean && tsc -b packages/core packages/cli packages/mcp",
     "test": "npm run build && node --test \"packages/core/dist/test/**/*.test.js\" && node scripts/mcp-smoke.mjs && node scripts/benchmark.mjs",
     "scan:sample": "node packages/cli/dist/src/index.js scan fixtures/sample-app",
-    "benchmark": "npm run build && node scripts/benchmark.mjs"
+    "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "clean": "node -e \"for (const p of ['core','cli','mcp']) require('fs').rmSync('packages/'+p+'/dist', { recursive: true, force: true })\""
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
