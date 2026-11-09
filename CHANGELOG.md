@@ -2,6 +2,20 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.5 · 2026-11-09
+
+Findings now cite the **OWASP Top 10 for LLM Applications 2026**, published in August 2026, instead of the 2025 edition. No rule changed what it finds; only the references moved:
+
+| Rule | 2025 reference | 2026 reference |
+|---|---|---|
+| `llm.user-input-in-system-prompt` | LLM01, LLM07 System Prompt Leakage | LLM01, LLM08 Hidden Context Exposure |
+| `llm.output-to-sink` | LLM05 | LLM10 Improper Output Handling |
+| `llm.no-output-limit`, `ai.call-not-logged` | LLM10 | LLM06 Unbounded Consumption |
+| `deps.unpinned-version`, `deps.install-script` | LLM03 | LLM04 Supply Chain |
+| `secret.*`, `pii.logged`, `log.secret` | LLM02 | LLM02 (unchanged) |
+
+Baselines and accepted findings keep working: they're keyed to the rule and the line, not to framework references.
+
 ## 0.3.4 · 2026-11-09 · Common Ground
 
 Six frameworks focused on what every developer ships: the EU AI Act, GDPR, OWASP Top 10, OWASP Top 10 for LLM Applications, the 2025 CWE Top 25 and the EU Cyber Resilience Act. 66 rules (19 new), cross-file checks, fewer false alarms after a field test on 100 public repositories, and clearer MCP tool definitions (4bb46a0).

@@ -1,4 +1,4 @@
-// OWASP Top 10 for LLM Applications 2025, the 2025 CWE Top 25 (MITRE), and mobile app checks.
+// OWASP Top 10 for LLM Applications 2026, the 2025 CWE Top 25 (MITRE), and mobile app checks.
 // Our own reading of the public texts; we cite IDs only. Beta.
 import type { Control, Rule } from "../types.js";
 import { isAiCall } from "./index.js";
@@ -7,9 +7,9 @@ const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 const c = (framework: Control["framework"]) => (id: string, title: string): Control => ({ framework, id, title });
 const LLM = c("owasp-llm"), CWE = c("cwe-top25");
 const W = (n: number, title: string) => CWE(`CWE-${n}`, title);
-const LLM01 = LLM("LLM01:2025", "Prompt Injection"), LLM02 = LLM("LLM02:2025", "Sensitive Information Disclosure"),
-  LLM03 = LLM("LLM03:2025", "Supply Chain"), LLM05 = LLM("LLM05:2025", "Improper Output Handling"),
-  LLM07 = LLM("LLM07:2025", "System Prompt Leakage"), LLM10 = LLM("LLM10:2025", "Unbounded Consumption");
+const LLM01 = LLM("LLM01:2026", "Prompt Injection"), LLM02 = LLM("LLM02:2026", "Sensitive Information Disclosure"),
+  LLM04 = LLM("LLM04:2026", "Supply Chain"), LLM10 = LLM("LLM10:2026", "Improper Output Handling"),
+  LLM08 = LLM("LLM08:2026", "Hidden Context Exposure"), LLM06 = LLM("LLM06:2026", "Unbounded Consumption");
 const GDPR32: Control = { framework: "gdpr", id: "Art. 32", title: "Security of processing" };
 const OW = (n: string, title: string): Control => ({ framework: "owasp-top10", id: `A${n}:2025`, title });
 const A04 = OW("04", "Cryptographic Failures"), A06 = OW("06", "Insecure Design");
@@ -17,7 +17,7 @@ const A04 = OW("04", "Cryptographic Failures"), A06 = OW("06", "Insecure Design"
 /** LLM and CWE controls for rules that already exist. Merged by id in rules/index.ts. */
 export const standardsForExisting: Record<string, Control[]> = {
   "secret.in-source": [LLM02], "secret.public-env": [LLM02, W(200, "Exposure of Sensitive Information")], "pii.logged": [LLM02, W(200, "Exposure of Sensitive Information")],
-  "log.secret": [LLM02, W(200, "Exposure of Sensitive Information")], "deps.unpinned-version": [LLM03], "deps.install-script": [LLM03],
+  "log.secret": [LLM02, W(200, "Exposure of Sensitive Information")], "deps.unpinned-version": [LLM04], "deps.install-script": [LLM04],
   "xss.raw-html": [W(79, "Cross-site Scripting")], "template.user-string": [W(79, "Cross-site Scripting"), W(94, "Code Injection")],
   "sql.string-built": [W(89, "SQL Injection")], "nosql.operator-input": [W(20, "Improper Input Validation")],
   "csrf.disabled": [W(352, "Cross-Site Request Forgery")], "path.user-input": [W(22, "Path Traversal")],
@@ -29,7 +29,7 @@ export const standardsForExisting: Record<string, Control[]> = {
   "fs.world-writable": [W(284, "Improper Access Control")], "mass-assignment": [W(20, "Improper Input Validation"), W(639, "Authorization Bypass Through User-Controlled Key")],
   "pii.in-url": [W(200, "Exposure of Sensitive Information")], "error.stack-to-client": [W(200, "Exposure of Sensitive Information")],
   "build.sourcemaps-public": [W(200, "Exposure of Sensitive Information")], "llm.no-output-limit": [W(770, "Allocation of Resources Without Limits or Throttling")],
-  "ai.call-not-logged": [LLM10],
+  "ai.call-not-logged": [LLM06],
 };
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
@@ -42,17 +42,17 @@ const USER_TEXT = /\$\{[^}]*\b(req\.(body|query|params)|request\.(json|form|args
 const rule = (r: Omit<Rule, "mappedBy" | "reviewedAt">): Rule => ({ ...r, ...DRAFT });
 export const standardsRules: Rule[] = [
   // OWASP Top 10 for LLM Applications
-  rule({ id: "llm.user-input-in-system-prompt", title: "User text placed inside the AI's system instructions", status: "partial", severity: "high", controls: [LLM01, LLM07],
+  rule({ id: "llm.user-input-in-system-prompt", title: "User text placed inside the AI's system instructions", status: "partial", severity: "high", controls: [LLM01, LLM08],
     fix: "Keep the system prompt fixed. Send what the user typed as a separate user message, and never put it inside the system instructions.",
     note: "Text in the system prompt is treated as the app's own instructions. If user text goes there, a user can rewrite the rules the AI follows (prompt injection). Marked Partial: the inserted value may be safe text your app controls.",
     extensions: CODE,
     test: (l) => /\b(role\s*:\s*["']system["']|system(Prompt|_prompt|Message|_message|Instruction)?\s*[:=]|["']system["']\s*,)/.test(l) && USER_TEXT.test(l) }),
-  rule({ id: "llm.output-to-sink", title: "AI output run as code, a command, a query or page HTML", status: "gap", severity: "high", controls: [LLM05],
+  rule({ id: "llm.output-to-sink", title: "AI output run as code, a command, a query or page HTML", status: "gap", severity: "high", controls: [LLM10],
     fix: "Treat model output like input from a stranger: validate it against what you expect, escape it for HTML, and never run it as code, a shell command or SQL.",
     note: "A model's reply can be steered by anyone who can influence its input. Passing it straight to eval, a shell, a database query or innerHTML lets them run code or change data.",
     extensions: CODE,
     test: (l) => MODEL_OUTPUT.test(l) && SINKS.test(l) }),
-  rule({ id: "llm.no-output-limit", title: "AI call with no limit on how much it may generate", status: "partial", severity: "low", controls: [LLM10],
+  rule({ id: "llm.no-output-limit", title: "AI call with no limit on how much it may generate", status: "partial", severity: "low", controls: [LLM06],
     fix: "Set a maximum output size on each call (max_tokens, maxTokens or max_output_tokens), and limit how often each user can call it.",
     note: "Without a limit, one request can run up a large bill or tie up the service (unbounded consumption). Marked Partial: the limit may be set in a shared client or wrapper.",
     extensions: CODE,

@@ -1,6 +1,6 @@
 {
   "name": "lintsure",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Readiness checks for the code your AI writes: EU AI Act, GDPR, OWASP, CWE Top 25, EU Cyber Resilience Act. Runs locally. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
@@ -13,7 +13,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@lintsure/core": "0.3.4"
+    "@lintsure/core": "0.3.5"
   },
   "author": "Lintsure <hello@lintsure.com>",
   "homepage": "https://lintsure.com/docs",
@@ -33,7 +33,7 @@
   },
   "keywords": [
     "compliance",
-    "gdpr",
+    "gdpr",
     "eu-ai-act",
     "mcp",
     "static-analysis",

@@ -22,7 +22,7 @@ export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
 import { loadPacks } from "./packs.js";
-export const RULES_VERSION = "0.3.4";
+export const RULES_VERSION = "0.3.5";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =

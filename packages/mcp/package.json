@@ -1,6 +1,6 @@
 {
   "name": "@lintsure/mcp",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "mcpName": "io.github.lintsure/lintsure",
   "description": "Lintsure MCP server for Claude Code, Cursor, Codex and Windsurf. Readiness checks, not an audit or legal advice.",
   "license": "Apache-2.0",
@@ -14,7 +14,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@lintsure/core": "0.3.4",
+    "@lintsure/core": "0.3.5",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "zod": "^4.6.7"
   },
@@ -36,7 +36,7 @@
   },
   "keywords": [
     "compliance",
-    "gdpr",
+    "gdpr",
     "eu-ai-act",
     "mcp",
     "static-analysis",

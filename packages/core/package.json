@@ -1,6 +1,6 @@
 {
   "name": "@lintsure/core",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Lintsure engine: rules, framework knowledge and reports for readiness checks of AI-written code. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
@@ -29,7 +29,7 @@
   },
   "keywords": [
     "compliance",
-    "gdpr",
+    "gdpr",
     "eu-ai-act",
     "mcp",
     "static-analysis",
