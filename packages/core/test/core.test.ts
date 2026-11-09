@@ -29,7 +29,7 @@ test("near misses in clean code are not flagged", async () => {
 
 test("known findings stay put", async () => {
   const r = await scan(root);
-  const got = r.findings.filter((f) => !/^(src\/(more|owasp|page)\.|package\.json|\.github\/)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
+  const got = r.findings.filter((f) => !/^(src\/(more|owasp|page|stack-client)\.|package\.json|\.github\/|supabase\/|next\.config)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
     "ai.call-not-logged@src/ai.ts:3",
     "ai.automated-decision@src/ai.ts:4",
@@ -329,4 +329,15 @@ test("AI calls are recognised in the forms real apps use, and need a record near
   const { mediaModelCalls } = await import("../src/rules/index.js");
   assert.deepEqual(mediaModelCalls(["const MODEL = 'gemini-2.5-flash-image';", "const r = await ai.models.generateContent({ model: MODEL });"]), [2]);
   assert.deepEqual(mediaModelCalls(['DEEPGRAM_TTS_MODELS = ("aura-2", "flux")', "r = client.chat.completions.create(model=m)"]), []);
+});
+
+test("Supabase: tables without row level security are found, system schemas and enabled tables are not", async () => {
+  const { tablesWithoutRls } = await import("../src/rules/stack.js");
+  assert.deepEqual(tablesWithoutRls([
+    "create table public.profiles (id uuid);",
+    "create table if not exists \"posts\" (id uuid);",
+    "alter table posts enable row level security;",
+    "create table auth.extra (id uuid);",
+    "CREATE TABLE Orders (id int);",
+  ]), [1, 5]);
 });

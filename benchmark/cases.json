@@ -579,5 +579,43 @@
       "res.status(500).json({ error: \"Something went wrong\" });",
       "logger.error(traceback.format_exc())"
     ]
+  },
+  "supabase.policy-allows-all": {
+    "flag": [
+      "create policy \"anyone\" on notes for all using (true);",
+      "  with check ( true );"
+    ],
+    "pass": [
+      "create policy \"own\" on notes using (auth.uid() = user_id);",
+      "-- using true for public posts is fine when intended"
+    ]
+  },
+  "secret.public-env": {
+    "flag": [
+      "const k = process.env.NEXT_PUBLIC_STRIPE_SECRET_KEY;",
+      "VITE_SUPABASE_SERVICE_ROLE_KEY=eyJ...",
+      "const o = process.env.NEXT_PUBLIC_OPENAI_API_KEY;",
+      "const apiKey = import.meta.env.VITE_OPENAI_API_KEY;"
+    ],
+    "pass": [
+      "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "const s = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;",
+      "const m = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;",
+      "const k = process.env.STRIPE_SECRET_KEY;",
+      "const PUBLIC_WITH_PRIVATE_AGENT = 'x';",
+      "NEXT_PUBLIC_ENABLE_ACCESS_TOKEN: coercedBoolean.default(false),",
+      "NEXT_PUBLIC_AMPLITUDE_API_KEY: z.string().optional(),",
+      "const t = process.env.NEXT_PUBLIC_CHATWOOT_TOKEN;",
+      "token: env.REACT_APP_PADDLE_CLIENT_TOKEN,"
+    ]
+  },
+  "build.sourcemaps-public": {
+    "flag": [
+      "  productionBrowserSourceMaps: true,"
+    ],
+    "pass": [
+      "productionBrowserSourceMaps: false",
+      "build: { sourcemap: true }"
+    ]
   }
 }

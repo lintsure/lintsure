@@ -30,7 +30,7 @@ export const soc2: FrameworkKnowledge = {
     { ref: "CC5", title: "Control activities", inCode: "no",
       plain: "You turn policies into concrete controls, including controls over technology.",
       evidence: "Written policies mapped to controls." },
-    { ref: "CC6.1", title: "Logical access", inCode: "yes", rules: ["secret.in-source", "pii.logged", "crypto.weak-password-hash", "session.cookie-insecure", "pii.in-url"],
+    { ref: "CC6.1", title: "Logical access", inCode: "yes", rules: ["secret.in-source", "pii.logged", "crypto.weak-password-hash", "session.cookie-insecure", "pii.in-url", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "secret.public-env"],
       plain: "Only the right people and systems can reach data. Secrets are protected, passwords are stored safely.",
       evidence: "Access settings, secret storage and password hashing." },
     { ref: "CC6.2–6.3", title: "Granting and removing access", inCode: "no",

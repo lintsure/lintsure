@@ -137,11 +137,11 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   for (const abs of await listFiles(root, ignore)) {
     const ext = extname(abs) || (abs.endsWith(".env") ? ".env" : "");
     const name = basename(abs);
-    const relevant = active.filter((r) => r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)));
+    const file = relative(root, abs).split(sep).join("/");
+    const relevant = active.filter((r) => r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)) && (!r.pathMatch || r.pathMatch.test(file)));
     if (!relevant.length) continue;
     const buf = await readFile(abs);
     if (buf.length > MAX_BYTES || buf.includes(0)) continue; // skip big or binary files
-    const file = relative(root, abs).split(sep).join("/");
     const lines = buf.toString("utf8").split(/\r?\n/);
     if (lines.some((l) => l.length > MAX_LINE)) continue; // minified or generated
     filesChecked++;

@@ -10,6 +10,9 @@ export const gdpr: FrameworkKnowledge = {
     "The EU's privacy law. If you handle data about people in the EU, you need a valid reason for each use, should collect only what you need, keep it safe, tell people what you do, and let them see, fix or delete their data. AI doesn't get special treatment: training on or feeding personal data into a model is still processing.",
   whoItAppliesTo:
     "Any organization that handles personal data while based in the EU, or that offers goods or services to people in the EU or tracks their behavior there.",
+  timeline: [
+    { date: "2018-05-25", what: "GDPR applies in full across the EU and EEA. There is no transition period left: every duty below applies today." },
+  ],
   applies(p) {
     if (!p.personalData) return null;
     if (!p.euUsers) return null;
@@ -49,7 +52,7 @@ export const gdpr: FrameworkKnowledge = {
       plain: "Keep a list of what personal data you process, why, with whom you share it and how long you keep it.",
       evidence: "The register of processing activities." },
     { ref: "Art. 32", title: "Security of processing", inCode: "yes",
-      rules: ["pii.logged", "secret.in-source", "transport.plain-http", "transport.tls-verify-off", "crypto.weak-password-hash", "sql.string-built", "pii.in-url"],
+      rules: ["pii.logged", "secret.in-source", "transport.plain-http", "transport.tls-verify-off", "crypto.weak-password-hash", "sql.string-built", "pii.in-url", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "secret.public-env"],
       plain: "Protect personal data with security that fits the risk: encryption, access control, testing and the ability to recover.",
       evidence: "Security measures and when they were last tested." },
     { ref: "Art. 33–34", title: "Breach notification", inCode: "no",
@@ -68,5 +71,5 @@ export const gdpr: FrameworkKnowledge = {
     "Analytics and session-replay tools often collect more than you think. Check what each SDK sends.",
     "Legitimate interests is not a free pass. It needs a written balancing test.",
   ],
-  checkedOn: "2026-11-07",
+  checkedOn: "2026-11-09",
 };

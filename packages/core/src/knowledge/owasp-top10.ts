@@ -13,19 +13,19 @@ export const owaspTop10: FrameworkKnowledge = {
     "Any team building a web application or API. It's voluntary, but often expected by business customers and referenced in security reviews.",
   applies(p) {
     if (p.b2bCustomers) return "Business customers and security questionnaires often ask how you handle the OWASP Top 10.";
-    if (p.personalData) return "You handle personal data in a web app, so the common web security risks apply.";
+    if (p.personalData) return "You handle personal data. If you offer it through a web app or API, the common web security risks apply.";
     return null;
   },
   obligations: [
     { ref: "A01:2025", title: "Broken Access Control", inCode: "partly",
-      rules: ["path.user-input", "redirect.open", "ssrf.user-url", "csrf.disabled", "fs.world-writable", "cors.any-origin", "cookie.trusted-role"],
+      rules: ["path.user-input", "redirect.open", "ssrf.user-url", "csrf.disabled", "fs.world-writable", "cors.any-origin", "cookie.trusted-role", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client"],
       plain: "People must only reach the data and actions meant for them. This covers file paths, redirects, requests your server makes on a user's behalf (SSRF), forged requests from other sites, and permissions kept where users can change them.",
       evidence: "A list of roles and what each may do, and tests showing one user can't read or change another user's data." },
     { ref: "A01:2025 (ownership checks)", title: "Every record is checked against the signed-in user", inCode: "no",
       plain: "Whether each endpoint checks that the record belongs to the person asking (often called IDOR). A line-by-line code check can't tell; it needs design review and testing with two accounts.",
       evidence: "Access control tests per role, or a penetration test report." },
     { ref: "A02:2025", title: "Security Misconfiguration", inCode: "partly",
-      rules: ["config.debug-on", "config.allowed-hosts-any", "config.default-secret-key", "xml.external-entities", "cors.any-origin", "session.cookie-insecure", "error.stack-to-client"],
+      rules: ["config.debug-on", "config.allowed-hosts-any", "config.default-secret-key", "xml.external-entities", "cors.any-origin", "session.cookie-insecure", "error.stack-to-client", "build.sourcemaps-public"],
       plain: "Safe settings by default: debug off, real host names, strong secret keys, cookies marked secure, XML parsers that don't load outside files, and errors that don't reveal internals.",
       evidence: "Production configuration and a hardening checklist." },
     { ref: "A02:2025 (deployed settings)", title: "Server, cloud and header configuration in production", inCode: "no",
@@ -39,7 +39,7 @@ export const owaspTop10: FrameworkKnowledge = {
       plain: "Whether any dependency version has a published vulnerability, and whether it's maintained. This needs vulnerability advisory data, which Lintsure doesn't download, so use a dependency scanner alongside it.",
       evidence: "Dependency scanner results (for example npm audit, OSV-Scanner or Dependabot) and how alerts are handled." },
     { ref: "A04:2025", title: "Cryptographic Failures", inCode: "yes",
-      rules: ["crypto.weak-password-hash", "crypto.weak-random-token", "crypto.weak-cipher", "jwt.unverified", "transport.plain-http", "transport.tls-verify-off", "secret.in-source"],
+      rules: ["crypto.weak-password-hash", "crypto.weak-random-token", "crypto.weak-cipher", "jwt.unverified", "transport.plain-http", "transport.tls-verify-off", "secret.in-source", "secret.public-env"],
       plain: "Protect data with sound cryptography: HTTPS everywhere, certificate checks on, strong password hashing, modern ciphers, unpredictable tokens, signed tokens that are verified, and no keys in code.",
       evidence: "Where data is encrypted in transit and at rest, and how keys are stored and rotated." },
     { ref: "A04:2025 (key management)", title: "Key management and encryption at rest", inCode: "no",

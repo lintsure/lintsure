@@ -46,7 +46,7 @@ export const iso27001: FrameworkKnowledge = {
     { ref: "A.8.20", title: "Network security", inCode: "yes", rules: ["transport.plain-http", "transport.tls-verify-off", "cors.any-origin"],
       plain: "Networks and connections are protected and controlled.",
       evidence: "Network and TLS settings." },
-    { ref: "A.8.24", title: "Use of cryptography", inCode: "yes", rules: ["secret.in-source", "crypto.weak-password-hash"],
+    { ref: "A.8.24", title: "Use of cryptography", inCode: "yes", rules: ["secret.in-source", "crypto.weak-password-hash", "secret.public-env"],
       plain: "Use strong cryptography correctly and manage keys safely, not in source code.",
       evidence: "Crypto and key management rules." },
     { ref: "A.8.25–8.29", title: "Secure development", inCode: "yes", rules: ["sql.string-built"],

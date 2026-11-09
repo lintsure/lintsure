@@ -20,6 +20,8 @@ export interface Rule {
   extensions: string[];
   /** Optional: only files whose name matches, e.g. /^package\.json$/ so lockfiles are skipped. */
   fileName?: RegExp;
+  /** Optional: only files whose path (relative to the scanned folder) matches, e.g. /(^|\/)supabase\//. */
+  pathMatch?: RegExp;
   /** Optional: a line hit is dropped when this appears within 8 lines above or 3 below
    *  (e.g. an exp claim set in the payload just before jwt.encode). */
   unlessNear?: RegExp;
