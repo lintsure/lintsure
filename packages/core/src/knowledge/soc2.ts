@@ -62,7 +62,7 @@ export const soc2: FrameworkKnowledge = {
     "A SOC 2 report is about your controls, not a pass or fail certificate. Exceptions are normal and get described.",
     "Type I looks at one day. Type II covers a period, often 3 to 12 months, so start collecting evidence early.",
     "Using AI in your service can bring AI-specific risks into scope. Auditors may ask how you oversee it.",
-    "The AICPA has proposed updated criteria. Check which version your auditor uses.",
+    "The AICPA published a draft of updated criteria in October 2026. It is open for comment until 15 January 2027 and, if approved, would apply from engagements starting on or after 31 December 2027. The criterion numbers in Lintsure follow the current criteria. Check which version your auditor uses.",
   ],
-  checkedOn: "2026-11-07",
+  checkedOn: "2026-11-09",
 };
