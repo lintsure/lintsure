@@ -23,6 +23,18 @@ export interface Profile {
   b2bCustomers?: boolean;
   /** Do customers or partners ask specifically for an ISO certificate? */
   wantsCertification?: boolean;
+  /** Do you supply software, an app or a connected device in the EU as a business? */
+  digitalProductEU?: boolean;
+  /** Is there a mobile app (iOS, Android, React Native, Expo)? */
+  mobileApp?: boolean;
+  /** Do you handle health information for US patients, as a covered entity or business associate? */
+  healthDataUS?: boolean;
+  /** Do you sell software to US government agencies or their suppliers? */
+  governmentCustomers?: boolean;
+  /** Do you sell to consumers in the EU (shops, banking, travel, e-books, communication services)? */
+  euConsumers?: boolean;
+  /** Do you take card payments (used by the PCI DSS pack)? */
+  cardPayments?: boolean;
   /** Are you based in, or mainly selling to, the US? */
   usMarket?: boolean;
 }

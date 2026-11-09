@@ -3,7 +3,9 @@
 
 export type Status = "met" | "partial" | "gap" | "outside";
 export type Severity = "high" | "medium" | "low";
-export type FrameworkId = "gdpr" | "soc2" | "iso-27001" | "eu-ai-act" | "owasp-top10";
+/** Built-in frameworks. Rule packs can add more, so FrameworkId is open to other strings. */
+export type BuiltinFrameworkId = "gdpr" | "eu-ai-act" | "owasp-top10" | "cra" | "owasp-llm" | "cwe-top25";
+export type FrameworkId = BuiltinFrameworkId | (string & {});
 
 export interface Control { framework: FrameworkId; id: string; title: string }
 
@@ -22,6 +24,8 @@ export interface Rule {
   fileName?: RegExp;
   /** Optional: only files whose path (relative to the scanned folder) matches, e.g. /(^|\/)supabase\//. */
   pathMatch?: RegExp;
+  /** Optional: skip files whose relative path matches, e.g. example folders or library adapters. */
+  unlessPath?: RegExp;
   /** Optional: a line hit is dropped when this appears within 8 lines above or 3 below
    *  (e.g. an exp claim set in the payload just before jwt.encode). */
   unlessNear?: RegExp;
@@ -32,7 +36,13 @@ export interface Rule {
   test?(line: string): boolean | "partial";
   /** File rule, for checks that need context (e.g. "an AI call with no logging in this file").
    *  Returns 1-based line numbers to flag. Must be pure. */
-  fileTest?(lines: string[]): number[];
+  fileTest?(lines: string[], shared?: string): number[];
+  /** Optional: fileTest also gets the text of every file this rule reads, joined (for example all Supabase
+   *  migrations, so row level security switched on in a later file counts). */
+  sharedContext?: boolean;
+  /** Repository check: returns the path of a file the repo should have but doesn't (e.g. "SECURITY.md"),
+   *  or null. Gets every file path relative to the scanned folder, "/"-separated. Must be pure. */
+  repoTest?(files: string[]): string | null;
   mappedBy: string;
   reviewedAt: string;
 }

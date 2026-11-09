@@ -6,7 +6,7 @@ The Lintsure engine: rules, framework knowledge, scanning and report writers. Us
 
 ```js
 import { scan, toMarkdown, toAssessmentHtml } from "@lintsure/core";
-const report = await scan("./my-app", ["gdpr", "soc2"]);
+const report = await scan("./my-app", ["gdpr", "owasp-top10"]);
 ```
 
 Docs: https://lintsure.com/docs · Source: https://github.com/lintsure/lintsure · Apache-2.0

@@ -2,9 +2,46 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
-## 0.3.4 · 2026-11-09 · Supabase and frontend secret checks
+## 0.3.4 · 2026-11-09 · Common Ground
 
-Five new rules (52 in total) for two of the most damaging mistakes in AI-built apps, open databases and secrets in the browser, and clearer MCP tool definitions (4bb46a0).
+Six frameworks focused on what every developer ships: the EU AI Act, GDPR, OWASP Top 10, OWASP Top 10 for LLM Applications, the 2025 CWE Top 25 and the EU Cyber Resilience Act. 66 rules (19 new), cross-file checks, fewer false alarms after a field test on 100 public repositories, and clearer MCP tool definitions (4bb46a0).
+
+### Frameworks: a sharper open-source set
+- **Added:** `owasp-llm` (OWASP Top 10 for LLM Applications 2025), `cwe-top25` (2025 CWE Top 25, MITRE) and `cra` (EU Cyber Resilience Act, below). These apply to almost every codebase and are where an open, local checker gives the most value.
+- **Moved to the Lintsure team platform:** SOC 2 and ISO/IEC 27001. They are certification and audit programmes run by an organisation: controls, evidence, policies and an auditor's review, most of it outside code. Their mappings now come with the platform's workspace and evidence features, where they're most useful. Every rule that used to map to them is still in the open checker and still finds the same problems; versions 0.3.3 and earlier keep their SOC 2 and ISO mappings.
+- New rules: `llm.user-input-in-system-prompt`, `llm.output-to-sink`, `llm.no-output-limit`, `mobile.token-in-plain-storage`, `mobile.cleartext-traffic`, `mobile.backup-allowed`, `mobile.webview-any-origin`.
+- `classify` takes new answers used by rule packs: `mobileApp`, `healthDataUS`, `governmentCustomers`, `euConsumers`, `cardPayments`.
+- File rules now see comment lines as blank.
+- Rule packs: `packs:` in `lintsure.config.yaml` loads installed `@lintsure/pack-*` packages, resolved only from Lintsure's own install, never from the scanned repo. `registerPack` and `loadPacks` are exported. `FrameworkId` accepts pack-defined ids.
+
+### EU Cyber Resilience Act (Beta)
+- New framework id `cra` with an own-words knowledge file: Annex I Part I and II, Art. 13(2), Art. 14 reporting, documentation and CE marking, timeline (in force 10 Dec 2024, reporting from 11 Sep 2026, full application 11 Dec 2027).
+- 46 existing rules now also map to Annex I controls (secure defaults, access, confidentiality, integrity, data minimisation, attack surface, logging, components, secure updates).
+- `repo.no-security-policy` (Partial): no `SECURITY.md` in the root, `.github/` or `docs/`.
+- `repo.no-sbom` (Partial): no CycloneDX or SPDX file in the repo.
+- `update.unverified-download` (Partial): `curl` or `wget` piped into a shell in shell scripts, YAML and Dockerfiles. Quoted text is ignored, so `echo "Install via: curl … | bash"` isn't flagged (found in the field test: 4 of 7 first hits).
+- Rules can now be repository checks (`repoTest`): they look at the file list once and point at the missing file. They only run when `cra` is selected.
+- `classify` takes a new answer, `digitalProductEU`.
+
+### CI, repository and secret checks
+- `ci.write-all-permissions` (Gap): `permissions: write-all` in a GitHub Actions workflow.
+- `ci.script-injection` (Gap): issue, comment or pull request text (title, body, branch name and so on) pasted into a `run:` step. Values passed through `env:` or used in `if:` are not flagged.
+- `repo.binary-committed` (Partial): compiled files (.exe, .dll, .so, .jar and so on) in the repo; the Gradle wrapper is allowed.
+- `repo.no-dependency-updates` (Partial): no Dependabot or Renovate config.
+- `secret.in-source` now recognises GitHub fine-grained and app tokens, GitLab, Slack webhooks, Anthropic, OpenAI, SendGrid, npm, PyPI, Hugging Face and Shopify tokens, AWS temporary keys, and DSA, encrypted and PGP private keys. Provider documentation examples (such as AWS's `AKIAIOSFODNN7EXAMPLE`) are skipped.
+- In test files, hand-typed fake keys are skipped (alphabet or number runs, words instead of random text, a whole key block on one line). Field test: secret alerts on the 18 repos went from 11 to 5.
+
+### Fewer false alarms (field test on 50 public repos: 2,214 findings down to 1,593)
+- `auth.hardcoded-password`: skips translation folders and translated or stand-in values, and no longer reads test files.
+- `sql.string-built`: skips safe tagged templates (`sql`, `tx`, `safeSql`, `Prisma.sql`, `$queryRaw`) and method calls such as `hash.update(` or SQLAlchemy `select(`.
+- `ai.call-not-logged`: skips examples, docs and AI library adapters (new rule option `unlessPath`).
+- `xss.raw-html`: skips clearing an element, DOMPurify output and JSON-LD built with `JSON.stringify`.
+
+- Second round on 50 more public repos (124,737 files, 94 seconds): `supabase.rls-disabled` now reads every SQL file in `supabase/` together (rule option `sharedContext`); `code.eval` ignores methods named `eval` and Playwright's `$$eval`; `secret.in-source` ignores code that checks for a key header and honours `pragma: allowlist secret`; `xss.raw-html` ignores fixed markup; `sql.string-built` recognises `sql<T>\``; `session.cookie-insecure` ignores SMTP settings; `crypto.weak-cipher` needs an encryption context; `crypto.weak-password-hash` ignores sentences; `log.secret` allows logging a token's length; `pii.logged` ignores GitHub's `::add-mask::`.
+- Reports list Gaps first, then by severity.
+
+### Agent guidance
+- Agents now check each Partial finding before showing it: try to rule it out from the surrounding code, then report it as likely real, needing the user's check (with the one fact to confirm), or ruled out (with a reason, recorded only if the user agrees). A missing extra safeguard is called a hardening suggestion, not a vulnerability.
 
 ### New rules
 - `supabase.rls-disabled` (Partial): a table created in a `supabase/` migration with no `enable row level security` for it in the same file. System schemas (auth, storage and so on) are skipped.
@@ -17,7 +54,7 @@ Five new rules (52 in total) for two of the most damaging mistakes in AI-built a
 
 ### MCP tools
 - Descriptions start with what the tool does, say what it returns and which tool to call first.
-- Every input has a description and an example, including all ten `classify` questions.
+- Every input has a description and an example. `classify` called with no answers returns its eleven questions, from one list that also describes the inputs.
 - `explain_framework` marks each date as already applying or upcoming.
 
 ### Knowledge
@@ -153,5 +190,4 @@ The engine, CLI, MCP server and [GitHub Action](https://github.com/lintsure/acti
 - Clearer CLI summary line (1a55089)
 
 ### Not yet
-- Auditor-reviewed rule mappings
 - The team platform

@@ -94,7 +94,9 @@ export const owaspRules: Rule[] = [
   rule({ id: "crypto.weak-cipher", title: "Weak or broken encryption", status: "gap", severity: "high", controls: [A04],
     fix: "Use AES-256-GCM or ChaCha20-Poly1305 with a random nonce, through a maintained library. Replace createCipher with createCipheriv.",
     note: "DES, RC4 and ECB mode can be broken or leak patterns in the data; createCipher derives a weak key and IV (CWE-327).", extensions: CODE,
-    test: (l) => /\bcreateCipher\s*\(|\bMODE_ECB\b|["'](des|des-ede3?|des-ede3-cbc|rc4|aes-\d{3}-ecb)["']|\b(DES3?|ARC4|Blowfish)\.new\s*\(/i.test(l) }),
+    // A quoted cipher name counts only on a line about encryption: "des" is also a German word (field test).
+    test: (l) => /\bcreateCipher\s*\(|\bMODE_ECB\b|\b(DES3?|ARC4|Blowfish)\.new\s*\(/i.test(l)
+      || (/["'](des|des-ede3?|des-ede3-cbc|rc4|aes-\d{3}-ecb)["']/i.test(l) && /cipher|crypt|algorithm/i.test(l)) }),
   rule({ id: "jwt.unverified", title: "JWT accepted without checking its signature", status: "gap", severity: "high", controls: [A04, A07],
     fix: "Verify tokens with jwt.verify (Node) or jwt.decode with a key and an explicit algorithms list (Python). Never allow the 'none' algorithm.",
     note: "Without signature checks anyone can write their own token and claim to be any user (CWE-347).", extensions: CODE,
@@ -111,12 +113,18 @@ export const owaspRules: Rule[] = [
   rule({ id: "code.eval", title: "Code run from a string", status: "gap", severity: "high", controls: [A05],
     fix: "Avoid eval and new Function. Parse data with JSON.parse or a real parser, and map names to functions with a lookup table.",
     note: "If any part of the string comes from outside, it runs as your code (code injection, CWE-94). Partial when the input isn't visible on the line.", extensions: CODE,
-    test: (l) => /\b(def|function|async)\s+eval\s*\(/.test(l) ? false // a method named eval is a definition, not a call
-      : /(^|[^.\w])eval\s*\(|\bnew Function\s*\(/.test(l) ? byInput(l) : false }),
+    // A method named eval is a definition, not a call (also TypeScript class methods, field test); $$eval is Playwright's;
+    // "eval" inside a string is text.
+    test: (l) => /\b(def|function|async)\s+eval\s*\(|^\s*((public|private|protected|static|override)\s+)*eval\s*\([^)]*\)\s*(:[^{=]+)?\{\s*$/.test(l) ? false
+      : /(^|[^.\w$])eval\s*\(|\bnew Function\s*\(/.test(l.replace(/(["'])(?:\\.|(?!\1).)*\1/g, '""')) ? byInput(l) : false }),
   rule({ id: "xss.raw-html", title: "HTML inserted without escaping", status: "partial", severity: "high", controls: [A05],
     fix: "Set text with textContent, let your framework escape values, or sanitise with DOMPurify before inserting HTML.",
     note: "If the HTML contains user input, attackers can run scripts in your users' browsers (cross-site scripting, CWE-79). Partial because fixed HTML from your own code is safe.", extensions: MARKUP,
-    test: (l) => /\.(innerHTML|outerHTML)\s*[+]?=|\bdocument\.write(ln)?\(|\bdangerouslySetInnerHTML\b|\bv-html=|\{@html\b|\|\s*safe\b|\bmark_safe\(|\bMarkup\(/.test(l) }),
+    // Clearing an element, DOMPurify-cleaned HTML and JSON-LD made with JSON.stringify are safe (field test).
+    test: (l) => /\.(innerHTML|outerHTML)\s*[+]?=|\bdocument\.write(ln)?\(|\bdangerouslySetInnerHTML\b|\bv-html=|\{@html\b|\|\s*safe\b|\bmark_safe\(|\bMarkup\(/.test(l)
+      && !/innerHTML\s*=\s*(""|''|``)\s*;?\s*$|DOMPurify\.sanitize|\bsanitize(Html)?\(|__html:\s*JSON\.stringify\(/.test(l)
+      // Fixed markup written in the code, with nothing inserted, can't carry someone else's input.
+      && !/innerHTML\s*=\s*("[^"$]*"|'[^'$]*'|`[^`$]*`)\s*;?\s*$/.test(l) }),
   rule({ id: "template.user-string", title: "Template built from request data", status: "gap", severity: "high", controls: [A05],
     fix: "Render a fixed template file and pass user values as variables, never as part of the template text.",
     note: "Template syntax in user input runs on your server (server-side template injection, CWE-94).", extensions: CODE,
@@ -140,7 +148,10 @@ export const owaspRules: Rule[] = [
   rule({ id: "auth.hardcoded-password", title: "Password written in the code", status: "partial", severity: "high", controls: [A07],
     fix: "Load passwords from environment variables or a secret manager, and rotate any that were committed.",
     note: "Anyone with the code has the password, and it can't be changed without a release (CWE-259, CWE-798).", extensions: CODE,
-    test: (l) => /\b(password|passwd|pwd|db_pass)\s*[:=]\s*["'][^"'\s]{4,}["']/i.test(l) && !/(example|placeholder|changeme|your[_-]|xxx|\*\*\*|<|process\.env|os\.environ|getenv|type\s*[:=]|label|autocomplete)/i.test(l) }),
+    unlessPath: /(^|\/)(locales?|i18n|lang|langs|translations?)\//i, // the word "password" in other languages
+    test: (l) => /\b(password|passwd|pwd|db_pass)\s*[:=]\s*["'][^"'\s]{4,}["']/i.test(l) && !/(example|placeholder|changeme|your[_-]|xxx|\*\*\*|<|process\.env|os\.environ|getenv|type\s*[:=]|label|autocomplete)/i.test(l)
+      // Translations ("Парола", "Passwort") and obvious stand-ins ("new-password", "hashed-password", "hunter2") are not credentials (field test).
+      && !/[:=]\s*["'][^"']*(passw|hash|redact|hidden|\bhunter2\b|[^\x00-\x7F])/i.test(l) }),
   rule({ id: "jwt.no-expiry", title: "JWT signed without an expiry", status: "partial", severity: "medium", controls: [A07],
     fix: "Add expiresIn (Node) or an exp claim (Python), and keep access tokens short-lived.",
     note: "A stolen token without an expiry works forever (insufficient session expiration, CWE-613). Partial because the expiry may be set in a payload built elsewhere.", extensions: CODE,
@@ -166,7 +177,7 @@ export const owaspRules: Rule[] = [
     note: "Logs are copied to many tools and people; a token in a log is a token anyone with log access can use (CWE-532).", extensions: CODE,
     test: (l) => { const a = logArgs(l); if (a === null) return false;
       // Logging only whether a token exists (!!token) or a short prefix (token[:8], token.slice(0, 8)) is safe.
-      const safe = stripStrings(a).replace(/!!\s*[\w.?]+/g, "").replace(/[\w.?]+\s*\[\s*:\s*\d+\s*\]/g, "").replace(/[\w.?]+\.slice\(\s*0\s*,\s*\d+\s*\)/g, "");
+      const safe = stripStrings(a).replace(/!!\s*[\w.?]+/g, "").replace(/[\w.?]+\s*\[\s*:\s*\d+\s*\]/g, "").replace(/[\w.?]+\.slice\(\s*0\s*,\s*\d+\s*\)/g, "").replace(/[\w.?]+\.length\b/g, ""); // its length is safe too
       return /\b(token|secret|authorization|api_?key|apiKey|bearer|access_token|refresh_token|private_?key|client_secret)\b/i.test(safe); } }),
   rule({ id: "log.injection", title: "Raw request data written to logs", status: "partial", severity: "low", controls: [A09],
     fix: "Log specific, validated fields, and strip line breaks from user input before logging it.",

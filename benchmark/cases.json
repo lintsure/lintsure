@@ -19,23 +19,37 @@
       "const email = form.email; logger.info('form submitted');",
       "console.log(`sent ${count} emails`);",
       "logger.info(`signup ${mask(user.id)}`);",
-      "sendEmail(user.email); logger.info('queued');"
+      "sendEmail(user.email); logger.info('queued');",
+      "if (process.env.GITHUB_ACTIONS) console.log(`::add-mask::${ctx.admin.password}`);"
     ]
   },
   "secret.in-source": {
     "flag": [
       "export const stripeKey = \"sk_live_51HxQabcdefghijklmnop\";",
-      "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
       "token: ghp_abcdefghijklmnopqrstuvwxyz0123456789",
       "SLACK_TOKEN=xoxb-1234567890-abcdefghij",
-      "-----BEGIN RSA PRIVATE KEY-----"
+      "-----BEGIN RSA PRIVATE KEY-----",
+      "const k = \"sk-ant-api03-Qw8Er7Ty6Ui5Op4As3Df2Gh1Jk0Lz-mnbvCXZ\";",
+      "OPENAI_API_KEY=sk-proj-Ab12Cd34Ef56Gh78Ij90Kl12Mn34",
+      "token: glpat{{}}-Ab1Cd2Ef3Gh4Ij5Kl6Mn",
+      "NPM_TOKEN=npm_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2",
+      "webhook: https://hooks.slack{{}}.com/services/T0ABC1234/B0DEF5678/Qw8Er7Ty6Ui5Op4As3Df2Gh1",
+      "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+      "AWS_ACCESS_KEY_ID=AKIA2E3RT5YU7IO9PQ4L"
     ],
     "pass": [
       "const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);",
       "export const publishable = \"pk_test_51Habc\";",
       "AWS_ACCESS_KEY_ID=",
       "// Set GITHUB_TOKEN in your CI secrets",
-      "-----BEGIN PUBLIC KEY-----"
+      "-----BEGIN PUBLIC KEY-----",
+      "aws_access_key_id = AKIAIOSFODNN7EXAMPLE",
+      "const t = \"ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\";",
+      "const prefix = \"sk-ant-\";",
+      "if (key.startsWith(\"npm_\")) return;",
+      "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
+      "const hasBeginMarker = key.includes('-----BEGIN PRIVATE KEY-----')",
+      "EC_KEY: '-----BEGIN EC PRIVATE KEY-----...',"
     ]
   },
   "transport.plain-http": {
@@ -85,7 +99,8 @@
     "pass": [
       "const hash = await bcrypt.hash(user.password, 12);",
       "const etag = md5(fileContents);",
-      "const checksum = sha1(buffer);"
+      "const checksum = sha1(buffer);",
+      "this.refuse('the server asked for an MD5 password hash'),"
     ]
   },
   "transport.tls-verify-off": {
@@ -135,7 +150,9 @@
       "db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);",
       "cursor.execute(\"SELECT * FROM orders WHERE user_id = %s\", (user_id,))",
       "const sql = 'SELECT COUNT(*) FROM companies';",
-      "const msg = `Select a plan from the list ${name}`;"
+      "const msg = `Select a plan from the list ${name}`;",
+      ".update(Buffer.from(`${talkRandom}${msg}`, \"utf8\"))",
+      "select(getattr(ChatMessage, key)).where(ChatMessage.id == f'{chat_id}-{message_id}')"
     ]
   },
   "cors.any-origin": {
@@ -355,7 +372,8 @@
     ],
     "pass": [
       "crypto.createCipheriv(\"aes-256-gcm\", key, iv);",
-      "SELECT * FROM users ORDER BY created_at DESC"
+      "SELECT * FROM users ORDER BY created_at DESC",
+      "'nicht', 'kein', 'keine', 'noch', 'bei', 'dem', 'den', 'des', 'ein', 'eine',"
     ]
   },
   "jwt.unverified": {
@@ -423,7 +441,10 @@
       "const data = JSON.parse(text);",
       "evaluate(expression)",
       "def eval(self, script: str, numkeys: int) -> Any:",
-      "  async eval() {"
+      "  async eval() {",
+      "return await this._frame.$$eval(this.selectorForQuery(), ee => ee.length);",
+      "  eval(context: AtomContext, input: TypedValue[]): TypedValue[] {",
+      "label: \"Build the eval (Recommended)\","
     ]
   },
   "xss.raw-html": {
@@ -436,7 +457,11 @@
     ],
     "pass": [
       "el.textContent = userBio;",
-      "<div>{bio}</div>"
+      "<div>{bio}</div>",
+      "barEl.innerHTML = '';",
+      "{@html DOMPurify.sanitize(html)}",
+      "<script type=\"application/ld+json\" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />",
+      "button.innerHTML = '<span>Page Copy</span>';"
     ]
   },
   "template.user-string": {
@@ -489,7 +514,11 @@
       "const field = { type: \"password\", label: \"Password\" };",
       "password = os.environ[\"DB_PASSWORD\"]",
       "password: process.env.DB_PASSWORD,",
-      "<input placeholder=\"your-password\" />"
+      "<input placeholder=\"your-password\" />",
+      "password: 'Парола',",
+      "password: 'Password',",
+      "const dto = { password: 'old-password', newPassword: 'new-password' };",
+      "[\"password: 'hunter2\", \"password: '[REDACTED]\"],"
     ]
   },
   "jwt.no-expiry": {
@@ -544,7 +573,8 @@
       "logger.info(\"token refreshed\", { userId });",
       "console.log(\"Missing API key\");",
       "logger.debug('Got token:', { hasToken: !!token?.accessToken });",
-      "logger.warning(f\"Invalid public access token: {token[:8]}...\")"
+      "logger.warning(f\"Invalid public access token: {token[:8]}...\")",
+      "console.log('[auth] token length:', token?.length);"
     ]
   },
   "log.injection": {
@@ -616,6 +646,79 @@
     "pass": [
       "productionBrowserSourceMaps: false",
       "build: { sourcemap: true }"
+    ]
+  },
+  "update.unverified-download": {
+    "flag": [
+      "curl -fsSL https://get.example.dev/install.sh | sh",
+      "RUN curl -sL https://deb.example.com/setup | sudo -E bash -",
+      "wget -qO- https://example.org/i.sh | bash",
+      "  run: curl https://tool.example.io/install | zsh",
+      "    curl -s https://raw.example.com/tool/\"$VERSION\"/install.sh | bash"
+    ],
+    "pass": [
+      "curl -fsSLo install.sh https://example.com/install.sh",
+      "curl -s https://api.example.com/health | grep ok",
+      "curl -s https://example.com/data.json | jq .name",
+      "echo done | sh # local, no download",
+      "  echo \"Install via: curl -fsSL https://deb.example.com/setup_22.x | sudo -E bash -\"",
+      "log_error \"Upgrade via: curl -fsSL https://x.example/setup | bash\""
+    ]
+  },
+  "ci.write-all-permissions": {
+    "flag": [
+      "permissions: write-all",
+      "  permissions: \"write-all\""
+    ],
+    "pass": [
+      "permissions: read-all",
+      "permissions:",
+      "  contents: write",
+      "# permissions: write-all is too broad"
+    ]
+  },
+  "llm.user-input-in-system-prompt": {
+    "flag": [
+      "{ role: \"system\", content: `You help ${req.body.company}` }",
+      "const systemPrompt = `Answer as ${userInput}`;",
+      "system_prompt = f\"You are a bot for {user_input}\""
+    ],
+    "pass": [
+      "{ role: \"system\", content: \"You are a helpful assistant.\" }",
+      "{ role: \"user\", content: req.body.question }",
+      "const systemPrompt = `Today is ${date}`;"
+    ]
+  },
+  "llm.output-to-sink": {
+    "flag": [
+      "eval(completion.choices[0].message.content);",
+      "el.innerHTML = response.choices[0].message.content;",
+      "await db.query(result.text);"
+    ],
+    "pass": [
+      "return completion.choices[0].message.content;",
+      "el.textContent = response.content;",
+      "eval(config.expr);"
+    ]
+  },
+  "mobile.token-in-plain-storage": {
+    "flag": [
+      "await AsyncStorage.setItem(\"authToken\", token);",
+      "AsyncStorage.setItem(\"refresh_token\", t)"
+    ],
+    "pass": [
+      "await SecureStore.setItemAsync(\"authToken\", token);",
+      "await AsyncStorage.setItem(\"theme\", \"dark\");"
+    ]
+  },
+  "mobile.cleartext-traffic": {
+    "flag": [
+      "<application android:usesCleartextTraffic=\"true\">",
+      "<key>NSAllowsArbitraryLoads</key>",
+      "\"usesCleartextTraffic\": true"
+    ],
+    "pass": [
+      "<application android:usesCleartextTraffic=\"false\">"
     ]
   }
 }

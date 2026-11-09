@@ -13,7 +13,9 @@ export interface AssessmentOptions {
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const NAME: Record<FrameworkId, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", soc2: "SOC 2", "iso-27001": "ISO/IEC 27001", "owasp-top10": "OWASP Top 10:2025" };
+const NAME: Record<string, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", "owasp-top10": "OWASP Top 10:2025", cra: "EU Cyber Resilience Act", "owasp-llm": "OWASP Top 10 for LLM Applications 2025", "cwe-top25": "CWE Top 25 (2025)" };
+// Frameworks from rule packs use the name in their own knowledge.
+const fwName = (f: string) => NAME[f] ?? knowledge.find((k) => k.id === f)?.name ?? f;
 const STATUS: Record<string, string> = { gap: "Gap", partial: "Partial", met: "Met", outside: "Outside code" };
 const SEV = ["high", "medium", "low"] as const;
 const SKIPPED = "node_modules, .git, dist, build, out, .output, .next, .nuxt, .svelte-kit, .astro, .vercel, .netlify, .wrangler, .turbo, .cache, venv, .venv, __pycache__, coverage";
@@ -29,7 +31,7 @@ function findingCard(f: Finding, i: number) {
   <h3>${esc(f.title)}</h3>
   <p class="where"><code>${esc(f.file)}:${f.line}</code></p>
   <dl>
-    <dt>Rules it may affect</dt><dd>${f.controls.map((c) => `${NAME[c.framework]} ${esc(c.id)} (${esc(c.title)})`).join("<br>")}</dd>
+    <dt>Rules it may affect</dt><dd>${f.controls.map((c) => `${fwName(c.framework)} ${esc(c.id)} (${esc(c.title)})`).join("<br>")}</dd>
     <dt>Why it matters</dt><dd>${esc(f.note)}</dd>
     <dt>Possible fix</dt><dd>${esc(f.fix)} Review the change before it is made.</dd>
   </dl>
@@ -49,10 +51,10 @@ export function toAssessmentHtml(r: Report, opts: AssessmentOptions): string {
 <table class="counts"><tr><th>Check points</th><th>Findings</th><th>Observations</th><th>Accepted</th><th>Fixed since baseline</th></tr>
 <tr><td>${rec.counts.checkPoints}</td><td>${rec.counts.findings}</td><td>${rec.counts.observations}</td><td>${rec.counts.accepted}</td><td>${rec.counts.fixedSinceBaseline}</td></tr></table>
 <p>Risk levels of open items: ${rec.counts.byRisk.high} high, ${rec.counts.byRisk.medium} medium, ${rec.counts.byRisk.low} low. A check point is one rule applied to one file (${rec.counts.rulesRun} rules ran).</p>
-<h3>What applies, and why</h3><ul>${rec.applies.map((a) => `<li><b>${NAME[a.framework]}</b>: ${esc(a.why)}</li>`).join("")}</ul>
+<h3>What applies, and why</h3><ul>${rec.applies.map((a) => `<li><b>${fwName(a.framework)}</b>: ${esc(a.why)}</li>`).join("")}</ul>
 <h3>Results by control</h3><p class="small">Finding: a Gap the code itself shows. Observation: a Partial that depends on context a person must confirm. No issue found: the rules found nothing in the files they read, which does not mean the control is met.</p>
 <table><tr><th>Framework</th><th>Control</th><th>Rules</th><th>Check points</th><th>Result</th><th>Items</th></tr>
-${rec.byControl.map((b) => `<tr><td>${NAME[b.framework]}</td><td><code>${esc(b.control)}</code> ${esc(b.title)}</td><td>${b.rules.map((x) => `<code>${esc(x)}</code>`).join(" ")}</td><td>${b.checkPoints}</td><td>${RESULT[b.result]}</td><td>${b.findingIds.join(", ") || "-"}</td></tr>`).join("")}</table>` : "";
+${rec.byControl.map((b) => `<tr><td>${fwName(b.framework)}</td><td><code>${esc(b.control)}</code> ${esc(b.title)}</td><td>${b.rules.map((x) => `<code>${esc(x)}</code>`).join(" ")}</td><td>${b.checkPoints}</td><td>${RESULT[b.result]}</td><td>${b.findingIds.join(", ") || "-"}</td></tr>`).join("")}</table>` : "";
   const cover = `<section class="page cover">
   <p class="brand">Lintsure</p>
   <h1>Readiness assessment</h1>
@@ -61,7 +63,7 @@ ${rec.byControl.map((b) => `<tr><td>${NAME[b.framework]}</td><td><code>${esc(b.c
     <tr><th>Date produced</th><td>${esc(opts.date)}</td></tr>
     ${rec ? `<tr><th>Record</th><td>${esc(rec.id)}, checked ${esc(rec.createdAt.replace("T", " ").slice(0, 19))} UTC</td></tr>` : ""}
     ${rec?.scope.commit ? `<tr><th>Code checked</th><td>${rec.scope.branch ? `branch <code>${esc(rec.scope.branch)}</code>, ` : ""}commit <code>${esc(rec.scope.commit)}</code></td></tr>` : ""}
-    <tr><th>Frameworks checked</th><td>${fws.map((f) => NAME[f]).join(", ") || "None"}</td></tr>
+    <tr><th>Frameworks checked</th><td>${fws.map((f) => fwName(f)).join(", ") || "None"}</td></tr>
     <tr><th>Files checked</th><td>${r.filesChecked}${rec ? `, ${rec.counts.checkPoints} check points` : ""}</td></tr>
     <tr><th>Rules version</th><td>${esc(r.rulesVersion)}</td></tr>
     <tr><th>Status of this report</th><td><b>Draft.</b> Not complete until a qualified person reviews it and signs the review page.</td></tr>
@@ -74,7 +76,7 @@ ${rec.byControl.map((b) => `<tr><td>${NAME[b.framework]}</td><td><code>${esc(b.c
 <tr><td>${n("gap")}</td><td>${n("partial")}</td><td>${r.met.length}</td><td>${r.outside.length}</td></tr></table>
 <h3>By framework</h3>
 <table><tr><th>Framework</th><th>Gaps</th><th>Partial</th><th>Rules with no finding</th><th>Outside-code items</th></tr>
-${fws.map((f) => `<tr><td>${NAME[f]}</td><td>${r.findings.filter((x) => x.status === "gap" && x.controls.some((c) => c.framework === f)).length}</td><td>${r.findings.filter((x) => x.status === "partial" && x.controls.some((c) => c.framework === f)).length}</td><td>${r.met.filter((m) => m.controls.some((c) => c.framework === f)).length}</td><td>${r.outside.filter((o) => o.framework === f).length}</td></tr>`).join("")}</table>
+${fws.map((f) => `<tr><td>${fwName(f)}</td><td>${r.findings.filter((x) => x.status === "gap" && x.controls.some((c) => c.framework === f)).length}</td><td>${r.findings.filter((x) => x.status === "partial" && x.controls.some((c) => c.framework === f)).length}</td><td>${r.met.filter((m) => m.controls.some((c) => c.framework === f)).length}</td><td>${r.outside.filter((o) => o.framework === f).length}</td></tr>`).join("")}</table>
 <div class="callout"><b>What this summary does not mean.</b> ${esc(NOT_A_VERDICT)}</div>`;
 
   const method = `<h3>What was checked</h3>
@@ -82,7 +84,7 @@ ${fws.map((f) => `<tr><td>${NAME[f]}</td><td>${r.findings.filter((x) => x.status
 <h3>How results are produced</h3>
 <ul><li>A fixed set of rules (version ${esc(r.rulesVersion)}) looks for known patterns, line by line or file by file. It does not use a language model to decide results, so the same code gives the same findings.</li>
 <li><b>Gap</b>: a rule found code that may break a control. <b>Partial</b>: a likely problem that depends on context only you can confirm. <b>Met</b>: the rule ran and found nothing in the files it read. <b>Outside code</b>: work that code cannot show.</li>
-<li>Rules reflect our reading of the publicly available text of each framework. They are in Beta: their mappings to framework controls await review by a qualified compliance professional.</li></ul>
+<li>Rules reflect our reading of the publicly available text of each framework. They are in Beta: their mappings to framework controls are our own reading of the public texts, not independently reviewed.</li></ul>
 <h3>Known limits</h3>
 <ul><li>Rules can miss real problems and can flag code that is fine.</li><li>They do not follow data across files or functions.</li><li>They mainly cover JavaScript, TypeScript and Python.</li><li>They cannot see infrastructure, cloud settings, or anything outside the folder that was scanned.</li></ul>`;
 
@@ -98,12 +100,12 @@ ${fws.map((f) => `<tr><td>${NAME[f]}</td><td>${r.findings.filter((x) => x.status
       const result = o.inCode === "no" ? "Outside code: needs evidence" : related.length ? `${related.length} finding${related.length === 1 ? "" : "s"} to review` : o.inCode === "partly" ? "No finding from the rules; code shows only part of this" : "No finding from the rules";
       return `<tr><td><code>${esc(o.ref)}</code></td><td><b>${esc(o.title)}.</b> ${esc(o.plain)}</td><td>${result}</td></tr>`;
     }).join("");
-    return `<h3>${NAME[f]}</h3>${k ? `<p>${esc(k.summary)}</p>` : ""}<table><tr><th>Ref</th><th>What it asks</th><th>What Lintsure saw</th></tr>${rows}</table>`;
+    return `<h3>${fwName(f)}</h3>${k ? `<p>${esc(k.summary)}</p>` : ""}<table><tr><th>Ref</th><th>What it asks</th><th>What Lintsure saw</th></tr>${rows}</table>`;
   }).join("");
 
   const outside = r.outside.length
     ? `<p>Code cannot show these. They still need to be done before a full review. Assign an owner to each.</p><table><tr><th>Framework</th><th>Item</th><th>Evidence an auditor may ask for</th><th>Owner</th><th>Done</th></tr>
-${r.outside.map((o) => `<tr><td>${NAME[o.framework]} <code>${esc(o.control)}</code></td><td>${esc(o.title)}</td><td>${esc(o.evidence)}</td><td></td><td>☐</td></tr>`).join("")}</table>`
+${r.outside.map((o) => `<tr><td>${fwName(o.framework)} <code>${esc(o.control)}</code></td><td>${esc(o.title)}</td><td>${esc(o.evidence)}</td><td></td><td>☐</td></tr>`).join("")}</table>`
     : `<p>No outside-code items for the frameworks checked.</p>`;
 
   const next = `<ol>${nextSteps(r).map((s) => `<li>${esc(s)}</li>`).join("")}</ol>

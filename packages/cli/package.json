@@ -1,7 +1,7 @@
 {
   "name": "lintsure",
-  "version": "0.3.3",
-  "description": "Readiness checks for the code your AI writes: EU AI Act, GDPR, SOC 2, ISO 27001. Runs locally. Not an audit or legal advice.",
+  "version": "0.3.4",
+  "description": "Readiness checks for the code your AI writes: EU AI Act, GDPR, OWASP, CWE Top 25, EU Cyber Resilience Act. Runs locally. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -13,7 +13,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@lintsure/core": "0.3.3"
+    "@lintsure/core": "0.3.4"
   },
   "author": "Lintsure <hello@lintsure.com>",
   "homepage": "https://lintsure.com/docs",
@@ -33,9 +33,7 @@
   },
   "keywords": [
     "compliance",
-    "gdpr",
-    "soc2",
-    "iso27001",
+    "gdpr",
     "eu-ai-act",
     "mcp",
     "static-analysis",

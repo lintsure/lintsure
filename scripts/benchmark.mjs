@@ -5,7 +5,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { rules } from "../packages/core/dist/src/index.js";
 
-const cases = JSON.parse(readFileSync(new URL("../benchmark/cases.json", import.meta.url), "utf8"));
+// Fake keys are stored split with {{}} so secret scanners (GitHub push protection) don't mistake them for real ones.
+const cases = JSON.parse(readFileSync(new URL("../benchmark/cases.json", import.meta.url), "utf8").replaceAll("{{}}", ""));
 const scoresUrl = new URL("../benchmark/scores.json", import.meta.url);
 const recorded = (() => { try { return JSON.parse(readFileSync(scoresUrl, "utf8")); } catch { return {}; } })();
 const pct = (n) => Math.round(n * 1000) / 10;

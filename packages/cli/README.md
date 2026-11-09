@@ -1,12 +1,12 @@
 # lintsure
 
-Readiness checks for the code your AI writes: EU AI Act, GDPR, SOC 2 and ISO/IEC 27001. Runs on your machine and never uploads your code.
+Readiness checks for the code your AI writes: EU AI Act, GDPR, OWASP Top 10, OWASP LLM Top 10, CWE Top 25 and the EU Cyber Resilience Act. Runs on your machine and never uploads your code.
 
 > **Lintsure is a readiness tool, not an audit, a certification or legal advice.** It checks code only, against our reading of the publicly available text of each framework. Work outside code still has to be done, and a qualified person should review the results before any audit or decision.
 
 ```bash
 npx lintsure scan
-npx lintsure scan ./my-app --framework gdpr,soc2 --json --fail-on gap
+npx lintsure scan ./my-app --framework gdpr,owasp-top10 --json --fail-on gap
 npx lintsure scan --report --project "My app"   # multi-page assessment to review and sign
 ```
 

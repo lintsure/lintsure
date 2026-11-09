@@ -11,8 +11,8 @@ export const APPROVAL_RULES = `Before you do anything (edit, create or delete a 
 4. The benefit to the user if they approve it.
 Then ask the user to approve that one proposal and wait. Only a clear yes is approval. Silence, "maybe" or a question is not. Do only what was approved, then show what changed. One proposal at a time.`;
 
-const NAMES: Record<string, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", soc2: "SOC 2", "iso-27001": "ISO 27001", "owasp-top10": "OWASP Top 10" };
-const refs = (cs: Control[]) => cs.map((c) => `${NAMES[c.framework]} ${c.id}`).join(", ");
+const NAMES: Record<string, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", "owasp-top10": "OWASP Top 10", cra: "Cyber Resilience Act", "owasp-llm": "OWASP LLM Top 10", "cwe-top25": "CWE Top 25" };
+const refs = (cs: Control[]) => cs.map((c) => `${NAMES[c.framework] ?? c.framework} ${c.id}`).join(", ");
 
 /** Lays a finding out as a proposal a person can approve or decline. */
 export function proposalFor(f: { file: string; line: number; title: string; fix: string; note: string; controls: Control[] }): Proposal {
@@ -36,7 +36,13 @@ When you report Lintsure results:
 - Say that results cover code only, against Lintsure's reading of the publicly available text of each framework.
 - Always mention the items outside code (policies, training, contracts, evidence) that still need to be done before a full review.
 - Recommend that a qualified person review the results before any audit, certification or business decision.
-- A control marked Met only means Lintsure's rules found no problem in the files they read. Say so if you mention Met.`;
+- A control marked Met only means Lintsure's rules found no problem in the files they read. Say so if you mention Met.
+
+Before you show a Partial finding, check it:
+- Read the code around it and try to rule it out. Each Partial note says what Lintsure couldn't see.
+- Then sort it as: likely real (say what you saw), needs the user's check (name the one fact to confirm), or ruled out (say why, and offer to record it in .lintsure/accepted.yaml with that reason, only if the user agrees).
+- Never drop a finding silently, and never upgrade one to a confirmed vulnerability without evidence from the code.
+- If another safeguard already stops the problem, call the missing one a hardening suggestion, not a vulnerability.`;
 
 /** Phrases that read as a verdict. Lintsure's own output must never claim these. */
 export const FORBIDDEN_CLAIMS: RegExp[] = [

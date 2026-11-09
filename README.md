@@ -23,7 +23,7 @@ Open source · Runs on your machine · Same input, same result</p>
 
 ## What it does
 
-Lintsure reads your repository and checks it against the EU AI Act, GDPR, SOC 2 and ISO/IEC 27001. Every finding shows:
+Lintsure reads your repository and checks it against the EU AI Act, GDPR, OWASP Top 10, OWASP LLM Top 10, CWE Top 25 and the EU Cyber Resilience Act. Every finding shows:
 
 - the **file and line**
 - a **status**: Gap, Partial, Met or Outside code
@@ -48,7 +48,7 @@ gap      src/users.ts:5    Personal data written to logs
 
 ## Try it
 
-> **Status: v0.1, Beta.** All rules are in Beta until their mappings are reviewed by a qualified compliance professional. 
+> **Status: v0.1, Beta.** All rules are in Beta: their mappings are our own reading of the public texts, not independently reviewed. 
 
 ```bash
 npx lintsure scan

@@ -29,15 +29,17 @@ test("near misses in clean code are not flagged", async () => {
 
 test("known findings stay put", async () => {
   const r = await scan(root);
-  const got = r.findings.filter((f) => !/^(src\/(more|owasp|page|stack-client)\.|package\.json|\.github\/|supabase\/|next\.config)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
+  const got = r.findings.filter((f) => !/^(src\/(more|owasp|page|stack-client)\.|package\.json|\.github\/|supabase\/|next\.config|scripts\/|SECURITY\.md|sbom|bin\/|mobile\/|web\/|src\/llm\.)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
     "ai.call-not-logged@src/ai.ts:3",
+    "llm.no-output-limit@src/ai.ts:3",
     "ai.automated-decision@src/ai.ts:4",
     "ai.hides-being-ai@src/ai.ts:5",
     "ai.synthetic-media@src/ai.ts:6",
     "ai.emotion-or-biometric@src/ai.ts:7",
     "transport.plain-http@src/billing.ts:4",
     "secret.in-source@src/config.ts:2",
+    "secret.in-source@src/config.ts:3",
     "config.debug-on@src/settings.py:2",
     "pii.logged@src/users.ts:5",
   ]);
@@ -47,7 +49,7 @@ test("every rule fills every field the site promises", () => {
   for (const r of rules) {
     for (const k of ["id", "title", "fix", "note", "mappedBy", "reviewedAt"] as const) assert.ok(r[k], `${r.id} missing ${k}`);
     assert.ok(r.controls.length > 0, `${r.id} has no controls`);
-    assert.ok(r.test || r.fileTest, `${r.id} has no test`);
+    assert.ok(r.test || r.fileTest || r.repoTest, `${r.id} has no test`);
     assert.notEqual(r.status as string, "met", `${r.id}: only the Checker may mark Met`);
   }
 });
@@ -82,15 +84,15 @@ test("outside-code items come from obligations code can't prove", () => {
 
 test("classifier suggests, with reasons", () => {
   const s = classify({ euUsers: true, personalData: true, usesAI: true, decisionArea: "credit", b2bCustomers: true, usMarket: true });
-  assert.deepEqual(s.map((x) => x.framework), ["eu-ai-act", "gdpr", "soc2", "owasp-top10"]);
+  assert.deepEqual(s.map((x) => x.framework), ["eu-ai-act", "gdpr", "owasp-top10", "cwe-top25"]);
   assert.match(s[0].reason, /high-risk/);
   assert.deepEqual(classify({ usesAI: true }), []);
 });
 
 test("reads lintsure.config.yaml and skips frameworks not checked yet", async () => {
   const c = await readConfig(fileURLToPath(new URL("../../../../fixtures/config-app", import.meta.url)));
-  assert.deepEqual(c.frameworks, ["gdpr", "soc2"]);
-  assert.deepEqual(c.skipped, ["hipaa"]);
+  assert.deepEqual(c.frameworks, ["gdpr", "cra"]);
+  assert.deepEqual(c.skipped, ["pci-dss"]);
   assert.deepEqual(c.ignore, ["vendor"]);
   assert.deepEqual(await readConfig(root), { frameworks: null, skipped: [], ignore: [] });
 });
@@ -174,7 +176,7 @@ test("ignore list, build output and minified files are skipped", async () => {
   await writeFile(join(dir, "dist/a.js"), bad);
   await writeFile(join(dir, "lintsure.config.yaml"), "ignore:\n  - tests/\n");
   const r = await scan(dir);
-  assert.deepEqual(r.findings.map((f) => f.file), ["src/a.ts"]);
+  assert.deepEqual(r.findings.filter((f) => !f.ruleId.startsWith("repo.")).map((f) => f.file), ["src/a.ts"]);
 });
 
 import { AGENT_GUIDANCE, APPROVAL_RULES, PROPOSAL_HEADING } from "../src/index.js";
@@ -293,9 +295,14 @@ test("peer dependencies and placeholder secrets in tests are not flagged", async
   await writeFile(join(dir, "package.json"), JSON.stringify({ dependencies: { a: "latest" }, peerDependencies: { react: "*" } }, null, 2));
   await mkdir(join(dir, "tests"));
   await writeFile(join(dir, "tests", "test_db.py"), 'conn = connect(password="test_password")\n');
+  // Hand-typed fake keys in tests are skipped; a random-looking one is still flagged.
+  await writeFile(join(dir, "tests", "keys.test.ts"), [
+    'bot_token = "xoxb-slack-bot-token"', 'const t = "ghp_abcdefghijklmnopqrstuvwxyz0123";',
+    "const PEM = '-----BEGIN RSA PRIVATE KEY-----\\nabc\\n-----END RSA PRIVATE KEY-----';", 'const real = "sk-proj-WZRTVpVvZEXF5s0H4y8N5n2BF6lRZhC79Zq";',
+  ].join("\n") + "\n");
   try {
-    const f = (await scan(dir)).findings.map((x) => `${x.ruleId}@${x.file}:${x.line}`);
-    assert.deepEqual(f, ["deps.unpinned-version@package.json:3"]);
+    const f = (await scan(dir)).findings.filter((x) => !x.ruleId.startsWith("repo.")).map((x) => `${x.ruleId}@${x.file}:${x.line}`);
+    assert.deepEqual(f, ["deps.unpinned-version@package.json:3", "secret.in-source@tests/keys.test.ts:4"]);
   } finally { await rm(dir, { recursive: true }); }
 });
 
@@ -340,4 +347,42 @@ test("Supabase: tables without row level security are found, system schemas and 
     "create table auth.extra (id uuid);",
     "CREATE TABLE Orders (id int);",
   ]), [1, 5]);
+});
+
+test("repository checks: a SECURITY.md in .github/ and an SPDX file count, and only CRA turns them on", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os"); const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ls-"));
+  const repo = async (fw: Parameters<typeof scan>[1]) => (await scan(dir, fw)).findings.filter((f) => f.ruleId.startsWith("repo.")).map((f) => `${f.ruleId}@${f.file}`);
+  assert.deepEqual(await repo(["gdpr"]), []);
+  assert.deepEqual(await repo(["cra"]), ["repo.no-dependency-updates@.github/dependabot.yml", "repo.no-sbom@sbom.cdx.json", "repo.no-security-policy@SECURITY.md"]);
+  await mkdir(join(dir, ".github"));
+  await writeFile(join(dir, ".github/SECURITY.md"), "Report issues to security@example.com\n");
+  await writeFile(join(dir, "app.spdx.json"), "{}\n");
+  await writeFile(join(dir, "renovate.json"), "{}\n");
+  assert.deepEqual(await repo(["cra"]), []);
+});
+
+test("row level security switched on in a later migration counts; the report lists Gaps first", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-rls-"));
+  await mkdir(join(dir, "supabase/migrations"), { recursive: true });
+  await writeFile(join(dir, "supabase/migrations/001_init.sql"), "create table notes (id uuid primary key);\ncreate table secrets (id uuid);\n");
+  await writeFile(join(dir, "supabase/migrations/002_rls.sql"), "alter table notes enable row level security;\n");
+  const r = await scan(dir, ["gdpr"]);
+  assert.deepEqual(r.findings.filter((f) => f.ruleId === "supabase.rls-disabled").map((f) => `${f.file}:${f.line}`), ["supabase/migrations/001_init.sql:2"]);
+  const md = toMarkdown(await scan(root));
+  assert.ok(md.indexOf("Gap") < md.indexOf("Partial"), "Gaps come before Partials");
+});
+
+test("rule packs: only @lintsure/pack-* names load, and a registered pack adds its framework and rules", async () => {
+  const { loadPacks, registerPack, ALL_FRAMEWORKS: fws } = await import("../src/index.js");
+  assert.deepEqual(await loadPacks(["evil-package", "../../steal", "@lintsure/pack-not-installed"]), ["evil-package", "../../steal", "@lintsure/pack-not-installed"]);
+  registerPack({ id: "@lintsure/pack-test", forExisting: { "sql.string-built": [{ framework: "test-pack", id: "T.1", title: "Test control" }] },
+    knowledge: [{ id: "test-pack", name: "Test pack", kind: "standard", summary: "", whoItAppliesTo: "", applies: () => null, obligations: [], watchOut: [], checkedOn: "2026-11-09" }],
+    rules: [] });
+  assert.ok(fws.includes("test-pack"));
+  const r = await scan(root, ["test-pack"]);
+  assert.ok(r.findings.length > 0 && r.findings.every((f) => f.ruleId === "sql.string-built"));
 });

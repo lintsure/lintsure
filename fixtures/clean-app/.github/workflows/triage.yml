@@ -1,0 +1,17 @@
+# Near misses: narrow permissions, issue text passed through env, expressions outside run steps.
+on: issues
+permissions:
+  contents: read
+  issues: write
+jobs:
+  label:
+    if: contains(github.event.issue.title, 'bug')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label ${{ github.event.issue.number }}
+        env:
+          TITLE: ${{ github.event.issue.title }}
+        run: |
+          echo "New issue $TITLE"
+          echo "${{ github.event.issue.number }}"
+      - run: echo done

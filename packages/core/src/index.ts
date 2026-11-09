@@ -20,7 +20,9 @@ export { rules };
 export * from "./guidance.js";
 export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
-export const RULES_VERSION = "0.3.3";
+export { loadPacks, registerPack, type Pack } from "./packs.js";
+import { loadPacks } from "./packs.js";
+export const RULES_VERSION = "0.3.4";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -48,31 +50,33 @@ export function nextSteps(r: Report): string[] {
     "Ask a qualified compliance professional to review the results before you rely on them.",
   ].filter(Boolean);
 }
-export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "soc2", "iso-27001", "eu-ai-act", "owasp-top10"];
+export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "eu-ai-act", "owasp-top10", "cra", "owasp-llm", "cwe-top25"];
 
 /** Reads the frameworks list from lintsure.config.yaml in the repo root, if there is one.
  *  Only the simple list form is supported:
  *    frameworks:
  *      - gdpr
- *  Ids Lintsure doesn't check yet (for example "hipaa") are returned in `skipped`.
+ *  Ids Lintsure doesn't check yet (for example "soc2" without its pack) are returned in `skipped`.
+ *  A `packs:` list loads installed @lintsure/pack-* rule packs first, so their frameworks count as known.
  *  An `ignore:` list of paths (relative to the root, for example tests/ or fixtures/) is skipped by scan(). */
-export async function readConfig(root: string): Promise<{ frameworks: FrameworkId[] | null; skipped: string[]; ignore: string[] }> {
+export async function readConfig(root: string): Promise<{ frameworks: FrameworkId[] | null; skipped: string[]; ignore: string[]; packsMissing?: string[] }> {
   let text: string;
   try { text = await readFile(join(root, "lintsure.config.yaml"), "utf8"); } catch { return { frameworks: null, skipped: [], ignore: [] }; }
-  const lists: Record<string, string[]> = { frameworks: [], ignore: [] }; let key = ""; let emptyFw = false;
+  const lists: Record<string, string[]> = { frameworks: [], ignore: [], packs: [] }; let key = ""; let emptyFw = false;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.replace(/#.*$/, "").trimEnd();
     if (/^frameworks\s*:\s*\[\s*\]\s*$/.test(line)) { emptyFw = true; key = ""; continue; }
-    const head = line.match(/^(frameworks|ignore)\s*:\s*$/);
+    const head = line.match(/^(frameworks|ignore|packs)\s*:\s*$/);
     if (head) { key = head[1]; continue; }
     if (key) { const m = line.match(/^\s+-\s*["']?([^"'\s]+)["']?\s*$/); if (m) lists[key].push(m[1]); else if (line.trim()) key = ""; }
   }
   const ignore = lists.ignore.map((p) => p.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, ""));
-  if (emptyFw) return { frameworks: [], skipped: [], ignore };
+  const packsMissing = lists.packs.length ? await loadPacks(lists.packs) : undefined;
+  if (emptyFw) return { frameworks: [], skipped: [], ignore, packsMissing };
   const ids = lists.frameworks;
-  if (!ids.length) return { frameworks: null, skipped: [], ignore };
+  if (!ids.length) return { frameworks: null, skipped: [], ignore, packsMissing };
   const known = ids.filter((i): i is FrameworkId => (ALL_FRAMEWORKS as string[]).includes(i));
-  return { frameworks: known, skipped: ids.filter((i) => !known.includes(i as FrameworkId)), ignore };
+  return { frameworks: known, skipped: ids.filter((i) => !known.includes(i as FrameworkId)), ignore, packsMissing };
 }
 
 // Dependencies, build output and caches: generated code, not code you wrote.
@@ -98,10 +102,12 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
 }
 
 const TEST_PATH = /(^|\/)(tests?|__tests__|__mocks__|spec|fixtures?|e2e)\/|\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/i;
-const SECRET_RULES = new Set(["secret.in-source", "config.default-secret-key", "auth.hardcoded-password"]);
+// Rules that also read test files. Not auth.hardcoded-password: test logins are fake by design (field test, 50 repos).
+const SECRET_RULES = new Set(["secret.in-source", "config.default-secret-key"]);
 // Lines a person already reviewed and marked for a linter or security scanner.
-const REVIEWED = /#\s*(noqa|nosec)\b|\/\/\s*NOSONAR\b|lintsure-ignore/;
-const PLACEHOLDER =/test|fake|dummy|example|sample|placeholder|sanitized|mock|xxx|changeme|localhost|["'](password|pass|secret|elastic|admin)["']/i;
+const REVIEWED = /#\s*(noqa|nosec)\b|\/\/\s*NOSONAR\b|lintsure-ignore|pragma:\s*allowlist secret/;
+// Also hand-typed fake keys: alphabet or number runs, words where random text should be, a whole key block on one line.
+const PLACEHOLDER =/test|fake|dummy|example|sample|placeholder|sanitized|mock|xxx|changeme|localhost|["'](password|pass|secret|elastic|admin)["']|abcdef|123456|\b(xox[baprs]|gh[pousr])[-_][a-z]+(-[a-z]+)*\b|PRIVATE KEY-----.*-----END/i;
 /** The JSON object key that opens the block a line sits in, e.g. "peerDependencies". Pure. */
 export function enclosingKey(lines: string[], i: number): string {
   let depth = 0;
@@ -134,11 +140,32 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   let filesChecked = 0, checkPoints = 0;
   const perRule: Record<string, number> = {};
   const { ignore } = await readConfig(root);
-  for (const abs of await listFiles(root, ignore)) {
+  const all = await listFiles(root, ignore);
+  // Repository checks look at the file list once, not at file contents. The finding points at the file that's missing.
+  const paths = all.map((p) => relative(root, p).split(sep).join("/"));
+  for (const r of active.filter((x) => x.repoTest)) {
+    checkPoints++; perRule[r.id] = 1;
+    const file = r.repoTest!(paths);
+    if (!file) continue;
+    const controls = r.controls.filter((c) => frameworks.includes(c.framework));
+    findings.push({ id: "", ruleId: r.id, file, line: 1, status: r.status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
+      proposal: proposalFor({ file, line: 1, title: r.title, fix: r.fix, note: r.note, controls }), fingerprint: fingerprint(r.id, file, "") });
+  }
+  // Rules that look across files get the joined text of every file they read, read once up front.
+  const shared = new Map<string, string>();
+  for (const r of active.filter((x) => x.sharedContext)) {
+    const texts: string[] = [];
+    for (const [k, abs] of all.entries()) {
+      const ext = extname(abs), file = paths[k];
+      if (r.extensions.includes(ext) && (!r.pathMatch || r.pathMatch.test(file)) && !r.unlessPath?.test(file)) texts.push(await readFile(abs, "utf8").catch(() => ""));
+    }
+    shared.set(r.id, texts.join("\n"));
+  }
+  for (const abs of all) {
     const ext = extname(abs) || (abs.endsWith(".env") ? ".env" : "");
     const name = basename(abs);
     const file = relative(root, abs).split(sep).join("/");
-    const relevant = active.filter((r) => r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)) && (!r.pathMatch || r.pathMatch.test(file)));
+    const relevant = active.filter((r) => r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)) && (!r.pathMatch || r.pathMatch.test(file)) && !r.unlessPath?.test(file));
     if (!relevant.length) continue;
     const buf = await readFile(abs);
     if (buf.length > MAX_BYTES || buf.includes(0)) continue; // skip big or binary files
@@ -171,7 +198,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         if (REVIEWED.test(text)) return; // someone already looked at this line and marked it
         add(r, i + 1, hit === "partial" ? "partial" : r.status);
       });
-      if (r.fileTest) for (const n of r.fileTest(lines)) add(r, n);
+      // File rules see comment lines as blank, so "<img> in a comment" or a commented-out call doesn't count (field test).
+      if (r.fileTest) for (const n of r.fileTest(skip ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id))) add(r, n);
     }
   }
   // Auditor: one finding per rule per line; stable order.
@@ -237,7 +265,9 @@ export function toMarkdown(r: Report): string {
   ];
   if (r.baseline) lines.splice(lines.length - 2, 0, `Since the baseline of ${r.baseline.created}: ${r.baseline.newCount} new, ${r.baseline.fixed.length} fixed, ${r.baseline.unchangedCount} unchanged.`, "");
   if (!r.findings.length) lines.push("No issues found by the current rules.", "");
-  for (const f of r.findings) lines.push(
+  // Fix first: Gaps before Partials, then by severity; file order within each group.
+  const rank = (f: Finding) => (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity];
+  for (const f of [...r.findings].sort((a, b) => rank(a) - rank(b))) lines.push(
     `### ${f.id} · ${f.status === "gap" ? "Finding" : "Observation"} (${LABEL[f.status]}) · \`${f.file}:${f.line}\`${f.change === "new" ? " · New since baseline" : ""}`, `**${f.title}** · Risk level: ${f.severity}`, "",
     ...(f.accepted ? [acceptedLine(f.accepted), ""] : []),
     `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, "",

@@ -1,0 +1,2 @@
+<!-- Planted examples: cleartext traffic and backups allowed. -->
+<application android:usesCleartextTraffic="true" android:allowBackup="true" />

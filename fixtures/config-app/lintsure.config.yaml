@@ -1,6 +1,6 @@
 frameworks:
   - gdpr
-  - soc2   # comment
-  - hipaa
+  - cra   # comment
+  - pci-dss
 ignore:
   - ./vendor/

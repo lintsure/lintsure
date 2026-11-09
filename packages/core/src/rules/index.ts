@@ -4,9 +4,11 @@
 import type { Rule } from "../types.js";
 import { owaspForExisting, owaspRules } from "./owasp.js";
 import { stackRules } from "./stack.js";
+import { craForExisting, craRules } from "./cra.js";
+import { standardsForExisting, standardsRules } from "./standards.js";
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
-// Beta: mapped by us, awaiting review by a qualified compliance professional.
+// Beta: mapped by us from our own reading of the public texts.
 const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 
 const LOG_CALL = /\b(console\.(log|info|warn|error|debug)|logger\.\w+|log\.(info|warn|error|debug)|logging\.\w+|print)\s*\(/;
@@ -24,6 +26,25 @@ function logArgs(l: string): string | null {
 const USER_INPUT = /\b(req|request|params|query|body|input|args|form|ctx|event|payload|searchParams|user_input)\b/;
 const SQL_PARTS = /\$\{([^}]*)\}|\bf["'][^"']*\{([^}]*)\}|["']\s*\+\s*([\w.[\]]+)|\.format\(([^)]*)\)|%s["']\s*%\s*([^\n]+)/g;
 
+// Key formats with a fixed, documented prefix, so a match is almost never anything else. Written from each
+// provider's published token format. Generic "key = random string" guessing is left out on purpose: too noisy.
+const KEY_FORMATS = new RegExp([
+  "\\b[sr]k_live_[0-9a-zA-Z]{10,}", // Stripe secret and restricted keys
+  "\\b(AKIA|ASIA)[0-9A-Z]{16}\\b", // AWS access key ids
+  "\\bgh[pousr]_[0-9A-Za-z]{30,}", "\\bgithub_pat_[0-9A-Za-z_]{40,}", // GitHub tokens
+  "\\bglpat-[0-9A-Za-z_-]{20,}", // GitLab personal tokens
+  "\\bxox[baprs]-[0-9A-Za-z-]{10,}", "hooks\\.slack\\.com/services/T[0-9A-Z]+/B[0-9A-Z]+/[0-9A-Za-z]{20,}", // Slack
+  "\\bsk-ant-(api|admin)\\d{2}-[0-9A-Za-z_-]{20,}", // Anthropic
+  "\\bsk-(proj|svcacct|admin)-[0-9A-Za-z_-]{20,}", "\\bsk-[0-9A-Za-z]{20}T3BlbkFJ[0-9A-Za-z]{20}", // OpenAI
+  "\\bSG\\.[0-9A-Za-z_-]{22}\\.[0-9A-Za-z_-]{43}", // SendGrid
+  "\\bnpm_[0-9A-Za-z]{36}\\b", "\\bpypi-AgEIcHlwaS5vcmc[0-9A-Za-z_-]{20,}", // npm and PyPI publish tokens
+  "\\bhf_[A-Za-z]{34}\\b", // Hugging Face
+  "\\bshp(at|ss|ca|pa)_[0-9a-fA-F]{32}\\b", // Shopify
+  "-----BEGIN (RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----", "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+].join("|"));
+// Example values from provider docs (AKIAIOSFODNN7EXAMPLE and the like) and obvious fill-ins.
+const DOC_EXAMPLE = /EXAMPLE|X{6,}|x{6,}|0{12,}|1234567890abcdef/;
+
 export const rules: Rule[] = [
   {
     id: "pii.logged",
@@ -31,13 +52,12 @@ export const rules: Rule[] = [
     status: "gap", severity: "high",
     controls: [
       { framework: "gdpr", id: "Art. 32", title: "Security of processing" },
-      { framework: "soc2", id: "CC6.1", title: "Logical access security" },
-      { framework: "iso-27001", id: "A.8.11", title: "Data masking" },
     ],
     fix: "Mask or remove the personal field before logging, for example mask(user.email).",
     note: "Logs are copied to many places and kept for a long time. Personal data in them is hard to find and delete.",
     extensions: CODE,
-    test: (l) => { const a = logArgs(l); return a !== null && PII.test(codeOnly(a)); },
+    // ::add-mask:: tells GitHub Actions to hide the value in its logs.
+    test: (l) => { const a = logArgs(l); return a !== null && !l.includes("::add-mask::") && PII.test(codeOnly(a)); },
     ...DRAFT,
   },
   {
@@ -45,14 +65,13 @@ export const rules: Rule[] = [
     title: "Secret or private key committed to source",
     status: "gap", severity: "high",
     controls: [
-      { framework: "soc2", id: "CC6.1", title: "Logical access security" },
-      { framework: "iso-27001", id: "A.8.24", title: "Use of cryptography" },
       { framework: "gdpr", id: "Art. 32", title: "Security of processing" },
     ],
     fix: "Move the secret to an environment variable or secrets manager, then rotate it: it is already in your git history.",
     note: "Anyone with read access to the repo, or a leaked copy of it, can use this key.",
     extensions: [...CODE, ".env", ".json", ".yaml", ".yml", ".toml"],
-    test: (l) => /(sk_live_[0-9a-zA-Z]{10,}|AKIA[0-9A-Z]{16}|ghp_[0-9A-Za-z]{30,}|xox[baprs]-[0-9A-Za-z-]{10,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)/.test(l),
+    // A key header that ends right at a quote (or "...") is code looking for a key, e.g. key.includes('-----BEGIN PRIVATE KEY-----').
+    test: (l) => { const m = l.match(KEY_FORMATS); return !!m && !DOC_EXAMPLE.test(m[0]) && !/PRIVATE KEY( BLOCK)?-----(["'`]|\.\.\.)/.test(l); },
     ...DRAFT,
   },
   {
@@ -60,8 +79,6 @@ export const rules: Rule[] = [
     title: "Data sent over plain HTTP",
     status: "partial", severity: "medium",
     controls: [
-      { framework: "soc2", id: "CC6.7", title: "Transmission of data" },
-      { framework: "iso-27001", id: "A.8.20", title: "Network security" },
       { framework: "gdpr", id: "Art. 32", title: "Security of processing" },
     ],
     fix: "Use https:// for every external call.",
@@ -77,8 +94,6 @@ export const rules: Rule[] = [
     controls: [
       { framework: "gdpr", id: "Art. 5(1)(c)", title: "Data minimisation" },
       { framework: "gdpr", id: "Art. 28", title: "Processors" },
-      { framework: "soc2", id: "P6.1", title: "Disclosure to third parties" },
-      { framework: "iso-27001", id: "A.5.34", title: "Privacy and protection of PII" },
     ],
     fix: "Send an internal user ID instead of the email or name, and list the tool as a processor.",
     note: "Analytics vendors keep what you send them. Personal data there needs a lawful basis and a processing agreement.",
@@ -92,8 +107,6 @@ export const rules: Rule[] = [
     status: "partial", severity: "medium",
     controls: [
       { framework: "gdpr", id: "Art. 32", title: "Security of processing" },
-      { framework: "soc2", id: "CC6.1", title: "Logical access security" },
-      { framework: "iso-27001", id: "A.8.11", title: "Data masking" },
     ],
     fix: "Send it in the request body or a header instead of the query string.",
     note: "URLs end up in server logs, browser history and referrer headers. Marked Partial: confirm the value is real personal data.",
@@ -107,13 +120,12 @@ export const rules: Rule[] = [
     status: "gap", severity: "high",
     controls: [
       { framework: "gdpr", id: "Art. 32", title: "Security of processing" },
-      { framework: "soc2", id: "CC6.1", title: "Logical access security" },
-      { framework: "iso-27001", id: "A.8.24", title: "Use of cryptography" },
     ],
     fix: "Use a password hashing function made for it: argon2id, scrypt or bcrypt.",
     note: "MD5 and SHA-1 are fast, so leaked hashes can be cracked quickly.",
     extensions: CODE,
-    test: (l) => /\b(md5|sha1)\b/i.test(l) && /pass(word|wd)?/i.test(l),
+    // Sentences in strings ("the server asked for an MD5 password hash") are messages, not hashing (field test).
+    test: (l) => { const c = l.replace(/(["'`])(?:(?!\1).)*\s(?:(?!\1).)*\1/g, '""'); return /\b(md5|sha1)\b/i.test(c) && /pass(word|wd)?/i.test(c); },
     ...DRAFT,
   },
   {
@@ -121,8 +133,6 @@ export const rules: Rule[] = [
     title: "TLS certificate checks turned off",
     status: "gap", severity: "high",
     controls: [
-      { framework: "soc2", id: "CC6.7", title: "Transmission of data" },
-      { framework: "iso-27001", id: "A.8.20", title: "Network security" },
       { framework: "gdpr", id: "Art. 32", title: "Security of processing" },
     ],
     fix: "Remove the override and trust a proper certificate. For self-signed certs in tests, scope it to the test only.",
@@ -136,8 +146,6 @@ export const rules: Rule[] = [
     title: "SQL query built from strings",
     status: "gap", severity: "high",
     controls: [
-      { framework: "soc2", id: "CC7.1", title: "Detect and fix vulnerabilities" },
-      { framework: "iso-27001", id: "A.8.28", title: "Secure coding" },
       { framework: "gdpr", id: "Art. 32", title: "Security of processing" },
     ],
     fix: "Use parameterized queries or your ORM's query builder. If the inserted value is fixed text from your own code, confirm it can never come from a user.",
@@ -145,11 +153,14 @@ export const rules: Rule[] = [
     extensions: CODE,
     test: (l) => {
       // SQL keywords are written in UPPER or lower case; "Select a plan from..." in a sentence is not SQL.
-      if (!/\b(SELECT|INSERT|UPDATE|DELETE|select|insert|update|delete)\b[^"'`]*\b(FROM|INTO|SET|WHERE|from|into|set|where)\b/.test(l)) return false;
+      // A keyword after a dot or before "(" is a method call (hash.update(...), select(Model) in SQLAlchemy), not SQL text.
+      if (!/(?<![.\w])(SELECT|INSERT|UPDATE|DELETE|select|insert|update|delete)\b(?!\s*\()[^"'`]*\b(FROM|INTO|SET|WHERE|from|into|set|where)\b/.test(l)) return false;
       const parts = [...l.matchAll(SQL_PARTS)].map((m) => m.slice(1).find(Boolean) ?? "");
       if (!parts.length) return false;
       return parts.some((p) => USER_INPUT.test(p)) ? true : "partial";
     },
+    // Tagged templates from Postgres.js, Drizzle, Prisma and similar send ${} values as parameters, not as SQL text (field test).
+    unlessNear: /(?<![.\w])(sql|safeSql|tx|Prisma\.sql)(<[^>`]*>)?\s*`|\$queryRaw\s*`/,
     ...DRAFT,
   },
   {
@@ -157,8 +168,6 @@ export const rules: Rule[] = [
     title: "API open to requests from any website",
     status: "partial", severity: "medium",
     controls: [
-      { framework: "soc2", id: "CC6.6", title: "Boundary protection" },
-      { framework: "iso-27001", id: "A.8.20", title: "Network security" },
     ],
     fix: "List the exact origins that may call the API.",
     note: "Marked Partial: fine for a public, read-only API. Risky when the API uses cookies or returns user data.",
@@ -171,13 +180,13 @@ export const rules: Rule[] = [
     title: "Session cookie without Secure or HttpOnly",
     status: "partial", severity: "medium",
     controls: [
-      { framework: "soc2", id: "CC6.1", title: "Logical access security" },
-      { framework: "iso-27001", id: "A.8.5", title: "Secure authentication" },
     ],
     fix: "Set secure: true and httpOnly: true on session cookies.",
     note: "Without these flags a session cookie can be read by scripts or sent over plain HTTP. Marked Partial: confirm it is a session cookie.",
     extensions: CODE,
     test: (l) => /\b(httpOnly|secure)\s*:\s*false\b|SESSION_COOKIE_(SECURE|HTTPONLY)\s*=\s*False/.test(l),
+    // `secure: false` in an email (SMTP) transport is about TLS on that connection, not a cookie (field test).
+    unlessNear: /\b(smtp|createTransport|nodemailer|ignoreTLS|requireTLS)\b/i,
     ...DRAFT,
   },
   {
@@ -185,8 +194,6 @@ export const rules: Rule[] = [
     title: "Debug mode switched on in code",
     status: "partial", severity: "medium",
     controls: [
-      { framework: "soc2", id: "CC8.1", title: "Change management" },
-      { framework: "iso-27001", id: "A.8.9", title: "Configuration management" },
     ],
     fix: "Read debug from an environment variable that is off in production.",
     note: "Debug pages can show stack traces, settings and secrets. Marked Partial: it may only run locally.",
@@ -213,7 +220,7 @@ const AI_CALL = new RegExp([
   /\b(fetch|axios(\.\w+)?|requests\.\w+|httpx\.\w+|ky(\.\w+)?)\s*\(\s*[`"'][^`"']*(api\.openai\.com\/v1\/(chat|responses|completions|images|audio)|api\.anthropic\.com\/v1\/messages|generativelanguage\.googleapis\.com|openrouter\.ai\/api|api\.groq\.com|api\.mistral\.ai|api\.deepseek\.com)/.source,
 ].join("|"), "i");
 const NOT_AI = /\bfunctions\.invoke\s*\(/;
-const isAiCall = (l: string) => AI_CALL.test(l) && !NOT_AI.test(l);
+export const isAiCall = (l: string) => AI_CALL.test(l) && !NOT_AI.test(l);
 /** The first AI call in a file with no log or save between 10 lines above and 30 below (one finding per file). Pure. */
 export const unloggedAiCalls = (lines: string[]) => {
   const i = lines.findIndex((l, i) => isAiCall(l) && !lines.slice(Math.max(0, i - 10), i + 31).some((x) => LOGGED.test(x)));
@@ -249,12 +256,13 @@ rules.push(
     status: "partial", severity: "medium",
     controls: [
       { framework: "eu-ai-act", id: "Art. 12", title: "Record-keeping" },
-      { framework: "soc2", id: "CC7.2", title: "Monitoring of system components" },
     ],
     fix: "Log each AI call: time, model and version, input reference and output, without raw personal data.",
     note: "High-risk systems must keep logs that let you trace what the AI did. Marked Partial: logging may happen in a wrapper or another file.",
     extensions: CODE,
     fileTest: unloggedAiCalls,
+    // Examples, docs and the provider adapters inside AI libraries aren't where an app keeps its records (field test, 50 repos).
+    unlessPath: /(^|\/)(examples?|samples?|cookbooks?|docs?|libs)\/|(^|\/)(providers?|adapters?|llms?|model-runtime|integrations)\//i,
     ...DRAFT,
   },
   {
@@ -303,3 +311,8 @@ for (const r of rules) r.controls.push(...(owaspForExisting[r.id] ?? []));
 rules.push(...owaspRules);
 // Supabase, Next.js and Vite: open databases and secrets reaching the browser.
 rules.push(...stackRules);
+for (const r of rules) r.controls.push(...(craForExisting[r.id] ?? []));
+rules.push(...craRules);
+rules.push(...standardsRules);
+// After the push, so the new LLM rules also get their CWE tags.
+for (const r of rules) r.controls.push(...(standardsForExisting[r.id] ?? []));

@@ -20,7 +20,9 @@ const calls = [
   ["scan", { path: "fixtures/sample-app" }],
   ["classify", { euUsers: true, personalData: true }],
   ["classify", {}],
+  ["classify", { digitalProductEU: true }],
   ["explain_framework", { framework: "gdpr" }],
+  ["explain_framework", { framework: "cra" }],
   ["explain_rule", { ruleId: "pii.logged" }],
 ];
 for (const [name, args] of calls) {
@@ -31,6 +33,8 @@ for (const [name, args] of calls) {
   const body = texts.join(" ").split(NOT_A_VERDICT).join("").split(DISCLAIMER).join("");
   if (FORBIDDEN_CLAIMS.some((re) => re.test(body))) fail(`${name} reply reads like a verdict`);
   if ((name === "scan" || name === "explain_rule") && !texts.join(" ").includes(APPROVAL_RULES)) fail(`${name} reply misses the approval rules`);
+  if (name === "classify" && Object.keys(args).length === 0 && !/Ask the user these questions[\s\S]*- digitalProductEU:/.test(texts.join(" "))) fail("classify with no answers should return every question");
+  if (name === "classify" && args.digitalProductEU && !texts.join(" ").includes("Cyber Resilience Act")) fail("classify should suggest the Cyber Resilience Act");
   console.log("ok", name);
 }
 p.kill(); console.log("MCP smoke test passed");

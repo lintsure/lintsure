@@ -8,16 +8,16 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { AGENT_GUIDANCE, APPROVAL_RULES, ALL_FRAMEWORKS, DISCLAIMER, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
-const server = new McpServer({ name: "lintsure", version: "0.3.3" }, { instructions: AGENT_GUIDANCE });
+const server = new McpServer({ name: "lintsure", version: "0.3.4" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const fw = z.array(z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]])).optional()
-  .describe("Frameworks to check, for example [\"gdpr\", \"owasp-top10\"]. Leave out to use lintsure.config.yaml in the repo, or all five if there is none.");
+  .describe("Frameworks to check, for example [\"gdpr\", \"owasp-top10\"]. Leave out to use lintsure.config.yaml in the repo, or all six if there is none.");
 // Every answer ends with the same disclaimer, so no tool output can be read as a verdict.
 const reply = (...texts: string[]) => ({ content: [...texts, `---\n${DISCLAIMER}`].map((text) => ({ type: "text" as const, text })) });
 
 server.tool("scan",
-  "Scan a repository's source code for compliance and security gaps against the chosen frameworks. Returns a Markdown report and the same data as JSON: each finding with file, line, status (Gap or Partial), the controls it relates to, a suggested fix and a proposal the user must approve, plus work that can't be checked in code. Read-only: it never changes files. Call classify first if you don't know which frameworks apply. Results are for a person to review, never a pass, certification or decision.",
+  "Scan a repository's source code for compliance and security gaps against the chosen frameworks. Use when the user asks things like 'is this ready to ship?', 'are we GDPR ready?' or 'check this repo for security issues'. Returns a Markdown report and the same data as JSON: each finding with file, line, status (Gap or Partial), the controls it relates to, a suggested fix and a proposal the user must approve, plus work that can't be checked in code. Read-only: it never changes files. Call classify first if you don't know which frameworks apply. Results are for a person to review, never a pass, certification or decision.",
   {
     path: z.string().default(".").describe("Folder to scan, absolute or relative to where the server runs. Example: \".\" for the current project, or \"apps/web\"."),
     frameworks: fw,
@@ -33,30 +33,60 @@ server.tool("scan",
   });
 
 server.tool("explain_rule",
-  "Explain one Lintsure rule in plain words: what it looks for, which framework controls it relates to (for example GDPR Art. 32 or OWASP A05), why it matters and how to fix it. Use it when the user asks about a finding from scan. Returns text; read-only.",
+  "Explain one Lintsure rule in plain words: what it looks for, which framework controls it relates to (for example GDPR Art. 32 or OWASP A05), why it matters and how to fix it. Use after scan, when the user asks about a finding ('what does pii.logged mean?', 'why is this a problem?'). Returns text; read-only.",
   { ruleId: z.string().describe("The rule id shown on a scan finding. Examples: \"pii.logged\" (personal data in logs), \"secret.in-source\", \"supabase.rls-disabled\". The full list is at lintsure.com/rules.") }, RO,
   async ({ ruleId }) => {
     const r = rules.find((x) => x.id === ruleId);
     return reply(r ? `${r.title}\nControls: ${r.controls.map((c) => `${c.framework} ${c.id}`).join(", ")}\nSuggested fix: ${r.fix}\nNote: ${r.note}\n\n${APPROVAL_RULES}` : `No rule named ${ruleId}. Rule ids look like "pii.logged"; see lintsure.com/rules.`);
   });
 
-const yes = (what: string) => z.boolean().optional().describe(what);
+// One list of questions: it describes the inputs and is what the agent asks when it has no answers yet.
+const QUESTIONS = {
+  euUsers: "Do you have users or customers in the EU?",
+  personalData: "Do you store or process data about people (names, emails, addresses, IP addresses)?",
+  specialCategoryData: "Any sensitive data, such as health, biometrics, ethnicity, religion, politics, sexual orientation or union membership?",
+  usesAI: "Does any feature use an AI model, including third-party ones like OpenAI or Gemini?",
+  generativeAI: "Does the AI create text, images, audio or video that people see?",
+  interactsWithPeople: "Do people talk or chat with the AI directly, for example a chatbot or voice assistant?",
+  decisionArea: "Does the AI help decide something important about people? If so, which area (for example \"employment\" for screening job applicants, \"credit\" for loan scoring), otherwise \"none\".",
+  b2bCustomers: "Do you sell to businesses, whose security teams may ask for SOC 2 or ISO 27001?",
+  wantsCertification: "Do customers or partners ask for a security certificate or report, such as ISO 27001 or a SOC 2 report?",
+  digitalProductEU: "Do you sell or supply software, an app or a connected device in the EU as a business?",
+  mobileApp: "Do you have a mobile app (iOS, Android, React Native, Expo or Flutter)?",
+  healthDataUS: "Do you handle health information for US patients, as a healthcare provider or for one (business associate)?",
+  governmentCustomers: "Do you sell software to US government agencies or their suppliers?",
+  euConsumers: "Do you sell to consumers in the EU, for example an online shop, banking, travel booking, e-books or a messaging service?",
+  cardPayments: "Do you take card payments?",
+  usMarket: "Do you sell in the United States?",
+} as const;
+const yes = (k: keyof typeof QUESTIONS) => z.boolean().optional().describe(`${QUESTIONS[k]} True or false; leave out if unknown.`);
 server.tool("classify",
-  "Suggest which compliance frameworks may apply to a product, with a short reason for each, from a few yes/no answers about it. Answer what you know and leave the rest out. Returns a list of frameworks to confirm with the user before running scan. Suggestions only: the user decides, ideally with a compliance professional. Read-only.",
+  "Suggest which compliance frameworks may apply to a product, with a short reason for each, from a few yes/no answers about it. Use when the user asks 'which rules apply to us?' or before a first scan. Call it with no answers to get the questions to ask the user; then call it again with what you know and leave the rest out. Returns a list of frameworks to confirm with the user before running scan. Suggestions only: the user decides, ideally with a compliance professional. Read-only.",
   {
-    euUsers: yes("True if the product has users or customers in the EU."),
-    personalData: yes("True if it stores or processes data about people, such as names, emails, addresses or IP addresses."),
-    specialCategoryData: yes("True if it handles sensitive data: health, biometrics, ethnicity, religion, politics, sexual orientation or union membership."),
-    usesAI: yes("True if any feature uses an AI model, including third-party ones like OpenAI or Gemini."),
-    generativeAI: yes("True if the AI creates text, images, audio or video that people see."),
-    interactsWithPeople: yes("True if people talk or chat with the AI directly, for example a chatbot or voice assistant."),
+    euUsers: yes("euUsers"),
+    personalData: yes("personalData"),
+    specialCategoryData: yes("specialCategoryData"),
+    usesAI: yes("usesAI"),
+    generativeAI: yes("generativeAI"),
+    interactsWithPeople: yes("interactsWithPeople"),
     decisionArea: z.enum(["none", "credit", "employment", "education", "essential-services", "insurance", "biometrics", "law-enforcement", "migration", "justice", "critical-infrastructure"]).optional()
-      .describe("If the AI helps decide something important about people, the area it decides in. Example: \"employment\" for screening job applicants, \"credit\" for loan scoring. Use \"none\" otherwise."),
-    b2bCustomers: yes("True if it sells to businesses, whose security teams may ask for SOC 2 or ISO 27001."),
-    wantsCertification: yes("True if customers or partners ask for a security certificate or report, such as ISO 27001 or a SOC 2 report."),
-    usMarket: yes("True if it sells in the United States."),
+      .describe(QUESTIONS.decisionArea),
+    b2bCustomers: yes("b2bCustomers"),
+    wantsCertification: yes("wantsCertification"),
+    digitalProductEU: yes("digitalProductEU"),
+    mobileApp: yes("mobileApp"),
+    healthDataUS: yes("healthDataUS"),
+    governmentCustomers: yes("governmentCustomers"),
+    euConsumers: yes("euConsumers"),
+    cardPayments: yes("cardPayments"),
+    usMarket: yes("usMarket"),
   }, RO,
   async (profile) => {
+    // No answers yet: hand back the questions, so the agent asks the user instead of guessing.
+    if (!Object.values(profile).some((v) => v !== undefined)) return reply([
+      "Ask the user these questions, then call classify again with their answers (leave out anything they don't know):",
+      ...Object.entries(QUESTIONS).map(([k, q]) => `- ${k}: ${q}`),
+    ].join("\n"));
     const s = classify(profile);
     return reply(s.length
       ? `These frameworks may apply, based on the answers given:\n${s.map((x) => `- ${x.name}: ${x.reason}`).join("\n")}\n\nThis is a suggestion, not a legal determination. Ask the user to confirm the list before running scan.`
@@ -64,8 +94,8 @@ server.tool("classify",
   });
 
 server.tool("explain_framework",
-  "Explain a compliance framework in plain words: what it is, who it applies to, key dates (marked as already applying or upcoming), what it asks for, which parts Lintsure can check in code and which need work outside code. Use it before a scan to help the user understand what applies. Returns text; read-only.",
-  { framework: z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]]).describe("Which framework to explain: \"eu-ai-act\", \"gdpr\", \"soc2\", \"iso-27001\" or \"owasp-top10\".") }, RO,
+  "Explain a compliance framework in plain words: what it is, who it applies to, key dates (marked as already applying or upcoming), what it asks for, which parts Lintsure can check in code and which need work outside code. Use when the user asks 'what is the EU AI Act?', 'does the Cyber Resilience Act apply to us?', 'when does it apply?' or 'what does SOC 2 need from our code?', often before a scan. Returns text; read-only.",
+  { framework: z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]]).describe("Which framework to explain: \"eu-ai-act\", \"gdpr\", \"owasp-top10\", \"cra\" (EU Cyber Resilience Act), \"owasp-llm\" or \"cwe-top25\". Rule packs installed with Lintsure add more.") }, RO,
   async ({ framework }) => {
     const k = getKnowledge(framework)!;
     const today = new Date().toISOString().slice(0, 10);

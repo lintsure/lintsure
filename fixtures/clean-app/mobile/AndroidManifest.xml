@@ -1,0 +1,2 @@
+<!-- Near misses: cleartext off, backups off. -->
+<application android:usesCleartextTraffic="false" android:allowBackup="false" />

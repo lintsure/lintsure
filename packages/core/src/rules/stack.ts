@@ -6,9 +6,6 @@ import type { Control, Rule } from "../types.js";
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 const GDPR32: Control = { framework: "gdpr", id: "Art. 32", title: "Security of processing" };
-const CC61: Control = { framework: "soc2", id: "CC6.1", title: "Logical access security" };
-const A83: Control = { framework: "iso-27001", id: "A.8.3", title: "Information access restriction" };
-const A824: Control = { framework: "iso-27001", id: "A.8.24", title: "Use of cryptography" };
 const OW = (n: string, title: string): Control => ({ framework: "owasp-top10", id: `A${n}:2025`, title });
 const A01 = OW("01", "Broken Access Control"), A02 = OW("02", "Security Misconfiguration"), A04 = OW("04", "Cryptographic Failures");
 const rule = (r: Omit<Rule, "mappedBy" | "reviewedAt">): Rule => ({ ...r, ...DRAFT });
@@ -16,8 +13,8 @@ const rule = (r: Omit<Rule, "mappedBy" | "reviewedAt">): Rule => ({ ...r, ...DRA
 // Tables in schemas Supabase manages itself; RLS on these is not the app's job.
 const SYSTEM_SCHEMA = /^(auth|storage|realtime|extensions|supabase_\w+|pg_\w+|graphql\w*|vault)\./i;
 /** Tables created in this SQL file with no "enable row level security" for them in the same file. Pure. */
-export function tablesWithoutRls(lines: string[]): number[] {
-  const text = lines.join("\n").toLowerCase();
+export function tablesWithoutRls(lines: string[], shared?: string): number[] {
+  const text = (shared ?? lines.join("\n")).toLowerCase();
   const out: number[] = [];
   lines.forEach((l, i) => {
     const m = /^\s*create\s+table\s+(if\s+not\s+exists\s+)?([\w."]+)/i.exec(l);
@@ -43,17 +40,18 @@ const SUPABASE_DIR = /(^|\/)supabase\//;
 const PUBLIC_BY_DESIGN = /ANON|PUBLISHABLE|_PK_|PUBLIC_KEY|FIREBASE|MAPS|MAPBOX|POSTHOG|SENTRY_DSN|ALGOLIA_SEARCH|SITE_KEY|MEASUREMENT_ID|URL$|_URL_/;
 
 export const stackRules: Rule[] = [
-  rule({ id: "supabase.rls-disabled", title: "Database table without row level security", status: "partial", severity: "high", controls: [GDPR32, CC61, A83, A01],
+  rule({ id: "supabase.rls-disabled", title: "Database table without row level security", status: "partial", severity: "high", controls: [GDPR32, A01],
     fix: "Add `alter table <name> enable row level security;` and a policy that limits each row to its owner, for example `using (auth.uid() = user_id)`.",
-    note: "In Supabase, a table without row level security can be read and changed by anyone with your public anon key, which ships in every browser. Marked Partial: it may be enabled in another migration.", extensions: [".sql"],
+    note: "In Supabase, a table without row level security can be read and changed by anyone with your public anon key, which ships in every browser. Lintsure looks across every SQL file in supabase/. Marked Partial: it may be switched on outside these files, for example in the dashboard.", extensions: [".sql"],
     pathMatch: SUPABASE_DIR,
+    sharedContext: true, // RLS is often switched on in a later migration (field test, 50 repos)
     fileTest: tablesWithoutRls }),
-  rule({ id: "supabase.policy-allows-all", title: "Database policy that lets everyone in", status: "partial", severity: "high", controls: [GDPR32, CC61, A83, A01],
+  rule({ id: "supabase.policy-allows-all", title: "Database policy that lets everyone in", status: "partial", severity: "high", controls: [GDPR32, A01],
     fix: "Limit the policy to the right people, for example `using (auth.uid() = user_id)`. Keep `using (true)` only for data that is meant to be public, such as published posts.",
     note: "`using (true)` or `with check (true)` turns row level security on but lets every request through, so the table is as open as having no security at all. Marked Partial: public read access can be intended.", extensions: [".sql"],
     pathMatch: SUPABASE_DIR,
     test: (l) => /\b(using|with\s+check)\s*\(\s*true\s*\)/i.test(l) }),
-  rule({ id: "secret.public-env", title: "Secret in a variable the browser can see", status: "gap", severity: "high", controls: [GDPR32, CC61, A824, A04],
+  rule({ id: "secret.public-env", title: "Secret in a variable the browser can see", status: "gap", severity: "high", controls: [GDPR32, A04],
     fix: "Rename the variable without the public prefix (NEXT_PUBLIC_, VITE_ and so on), use it only in server code, and rotate the key, since it has already been shipped to browsers.",
     note: "Variables starting with NEXT_PUBLIC_, VITE_, EXPO_PUBLIC_ or REACT_APP_ are copied into the JavaScript every visitor downloads. Anyone can read a secret, service-role or private key put there. Keys that are public by design (Supabase anon, Stripe publishable, Firebase) are not flagged.",
     extensions: [...CODE, ".env"],
@@ -62,7 +60,7 @@ export const stackRules: Rule[] = [
       const risky = names.filter((n) => !PUBLIC_BY_DESIGN.test(n));
       return risky.some((n) => /SECRET|PRIVATE|SERVICE_ROLE|PASSWORD|SB_SECRET/.test(n) || (SECRET_SERVICE.test(n) && /KEY|TOKEN/.test(n)));
     } }),
-  rule({ id: "supabase.service-key-in-client", title: "Supabase service-role key used in browser code", status: "gap", severity: "high", controls: [GDPR32, CC61, A83, A01],
+  rule({ id: "supabase.service-key-in-client", title: "Supabase service-role key used in browser code", status: "gap", severity: "high", controls: [GDPR32, A01],
     fix: "Use the service-role key only in server code (API routes, server actions, edge functions). In browser code, use the anon key with row level security, and rotate the service-role key if it was ever shipped.",
     note: "The service-role key skips every row level security rule. In a file marked \"use client\", or in browser-exposed env vars, it reaches every visitor, who can then read and change your whole database.", extensions: CODE,
     fileTest: (lines) => lines.some((l) => /^\s*["']use client["']/.test(l))
