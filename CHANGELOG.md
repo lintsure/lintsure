@@ -2,6 +2,19 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.8 · 2026-11-10 · Code the way formatters write it
+
+Formatters such as Prettier and Black split one call over several lines, and a check that reads one line at a time never saw `logger.info("signup", {` and `email: user.email,` together. Selected checks now read the whole statement.
+
+- **Format robustness:** every benchmark case is re-wrapped the way a formatter would and run through a real scan. 36 of 96 (38%) were still found in 0.3.7; 81 of 96 (84%) are found now. `npm test` fails if this drops below 80%.
+- **Which checks read whole statements, and why only these:** personal data in logs and analytics, log injection, file uploads, mass assignment, server-side request forgery, file paths, redirects, NoSQL queries, server-side templates, error details, plain HTTP, TLS checks, unverified JWTs, weak ciphers, file permissions, mobile token storage, debug mode and cookie roles.
+  - We first turned it on for every check. On 139 public repositories it added 692 findings, and only 5 of 41 sampled were real. Words from different parts of one statement matched together, such as a constant system message beside a separate user message, or `Math.random()` as a React key beside the text "Password updated".
+  - SQL, shell commands, secrets in logs, random tokens and AI system prompts stay line by line until that can be done reliably.
+- **What it found on the 139 repositories:** 67 new findings, including emails sent to analytics in multi-line `identify` calls, JWTs decoded with `verify_signature: False` over several lines, and a multi-line upload setup with no size or type limit. All 31 previously confirmed real problems are still found.
+- **Prompt text is not code:** a multi-line template literal with no `${}`, such as a system prompt, is no longer read as code by the code checks. A prompt that says "never suggest eval(userInput)" is no longer an eval finding. The check for prompts that tell an AI to hide being an AI still reads them.
+- **Fixed: catastrophic backtracking.** The pattern that blanks out string contents could take minutes on a line full of backslashes and quotes, such as an array of regular expressions. It is now linear, with a test.
+- **Scan time:** about 40% longer on the 139 repositories (216 to 305 seconds for 28.7 million lines).
+
 ## 0.3.7 · 2026-11-10 · Honest gates and records
 
 An independent review of 0.3.6 reproduced 29 problems, each with a small test project. This release fixes the most serious ones, and every fix has a test that failed on 0.3.6. On the same 139 field-test repositories, 31 of the 33 confirmed real problems are still found, and confirmed false alarms drop from 92 to 82.

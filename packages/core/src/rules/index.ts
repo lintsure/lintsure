@@ -13,7 +13,9 @@ const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 
 const LOG_CALL = /\b(console\.(log|info|warn|error|debug)|logger\.\w+|log\.(info|warn|error|debug)|logging\.\w+|print)\s*\(/;
 // Drops the text of string literals but keeps interpolations, so "email error" is ignored and `${user.email}` or f"{user.email}" is not.
-const codeOnly = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1).)*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
+// [^\\] keeps the two alternatives apart: with "." a run of backslashes could match two ways, which backtracks
+// exponentially on text such as an array of regular expressions (found when statements were joined).
+const codeOnly = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
 const PII = /\b(e-?mail|phone|ssn|social_?security|passport|date_?of_?birth|dob|password|passwd|credit_?card|card_?number|iban)\b/i;
 // The arguments of the first log call on a line, up to its matching ")". Other code on the same line is ignored.
 function logArgs(l: string): string | null {
@@ -152,7 +154,7 @@ export const rules: Rule[] = [
     // Sentences in strings ("the server asked for an MD5 password hash") are messages, not hashing (field test).
     // The hash must be applied to a password. HMAC, HTTP Digest and fixed vendor formats require the algorithm;
     // they don't store passwords (field test, 139 repos).
-    test: (l) => { const c = l.replace(/(["'`])(?:(?!\1).)*\s(?:(?!\1).)*\1/g, '""');
+    test: (l) => { const c = l.replace(/(["'`])(?:(?!\1)\S)*\s(?:(?!\1).)*\1/g, '""');
       return /\b(md5|sha1)\b[^;\n]{0,60}\bpass(word|wd)?\b/i.test(c) && !/hmac|digest\s*(auth|access)|\brealm\b|\bnonce\b|cookie/i.test(c); },
     ...DRAFT,
   },

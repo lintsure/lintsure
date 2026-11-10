@@ -23,7 +23,7 @@ function logArgs(l: string): string | null {
   for (let j = i; j < l.length; j++) { if (l[j] === "(") depth++; else if (l[j] === ")" && --depth === 0) return l.slice(i + 1, j); }
   return l.slice(i + 1);
 }
-const stripStrings = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1).)*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
+const stripStrings = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
 
 const rule = (r: Omit<Rule, "mappedBy" | "reviewedAt">): Rule => ({ ...r, ...DRAFT });
 
@@ -155,7 +155,7 @@ export const owaspRules: Rule[] = [
     // A method named eval is a definition, not a call (also TypeScript class methods, field test); $$eval is Playwright's;
     // "eval" inside a string is text.
     test: (l) => /\b(def|function|async)\s+eval\s*\(|^\s*((public|private|protected|static|override)\s+)*eval\s*\([^)]*\)\s*(:[^{=]+)?\{\s*$/.test(l) ? false
-      : /(^|[^.\w$])eval\s*\(|\bnew Function\s*\(/.test(l.replace(/(["'])(?:\\.|(?!\1).)*\1/g, '""')) ? byInput(l) : false }),
+      : /(^|[^.\w$])eval\s*\(|\bnew Function\s*\(/.test(l.replace(/(["'])(?:\\.|(?!\1)[^\\])*\1/g, '""')) ? byInput(l) : false }),
   rule({ id: "xss.raw-html", title: "HTML inserted without escaping", status: "partial", severity: "medium", controls: [A05],
     fix: "Set text with textContent, let your framework escape values, or sanitise with DOMPurify before inserting HTML.",
     note: "If the HTML contains user input, attackers can run scripts in your users' browsers (cross-site scripting, CWE-79). Partial because fixed HTML from your own code is safe.", extensions: MARKUP,

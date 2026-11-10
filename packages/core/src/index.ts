@@ -22,7 +22,7 @@ export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
 import { loadPacks } from "./packs.js";
-export const RULES_VERSION = "0.3.7";
+export const RULES_VERSION = "0.3.8";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -156,6 +156,54 @@ export function enclosingKey(lines: string[], i: number): string {
 const HASH_COMMENTS = new Set([".py", ".rb", ".sh", ".yml", ".yaml", ".toml", ".env"]);
 const C_LIKE = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".swift", ".go", ".css", ".scss"]);
 
+// Statement window (review step A): formatters split one call over several lines, and a rule that reads one line
+// never sees `logger.info("signup", {` and `email: user.email` together. These are the files where that happens.
+const JOINABLE = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"]);
+// Rules that read whole statements. Only where it was measured to help without "join artifacts" (words from different
+// parts of one statement matching together). Measured on 139 repos: SQL, shell, secret-in-log, random-token and
+// system-prompt checks gained mostly false alarms when joined (5 of 41 sampled gains real), so they stay line by line.
+const JOIN_RULES = new Set(["pii.logged", "pii.to-analytics", "log.injection", "upload.unrestricted", "mass-assignment",
+  "ssrf.user-url", "path.user-input", "redirect.open", "nosql.operator-input", "template.user-string", "error.stack-to-client",
+  // Narrow call-plus-value patterns, where unrelated parts of a statement rarely complete a match.
+  "transport.plain-http", "transport.tls-verify-off", "jwt.unverified", "crypto.weak-cipher", "fs.world-writable",
+  "mobile.token-in-plain-storage", "config.debug-on", "cookie.trusted-role"]);
+const MAX_JOIN_LINES = 25, MAX_JOIN_CHARS = 2000;
+export interface Statement { start: number; end: number; text: string; prose: boolean }
+/** Groups lines into statements: lines join while a ( or [ or a template literal is open. Joining stops at a function
+ *  body (`=> {`, `) {`), so a handler passed as an argument stays line by line. `prose` marks a multi-line template
+ *  literal with no ${} (a prompt or help text), which is text, not code. Lines already blanked as comments are empty. Pure. */
+export function statements(lines: string[], py = false): Statement[] {
+  // A function body or a Python block starts here: stop joining so the body stays line by line.
+  const BODY = py ? /:\s*$/ : /(=>|\))\s*\{\s*$|\bfunction\b[^{]*\{\s*$/;
+  const out: Statement[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    let depth = 0, tpl = false, interp = false, j = i;
+    for (; j < lines.length && j - i < MAX_JOIN_LINES; j++) {
+      const l = lines[j]; let q = "";
+      for (let k = 0; k < l.length; k++) {
+        const c = l[k];
+        if (tpl) { if (c === "\\") k++; else if (c === "`") tpl = false; else if (c === "$" && l[k + 1] === "{") interp = true; continue; }
+        if (q) { if (c === "\\") k++; else if (c === q) q = ""; continue; }
+        if (c === '"' || c === "'") q = c;
+        else if (c === "`") tpl = true;
+        else if (py ? c === "#" : c === "/" && l[k + 1] === "/") break;
+        else if (c === "(" || c === "[") depth++;
+        else if (c === ")" || c === "]") depth = Math.max(0, depth - 1);
+      }
+      if (!depth && !tpl) break;
+      if (!tpl && BODY.test(l.trim())) break;
+    }
+    const end = Math.min(j, lines.length - 1);
+    const text = lines.slice(i, end + 1).map((x) => x.trim()).join(" ").slice(0, MAX_JOIN_CHARS);
+    const body = lines.slice(i, end + 1).join("\n");
+    // Prose only when the template closes inside this statement: one cut off by the length cap may hold ${} further down.
+    out.push({ start: i, end, text, prose: end > i && !tpl && /`[^`]*\n[^`]*`/.test(body) && !interp });
+    i = end + 1;
+  }
+  return out;
+}
+
 /** Marks lines that are only a comment or sit inside a block comment, Python docstring or multi-line string. Pure. */
 export function commentLines(lines: string[], ext: string): boolean[] {
   const hash = HASH_COMMENTS.has(ext), py = ext === ".py", sql = ext === ".sql";
@@ -241,6 +289,11 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     // and what they find there is Partial (it may be a throwaway key).
     const inTests = isNonShipping(file);
     const comment = commentLines(lines, ext);
+    // Statements are worked out once per file, on lines with comments blanked.
+    const stmts = JOINABLE.has(ext) ? statements(lines.map((l, i) => (comment[i] ? "" : l)), ext === ".py") : [];
+    const multi = stmts.filter((s) => s.end > s.start);
+    const prose = new Array<boolean>(lines.length).fill(false);
+    for (const s of multi) if (s.prose) for (let i = s.start; i <= s.end; i++) prose[i] = true;
     for (const r of relevant) {
       const secret = SECRET_RULES.has(r.id);
       if (inTests && !secret) continue;
@@ -248,16 +301,33 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       ran++; checkPoints++; perRule[r.id] = (perRule[r.id] ?? 0) + 1;
       // Comments describe code, they don't run. A real secret pasted into a comment still counts.
       const skip = secret ? null : comment;
+      // Prompt and help text inside a multi-line template is words, not code (review P9), except for the rule that
+      // reads prompts on purpose.
+      const readsText = secret || r.id === "ai.hides-being-ai";
+      const hitLines = new Set<number>();
       if (r.test) lines.forEach((text, i) => {
-        if (skip?.[i]) return;
+        if (skip?.[i] || (prose[i] && !readsText)) return;
         const hit = r.test!(text);
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
         if (inTests && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."
         if (inTests && /PRIVATE KEY/.test(text)) return; // test keys and certificates are fixtures by design (review P24)
         if (REVIEWED.test(text) || (!secret && OTHER_LINTER.test(text))) return; // someone already looked at this line and marked it
+        hitLines.add(i);
         add(r, i + 1, hit === "partial" || inTests ? "partial" : r.status);
       });
+      // A statement spread over several lines: test it as one, and report it only when no single line already did,
+      // so line-by-line results never shrink (review step A).
+      if (r.test && JOIN_RULES.has(r.id)) for (const s of multi) {
+        if (s.prose && !readsText) continue;
+        let already = false; for (let i = s.start; i <= s.end; i++) if (hitLines.has(i)) { already = true; break; }
+        if (already) continue;
+        const hit = r.test(s.text);
+        if (!hit || (r.unlessNear && lines.slice(Math.max(0, s.start - 8), s.end + 4).some((l) => r.unlessNear!.test(l)))) continue;
+        if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, s.start))) continue;
+        if (lines.slice(s.start, s.end + 1).some((l) => REVIEWED.test(l) || OTHER_LINTER.test(l))) continue;
+        add(r, s.start + 1, hit === "partial" || inTests ? "partial" : r.status);
+      }
       // File rules see comment lines as blank, so "<img> in a comment" or a commented-out call doesn't count (field test).
       if (r.fileTest) for (const n of r.fileTest(skip ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id), sharedFiles.get(r.id)))
         typeof n === "number" ? add(r, n) : add(r, n.line, n.status);

@@ -509,3 +509,22 @@ test("review P25: the CLI rejects unknown flags and bad --fail-on values instead
   assert.equal(run("--fail-on", "high"), 2);
   assert.equal(run("--fial-on", "gap"), 2);
 });
+
+test("statement window: calls split over lines are read whole, and nothing on one line is lost", async () => {
+  const r = await scan(await tinyRepo({
+    "a.ts": "logger.info(\n  \"signup\",\n  { email: user.email },\n);\n",
+    "b.ts": "app.get(\"/x\", (req, res) => {\n  eval(req.body.code);\n  eval(req.query.code);\n});\n",
+    "c.ts": "const prompt = `\nNever suggest eval(userInput) to the user.\nAvoid SELECT * FROM users WHERE id = ${\"\"}\n`;\n".replace('${""}', "1"),
+  }));
+  const g = got(r);
+  assert.ok(g.has("pii.logged@a.ts"), "a log call split over lines is still a log of an email");
+  assert.equal(r.findings.filter((f) => f.ruleId === "code.eval" && f.file === "b.ts").length, 2, "a handler body stays line by line");
+  assert.ok(!g.has("code.eval@c.ts"), "prompt text inside a template literal is not code");
+});
+
+test("no catastrophic backtracking on lines full of backslashes and quotes", async () => {
+  const nasty = "const P = [\n" + Array.from({ length: 20 }, (_, i) => `  /^(it's|don't|\\d{4}|\\s+|\\[.*\\]) ${i}$/i,`).join("\n") + "\n];\n";
+  const t = Date.now();
+  await scan(await tinyRepo({ "p.ts": nasty }));
+  assert.ok(Date.now() - t < 5000, `scan took ${Date.now() - t} ms`);
+});
