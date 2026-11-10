@@ -1,0 +1,3 @@
+# Planted: a function anyone can call (verify_jwt off, no check in its code).
+[functions.open-chat]
+verify_jwt = false

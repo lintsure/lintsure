@@ -18,7 +18,7 @@ const tag = (c: Control, ids: string[]) => Object.fromEntries(ids.map((id) => [i
 /** CRA controls for rules that already exist. Merged by id in rules/index.ts. */
 export const craForExisting: Record<string, Control[]> = mergeTags(
   tag(DEFAULTS, ["config.debug-on", "config.allowed-hosts-any", "config.default-secret-key", "cors.any-origin", "build.sourcemaps-public", "csrf.disabled", "session.cookie-insecure"]),
-  tag(ACCESS, ["auth.hardcoded-password", "jwt.unverified", "jwt.no-expiry", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "cookie.trusted-role", "path.user-input", "fs.world-writable"]),
+  tag(ACCESS, ["auth.hardcoded-password", "jwt.unverified", "jwt.no-expiry", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "supabase.function-no-auth", "cookie.trusted-role", "path.user-input", "fs.world-writable"]),
   tag(CONFIDENTIAL, ["transport.plain-http", "transport.tls-verify-off", "crypto.weak-cipher", "crypto.weak-password-hash", "crypto.weak-random-token", "secret.in-source", "secret.public-env"]),
   tag(INTEGRITY, ["sql.string-built", "cmd.shell-built", "code.eval", "deserialize.unsafe", "xss.raw-html", "template.user-string", "nosql.operator-input", "xml.external-entities", "mass-assignment", "html.script-no-sri"]),
   tag(MINIMAL, ["pii.logged", "pii.in-url", "pii.to-analytics"]),

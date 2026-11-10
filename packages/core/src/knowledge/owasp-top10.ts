@@ -18,7 +18,7 @@ export const owaspTop10: FrameworkKnowledge = {
   },
   obligations: [
     { ref: "A01:2025", title: "Broken Access Control", inCode: "partly",
-      rules: ["path.user-input", "redirect.open", "ssrf.user-url", "csrf.disabled", "fs.world-writable", "cors.any-origin", "cookie.trusted-role", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client"],
+      rules: ["path.user-input", "redirect.open", "ssrf.user-url", "csrf.disabled", "fs.world-writable", "cors.any-origin", "cookie.trusted-role", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "supabase.function-no-auth"],
       plain: "People must only reach the data and actions meant for them. This covers file paths, redirects, requests your server makes on a user's behalf (SSRF), forged requests from other sites, and permissions kept where users can change them.",
       evidence: "A list of roles and what each may do, and tests showing one user can't read or change another user's data." },
     { ref: "A01:2025 (ownership checks)", title: "Every record is checked against the signed-in user", inCode: "no",

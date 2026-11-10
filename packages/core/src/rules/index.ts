@@ -84,7 +84,8 @@ export const rules: Rule[] = [
     fix: "Use https:// for every external call.",
     note: "Marked Partial: the call may carry no sensitive data. Confirm, then switch to HTTPS anyway.",
     extensions: CODE,
-    test: (l) => /\b(fetch|axios\.\w+|requests\.\w+|http\.(get|request))\s*\(\s*["'`]http:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/.test(l),
+    // Loopback, private ranges and single-label service names (http://redis:6379) stay on the machine or network (field test).
+    test: (l) => /\b(fetch|axios\.\w+|requests\.\w+|http\.(get|request))\s*\(\s*["'`]http:\/\/(?!localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\]|host\.docker\.internal)[\w-]+\.[\w.-]+/.test(l),
     ...DRAFT,
   },
   {
@@ -93,9 +94,8 @@ export const rules: Rule[] = [
     status: "gap", severity: "high",
     controls: [
       { framework: "gdpr", id: "Art. 5(1)(c)", title: "Data minimisation" },
-      { framework: "gdpr", id: "Art. 28", title: "Processors" },
     ],
-    fix: "Send an internal user ID instead of the email or name, and list the tool as a processor.",
+    fix: "Send an internal user ID instead of the email or name. If personal data must go there, list the tool as a processor.",
     note: "Analytics vendors keep what you send them. Personal data there needs a lawful basis and a processing agreement.",
     extensions: CODE,
     test: (l) => /\b(posthog|analytics|mixpanel|amplitude|segment|heap|gtag|ga|intercom|hotjar|sentry)\.(identify|track|capture|people\.set|setUser|setUserProperties|register)\s*\(/i.test(l) && PII.test(l),
@@ -125,7 +125,10 @@ export const rules: Rule[] = [
     note: "MD5 and SHA-1 are fast, so leaked hashes can be cracked quickly.",
     extensions: CODE,
     // Sentences in strings ("the server asked for an MD5 password hash") are messages, not hashing (field test).
-    test: (l) => { const c = l.replace(/(["'`])(?:(?!\1).)*\s(?:(?!\1).)*\1/g, '""'); return /\b(md5|sha1)\b/i.test(c) && /pass(word|wd)?/i.test(c); },
+    // The hash must be applied to a password. HMAC, HTTP Digest and fixed vendor formats require the algorithm;
+    // they don't store passwords (field test, 139 repos).
+    test: (l) => { const c = l.replace(/(["'`])(?:(?!\1).)*\s(?:(?!\1).)*\1/g, '""');
+      return /\b(md5|sha1)\b[^;\n]{0,60}\bpass(word|wd)?\b/i.test(c) && !/hmac|digest\s*(auth|access)|\brealm\b|\bnonce\b|cookie/i.test(c); },
     ...DRAFT,
   },
   {
@@ -154,10 +157,14 @@ export const rules: Rule[] = [
     test: (l) => {
       // SQL keywords are written in UPPER or lower case; "Select a plan from..." in a sentence is not SQL.
       // A keyword after a dot or before "(" is a method call (hash.update(...), select(Model) in SQLAlchemy), not SQL text.
-      if (!/(?<![.\w])(SELECT|INSERT|UPDATE|DELETE|select|insert|update|delete)\b(?!\s*\()[^"'`]*\b(FROM|INTO|SET|WHERE|from|into|set|where)\b/.test(l)) return false;
+      // A statement's shape: SELECT ... FROM, INSERT INTO, UPDATE x SET, DELETE FROM. "Could not update user ${id} from ..." is a message.
+      if (!/(?<![.\w])(SELECT\b(?!\s*\()[^"'`]*\bFROM\b|INSERT\s+INTO\b|UPDATE\s+[\w."`${}]+\s+SET\b|DELETE\s+FROM\b)/i.test(l)) return false;
+      if (/\b(throw|Error|message|msg)\b/.test(l) && !/\.(query|execute|exec|raw|run|prepare|all|get)\s*\(/.test(l)) return false;
       const parts = [...l.matchAll(SQL_PARTS)].map((m) => m.slice(1).find(Boolean) ?? "");
       if (!parts.length) return false;
-      return parts.some((p) => USER_INPUT.test(p)) ? true : "partial";
+      if (parts.some((p) => USER_INPUT.test(p))) return true;
+      // Table and column names, placeholder lists and CONSTANTS are your own text, not values (field test, 139 repos).
+      return parts.every((p) => /^\s*([A-Z][A-Z0-9_]*|[\w.]*(table|Table|TABLE|column|Column|cols|fields|placeholders?|Placeholders|schema|Schema|alias|orderBy|sortField|direction)\w*)\s*$/.test(p)) ? false : "partial";
     },
     // Tagged templates from Postgres.js, Drizzle, Prisma and similar send ${} values as parameters, not as SQL text (field test).
     unlessNear: /(?<![.\w])(sql|safeSql|tx|Prisma\.sql)(<[^>`]*>)?\s*`|\$queryRaw\s*`/,
@@ -173,12 +180,13 @@ export const rules: Rule[] = [
     note: "Marked Partial: fine for a public, read-only API. Risky when the API uses cookies or returns user data.",
     extensions: CODE,
     test: (l) => /Access-Control-Allow-Origin["']?\s*[,:]\s*["']\*["']|origin\s*:\s*(["']\*["']|true\b)|CORS_ALLOW_ALL_ORIGINS\s*=\s*True|allow_origins\s*=\s*\[\s*["']\*["']/.test(l),
+    unlessPath: /(^|\/)(vite|webpack|rollup|next|nuxt|astro)\.config\.|openapi|swagger/i, // dev servers and published API specs (field test)
     ...DRAFT,
   },
   {
     id: "session.cookie-insecure",
     title: "Session cookie without Secure or HttpOnly",
-    status: "partial", severity: "medium",
+    status: "partial", severity: "low",
     controls: [
     ],
     fix: "Set secure: true and httpOnly: true on session cookies.",
@@ -231,7 +239,9 @@ const MEDIA_MODEL = /["'`](dall-e-\d|gpt-image-[\w.]+|imagen-[\w.-]+|gemini-[\w.
 /** AI calls in a file that names an image, voice or video model. Pure. */
 export const mediaModelCalls = (lines: string[]) =>
   lines.some((l) => MEDIA_MODEL.test(l)) ? lines.flatMap((l, i) => (isAiCall(l) ? [i + 1] : [])) : [];
-const DECISION = /\b(approv|reject|deny|denied|declin|eligib|hire|hiring|shortlist|credit|loan|underwrit|admit|admission|ban|suspend)\w*/i;
+// Whole words only: "banner" is not "ban" (field test, 139 repos).
+// Letters may not touch the word, but underscores may: loan_denied counts, banner doesn't.
+const DECISION = /(?<![a-z])(approve[ds]?|approval|reject(ed|ion)?|deny|denied|decline[ds]?|eligib(le|ility)|hire[ds]?|hiring|shortlist(ed)?|credit[_ ]?(score|limit|decision)|loan|underwrit[a-z]*|admit(ted)?|admission|ban(ned)?|suspend(ed)?)(?![a-z])/i;
 const LOGGED = /\b(logger|log|logging|audit|auditLog|console)\.\w+\s*\(|\binsert\w*\s*\(|\.save\s*\(/;
 
 rules.push(
@@ -247,7 +257,8 @@ rules.push(
     note: "Credit, hiring, admission and similar decisions about people are high-risk under Annex III. Marked Partial: a review step may exist elsewhere.",
     extensions: CODE,
     // A model's output and a decision word on the same line, e.g. status = model.predict(x) > 0.5 ? "approved" : "rejected".
-    test: (l) => /\b(predict|predict_proba|score|classify|completion|generateText|invoke)\w*\s*\(/.test(l) && DECISION.test(l),
+    // score() and invoke() are too generic: a music score, a memory ranking (field test).
+    test: (l) => /\b(predict|predict_proba|classify|generateText|generateObject)\w*\s*\(|\.chat\.completions\.create\s*\(/.test(l) && DECISION.test(l),
     ...DRAFT,
   },
   {
@@ -268,12 +279,14 @@ rules.push(
   {
     id: "ai.hides-being-ai",
     title: "AI told to hide that it is an AI",
-    status: "gap", severity: "high",
+    status: "partial", severity: "high",
     controls: [{ framework: "eu-ai-act", id: "Art. 50(1)", title: "Transparency for AI interacting with people" }],
     fix: "Remove the instruction and tell users they are talking to an AI.",
-    note: "People must be told when they interact with an AI system, unless it is obvious.",
+    note: "People must be told when they interact with an AI system, unless it is obvious. Marked Partial: role-play wording can be harmless.",
     extensions: [...CODE, ".md", ".txt", ".yaml", ".yml", ".json"],
-    test: (l) => /\b(pretend|act|behave|pose)\s+(to\s+be\s+|as\s+|like\s+)(a\s+)?(real\s+)?(human|person)\b|\bnever\s+(say|reveal|mention|admit|disclose)\b.{0,40}\b(ai|a\.i\.|bot|language model|assistant)\b/i.test(l),
+    unlessPath: /(^|\/)(README|CHANGELOG|CONTRIBUTING|SECURITY|LICENSE)[^/]*$|(^|\/)docs?\//i, // text about the rule, not a prompt
+    // "Act as a human resources advisor" is a job title, not a disguise.
+    test: (l) => /\b(pretend|act|behave|pose)\s+(to\s+be\s+|as\s+|like\s+)(a\s+)?(real\s+)?(human|person)\b(?!\s+(resources?|readable|reviewer))|\bnever\s+(say|reveal|mention|admit|disclose)\b.{0,40}\b(ai|a\.i\.|bot|language model|assistant)\b/i.test(l),
     ...DRAFT,
   },
   {
@@ -292,14 +305,14 @@ rules.push(
   {
     id: "ai.emotion-or-biometric",
     title: "Emotion recognition or biometric categorisation",
-    status: "gap", severity: "high",
+    status: "partial", severity: "high",
     controls: [
       { framework: "eu-ai-act", id: "Art. 5(1)(f)", title: "Prohibited: emotion recognition at work and in education" },
       { framework: "eu-ai-act", id: "Annex III(1)", title: "High-risk: biometrics" },
       { framework: "gdpr", id: "Art. 9", title: "Special categories of personal data" },
     ],
     fix: "Check whether this use is banned or high-risk before shipping. Remove it if it infers emotions of staff or students.",
-    note: "Some uses are banned outright since February 2025. Others are high-risk. This needs a human decision, not a code fix.",
+    note: "Some uses are banned outright since February 2025 (emotion recognition at work or in education); others are high-risk. Marked Partial: whether a ban applies depends on whose data is analysed and where, which code can't show.",
     extensions: CODE,
     test: (l) => /\b(detect|recogni[sz]e|analy[sz]e|infer|predict)\w*_?(emotion|sentiment_from_face|facial_expression)|\bemotion(s)?\s*[:=]\s*\w*\.(detect|analy)|\bDeepFace\.analyze\s*\(|\bdetect_faces?\b.*\bemotion|\b(face_recognition|FaceAttributes|DetectFaces)\b/i.test(l),
     ...DRAFT,

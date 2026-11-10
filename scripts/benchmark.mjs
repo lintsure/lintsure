@@ -15,18 +15,20 @@ const out = {}; let failed = false;
 for (const [id, c] of Object.entries(cases)) {
   if (id.startsWith("_")) continue;
   const rule = rules.find((r) => r.id === id);
-  if (!rule?.test) { console.error(`FAIL ${id}: no line rule with this id`); failed = true; continue; }
+  if (!rule?.test && !rule?.fileTest) { console.error(`FAIL ${id}: no rule with this id`); failed = true; continue; }
+  // File rules get the case as a small file (a newline separates its lines); a hit is any flagged line.
+  const check = rule.test ? (line) => rule.test(line) : (line) => { const r = rule.fileTest(line.split("\n"), line, {}); return r.length ? (typeof r[0] === "object" && r[0].status === "partial" ? "partial" : true) : false; };
   let tp = 0, fp = 0, fn = 0; const problems = [];
   for (const item of c.flag) {
     const line = typeof item === "string" ? item : item.line;
-    const hit = rule.test(line);
+    const hit = check(line);
     if (!hit) { fn++; problems.push(`missed: ${line}`); continue; }
     tp++;
     const want = typeof item === "string" ? null : item.status;
     const got = hit === "partial" ? "partial" : rule.status;
     if (want && want !== got) problems.push(`status ${got}, expected ${want}: ${line}`);
   }
-  for (const line of c.pass) if (rule.test(line)) { fp++; problems.push(`false alarm: ${line}`); }
+  for (const line of c.pass) if (check(line)) { fp++; problems.push(`false alarm: ${line}`); }
   const precision = tp + fp ? tp / (tp + fp) : 1, recall = tp + fn ? tp / (tp + fn) : 1;
   out[id] = { precision: pct(precision), recall: pct(recall), cases: c.flag.length + c.pass.length };
   const min = recorded[id];

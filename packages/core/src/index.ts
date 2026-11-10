@@ -22,7 +22,7 @@ export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
 import { loadPacks } from "./packs.js";
-export const RULES_VERSION = "0.3.5";
+export const RULES_VERSION = "0.3.6";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -80,10 +80,23 @@ export async function readConfig(root: string): Promise<{ frameworks: FrameworkI
 }
 
 // Dependencies, build output and caches: generated code, not code you wrote.
-export const SKIP_DIRS = ["node_modules", ".git", "dist", "build", "out", ".output", ".next", ".nuxt", ".svelte-kit", ".astro", ".vercel", ".netlify", ".wrangler", ".turbo", ".cache", "venv", ".venv", "__pycache__", "coverage"];
+// Also other people's code copied in (vendor, third_party): not code you wrote (field test, 139 repos).
+export const SKIP_DIRS = ["node_modules", ".git", "dist", "build", "out", ".output", ".next", ".nuxt", ".svelte-kit", ".astro", ".vercel", ".netlify", ".wrangler", ".turbo", ".cache", "venv", ".venv", "__pycache__", "coverage", "vendor", "third_party", "bower_components"];
 const SKIP = new Set(SKIP_DIRS);
-const MAX_LINE = 1000; // a line this long means minified or generated code
+// Bundled builds of libraries checked into a repo, e.g. vue.global.js (field test, 139 repos).
+const BUNDLED = /\.(min|global|bundle|umd|prod)\.(js|css)$/;
+const MAX_LINE = 1000; // longer lines are minified or generated: they are ignored, not the whole file
 const MAX_BYTES = 1_000_000;
+/** A file is generated or minified when long lines make up more than a twentieth of it. Pure. */
+export const isMinified = (lines: string[]) => lines.filter((l) => l.length > MAX_LINE).length > Math.max(1, lines.length / 20);
+/** Normalises file extensions so rules written for .ts also read .mts and .cts, and every .env file is ".env". */
+export function extOf(abs: string): string {
+  const name = basename(abs);
+  if (/^\.env(\.[\w.-]+)?$/.test(name)) return ".env";
+  if (/^Dockerfile\b/i.test(name)) return ""; // Dockerfile.prod is still a Dockerfile
+  const e = extname(abs);
+  return e === ".mts" || e === ".cts" ? ".ts" : e;
+}
 
 /** Scout: list files to check, sorted so output order never depends on the file system. */
 export async function listFiles(root: string, ignore: string[] = []): Promise<string[]> {
@@ -91,7 +104,7 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
   const ignored = (p: string) => { const r = relative(root, p).split(sep).join("/"); return ignore.some((i) => r === i || r.startsWith(i + "/")); };
   async function walk(dir: string) {
     for (const e of await readdir(dir, { withFileTypes: true })) {
-      if (SKIP.has(e.name) || /\.min\.(js|css)$/.test(e.name)) continue;
+      if (SKIP.has(e.name) || BUNDLED.test(e.name)) continue;
       const p = join(dir, e.name);
       if (ignored(p)) continue;
       if (e.isDirectory()) await walk(p); else if (e.isFile()) out.push(p);
@@ -101,11 +114,15 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
   return out.sort();
 }
 
-const TEST_PATH = /(^|\/)(tests?|__tests__|__mocks__|spec|fixtures?|e2e)\/|\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/i;
+// Code that doesn't ship: tests, fixtures, examples, docs, demos, stories and seed data. Most false alarms in the
+// 139-repo field test came from here. Only the secret rules read these paths, and their findings there are Partial.
+export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)conftest\.py$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
 // Rules that also read test files. Not auth.hardcoded-password: test logins are fake by design (field test, 50 repos).
 const SECRET_RULES = new Set(["secret.in-source", "config.default-secret-key"]);
-// Lines a person already reviewed and marked for a linter or security scanner.
-const REVIEWED = /#\s*(noqa|nosec)\b|\/\/\s*NOSONAR\b|lintsure-ignore|pragma:\s*allowlist secret/;
+// Lines a person already reviewed. lintsure-ignore and the secret allowlist pragma count only in a comment and apply
+// to every rule. Other linters' markers (noqa, nosec, NOSONAR) don't hide secrets: `# noqa: E501` is about line length.
+const REVIEWED = /(#|\/\/|\/\*|--)\s*(lintsure-ignore|pragma:\s*allowlist secret)\b/;
+const OTHER_LINTER = /#\s*(noqa|nosec)\b|\/\/\s*NOSONAR\b/;
 // Also hand-typed fake keys: alphabet or number runs, words where random text should be, a whole key block on one line.
 const PLACEHOLDER =/test|fake|dummy|example|sample|placeholder|sanitized|mock|xxx|changeme|localhost|["'](password|pass|secret|elastic|admin)["']|abcdef|123456|\b(xox[baprs]|gh[pousr])[-_][a-z]+(-[a-z]+)*\b|PRIVATE KEY-----.*-----END/i;
 /** The JSON object key that opens the block a line sits in, e.g. "peerDependencies". Pure. */
@@ -119,18 +136,26 @@ export function enclosingKey(lines: string[], i: number): string {
   return "";
 }
 const HASH_COMMENTS = new Set([".py", ".rb", ".sh", ".yml", ".yaml", ".toml", ".env"]);
+const C_LIKE = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".swift", ".go", ".css", ".scss"]);
 
-/** Marks lines that are only a comment or sit inside a block comment or Python docstring. Pure. */
+/** Marks lines that are only a comment or sit inside a block comment, Python docstring or multi-line string. Pure. */
 export function commentLines(lines: string[], ext: string): boolean[] {
-  const hash = HASH_COMMENTS.has(ext), py = ext === ".py";
-  let block = false, doc = false;
+  const hash = HASH_COMMENTS.has(ext), py = ext === ".py", sql = ext === ".sql";
+  let block = false, doc = false, quote = "";
   return lines.map((raw) => {
     const t = raw.trim();
     if (block) { if (t.includes("*/")) block = false; return true; }
-    if (doc) { if (/"""|'''/.test(t)) doc = false; return true; }
-    if (py && /^[rbuf]*("""|''')/i.test(t)) { const q = t.match(/"""|'''/)![0]; if (t.split(q).length - 1 === 1) doc = true; return true; }
-    if (t.startsWith("/*")) { if (!t.includes("*/")) block = true; return true; }
-    return t.startsWith("//") || t.startsWith("*") || t.startsWith("<!--") || (hash && t.startsWith("#"));
+    if (doc) { if (t.includes(quote)) doc = false; return true; }
+    if (py) {
+      const q = t.match(/"""|'''/)?.[0];
+      // An odd number of triple quotes opens a string that runs onto the next lines. A docstring line is text;
+      // `PROMPT = """` is code whose string continues, and its closing quotes must not open a fake docstring (field test).
+      if (q && t.split(q).length % 2 === 0) { doc = true; quote = q; return /^[rbuf]*("""|''')/i.test(t); }
+      if (q && /^[rbuf]*("""|''')/i.test(t) && t.endsWith(q)) return true; // one-line docstring
+    }
+    // `/* note */ code();` is code: only a line that is all comment counts.
+    if (t.startsWith("/*")) { const end = t.indexOf("*/"); if (end < 0) { block = true; return true; } return !t.slice(end + 2).trim(); }
+    return t.startsWith("//") || (C_LIKE.has(ext) && t.startsWith("*")) || t.startsWith("<!--") || (hash && t.startsWith("#")) || (sql && t.startsWith("--"));
   });
 }
 
@@ -156,21 +181,34 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   for (const r of active.filter((x) => x.sharedContext)) {
     const texts: string[] = [];
     for (const [k, abs] of all.entries()) {
-      const ext = extname(abs), file = paths[k];
-      if (r.extensions.includes(ext) && (!r.pathMatch || r.pathMatch.test(file)) && !r.unlessPath?.test(file)) texts.push(await readFile(abs, "utf8").catch(() => ""));
+      const ext = extOf(abs), file = paths[k];
+      if (!r.extensions.includes(ext) || (r.fileName && !r.fileName.test(basename(abs))) || (r.pathMatch && !r.pathMatch.test(file)) || r.unlessPath?.test(file)) continue;
+      const text = await readFile(abs, "utf8").catch(() => "");
+      // Commented-out lines don't count: "-- alter table x enable row level security" switches nothing on.
+      const comment = commentLines(text.split(/\r?\n/), ext);
+      texts.push(text.split(/\r?\n/).filter((_, i) => !comment[i]).join("\n"));
     }
     shared.set(r.id, texts.join("\n"));
   }
+  // Rules that read two files together (a config entry and the code it points to) get those files by path.
+  const sharedFiles = new Map<string, Record<string, string>>();
+  for (const r of active.filter((x) => x.sharedFiles)) {
+    const files: Record<string, string> = {};
+    for (const [k, abs] of all.entries()) if (r.sharedFiles!.test(paths[k])) files[paths[k]] = await readFile(abs, "utf8").catch(() => "");
+    sharedFiles.set(r.id, files);
+  }
   for (const abs of all) {
-    const ext = extname(abs) || (abs.endsWith(".env") ? ".env" : "");
+    const ext = extOf(abs);
     const name = basename(abs);
     const file = relative(root, abs).split(sep).join("/");
     const relevant = active.filter((r) => r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)) && (!r.pathMatch || r.pathMatch.test(file)) && !r.unlessPath?.test(file));
     if (!relevant.length) continue;
     const buf = await readFile(abs);
     if (buf.length > MAX_BYTES || buf.includes(0)) continue; // skip big or binary files
-    const lines = buf.toString("utf8").split(/\r?\n/);
-    if (lines.some((l) => l.length > MAX_LINE)) continue; // minified or generated
+    const raw = buf.toString("utf8").split(/\r?\n/);
+    if (isMinified(raw)) continue; // minified or generated
+    // A single very long line (a data URL, a long prompt) is ignored on its own; the rest of the file is still read.
+    const lines = raw.map((l) => (l.length > MAX_LINE ? "" : l));
     filesChecked++;
     checkPoints += relevant.length; // one rule applied to one file is one check point
     for (const r of relevant) perRule[r.id] = (perRule[r.id] ?? 0) + 1;
@@ -182,24 +220,27 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         fingerprint: fingerprint(r.id, file, lines[line - 1] ?? ""),
       });
     };
-    // Tests and fixtures are full of fake tokens and planted examples: only secret rules look at them.
-    const inTests = TEST_PATH.test(file);
+    // Tests, fixtures, examples and docs are full of fake tokens and planted examples: only secret rules look at them,
+    // and what they find there is Partial (it may be a throwaway key).
+    const inTests = NON_SHIPPING.test(file);
     const comment = commentLines(lines, ext);
     for (const r of relevant) {
-      if (inTests && !SECRET_RULES.has(r.id)) continue;
+      const secret = SECRET_RULES.has(r.id);
+      if (inTests && !secret) continue;
       // Comments describe code, they don't run. A real secret pasted into a comment still counts.
-      const skip = SECRET_RULES.has(r.id) ? null : comment;
+      const skip = secret ? null : comment;
       if (r.test) lines.forEach((text, i) => {
         if (skip?.[i]) return;
         const hit = r.test!(text);
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
         if (inTests && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."
-        if (REVIEWED.test(text)) return; // someone already looked at this line and marked it
-        add(r, i + 1, hit === "partial" ? "partial" : r.status);
+        if (REVIEWED.test(text) || (!secret && OTHER_LINTER.test(text))) return; // someone already looked at this line and marked it
+        add(r, i + 1, hit === "partial" || inTests ? "partial" : r.status);
       });
       // File rules see comment lines as blank, so "<img> in a comment" or a commented-out call doesn't count (field test).
-      if (r.fileTest) for (const n of r.fileTest(skip ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id))) add(r, n);
+      if (r.fileTest) for (const n of r.fileTest(skip ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id), sharedFiles.get(r.id)))
+        typeof n === "number" ? add(r, n) : add(r, n.line, n.status);
     }
   }
   // Auditor: one finding per rule per line; stable order.
@@ -213,8 +254,9 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     rulesVersion: RULES_VERSION,
     frameworks: [...frameworks].sort(),
     findings: deduped,
-    // Only the Checker sets Met: a rule that ran and found nothing.
-    met: active.filter((r) => !hit.has(r.id)).map((r) => ({ ruleId: r.id, title: r.title, controls: r.controls.filter((c) => frameworks.includes(c.framework)) })),
+    // Only the Checker sets Met: a rule that read at least one file and found nothing. A rule with nothing to read
+    // (mobile rules in a web app) is not Met: nothing was checked.
+    met: active.filter((r) => !hit.has(r.id) && (perRule[r.id] ?? 0) > 0).map((r) => ({ ruleId: r.id, title: r.title, controls: r.controls.filter((c) => frameworks.includes(c.framework)) })),
     outside: outsideFor(frameworks),
     filesChecked,
     disclaimer: DISCLAIMER,

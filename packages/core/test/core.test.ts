@@ -169,14 +169,70 @@ test("ignore list, build output and minified files are skipped", async () => {
   const bad = "console.log(user.email);\n";
   for (const d of ["src", "tests", ".output", "dist"]) await mkdir(join(dir, d));
   await writeFile(join(dir, "src/a.ts"), bad);
-  await writeFile(join(dir, "src/b.ts"), "x".repeat(2000) + "\n" + bad);
+  // Minified: long lines throughout. A file with just one long line (a data URL, a long prompt) is still read.
+  await writeFile(join(dir, "src/b.ts"), ("x".repeat(2000) + "\n").repeat(3) + bad);
+  await writeFile(join(dir, "src/d.ts"), "const icon = \"" + "x".repeat(2000) + "\";\n" + "const a = 1;\n".repeat(30) + bad);
   await writeFile(join(dir, "src/c.min.js"), bad);
   await writeFile(join(dir, "tests/a.ts"), bad);
   await writeFile(join(dir, ".output/a.js"), bad);
   await writeFile(join(dir, "dist/a.js"), bad);
   await writeFile(join(dir, "lintsure.config.yaml"), "ignore:\n  - tests/\n");
   const r = await scan(dir);
-  assert.deepEqual(r.findings.filter((f) => !f.ruleId.startsWith("repo.")).map((f) => f.file), ["src/a.ts"]);
+  assert.deepEqual(r.findings.filter((f) => !f.ruleId.startsWith("repo.")).map((f) => f.file), ["src/a.ts", "src/d.ts"]);
+});
+
+// Scanner-level cases from the 139-repo field test. Each one ran through scan(), not just a rule's pattern,
+// because the bugs were in how files are read: comments, strings, markers, paths and file types.
+test("scanner: what the 139-repo field test found it was missing or getting wrong", async () => {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os"); const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ls-scan-"));
+  for (const d of ["app", "api/spec", "examples", "vendor/lib", "supabase/migrations"]) await mkdir(join(dir, d), { recursive: true });
+  const files: Record<string, string> = {
+    // Code after a multi-line prompt string used to be read as a docstring and skipped.
+    "app/agent.py": 'PROMPT = """\nYou are helpful.\n"""\nimport os\nos.system("rm -rf " + request.args["p"])\n',
+    // A line-length marker for another linter must not hide a live key.
+    // Fake keys are split in the source so secret scanners don't mistake this test for a leak.
+    "app/keys.py": 'STRIPE = "sk_' + 'live_51HabcdefghijklmnopQRSTUVWX12345"  # noqa: E501\n',
+    // A comment before code on the same line doesn't make the code a comment.
+    "app/run.js": "/* istanbul ignore next */ eval(req.body.code);\n",
+    // .mts files and .env.local were never read.
+    "app/server.mts": "eval(req.body.code);\n",
+    ".env.local": "NEXT_PUBLIC_OPENAI_API_KEY=sk-" + "proj-abcdefghijklmnopqrstuvwxyz0123\n",
+    // A secret that falls back to text in the code.
+    "app/auth.py": 'JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")\n',
+    // "lintsure-ignore" inside a string is not a marker.
+    "app/msg.js": 'eval(req.body.code); const note = "lintsure-ignore";\n',
+    // Not shipped: examples and vendored code stay quiet.
+    "examples/demo.js": "eval(req.body.code);\n",
+    "vendor/lib/jquery.js": "elem.innerHTML = value;\n",
+    // A commented-out RLS statement doesn't switch RLS on.
+    "supabase/migrations/1.sql": "create table notes (id int);\n-- alter table notes enable row level security;\n",
+  };
+  for (const [p, t] of Object.entries(files)) await writeFile(join(dir, p), t);
+  const r = await scan(dir);
+  const got = new Set(r.findings.map((f) => `${f.ruleId}@${f.file}`));
+  for (const want of ["cmd.shell-built@app/agent.py", "secret.in-source@app/keys.py", "code.eval@app/run.js", "code.eval@app/server.mts",
+    "secret.public-env@.env.local", "config.default-secret-key@app/auth.py", "code.eval@app/msg.js", "supabase.rls-disabled@supabase/migrations/1.sql"])
+    assert.ok(got.has(want), `missed ${want}`);
+  for (const unwanted of ["code.eval@examples/demo.js", "xss.raw-html@vendor/lib/jquery.js"]) assert.ok(!got.has(unwanted), `flagged ${unwanted}`);
+});
+
+test("rules: false alarms from the 139-repo field test stay quiet", async () => {
+  const { rules } = await import("../src/index.js");
+  const t = (id: string, line: string) => rules.find((r) => r.id === id)!.test!(line);
+  assert.equal(t("sql.string-built", "throw new Error(`Could not update user ${id} from ${source}`);"), false);
+  assert.equal(t("sql.string-built", "db.prepare(`SELECT * FROM ${TABLE} WHERE id = ?`)"), false);
+  assert.equal(t("cmd.shell-built", "const m = pattern.exec(`${prefix}-${id}`);"), false);
+  assert.equal(t("ai.hides-being-ai", "Act as a human resources advisor and answer policy questions."), false);
+  assert.equal(t("ai.automated-decision", "const s = score(hand); status = 'denied'"), false);
+  assert.equal(t("auth.hardcoded-password", "{ email: \"string\", password: \"string\" }"), false);
+  assert.equal(t("crypto.weak-password-hash", "const ha1 = md5(`${user}:${realm}:${password}`); // HTTP Digest"), false);
+  assert.equal(t("deserialize.unsafe", "const cfg = yaml.load(text, { schema: JSON_SCHEMA });"), false);
+  assert.equal(t("transport.plain-http", "fetch(\"http://redis:6379/health\")"), false);
+  // and the real thing still fires
+  assert.equal(t("sql.string-built", "db.query(`SELECT * FROM users WHERE id = ${req.params.id}`)"), true);
+  assert.equal(t("config.default-secret-key", "const secret = process.env.SESSION_SECRET || \"dev-secret-2026\";"), true);
 });
 
 import { AGENT_GUIDANCE, APPROVAL_RULES, PROPOSAL_HEADING } from "../src/index.js";

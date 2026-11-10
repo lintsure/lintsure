@@ -24,7 +24,7 @@ export const cra: FrameworkKnowledge = {
       plain: "The product ships with safe settings switched on: debug off, real host names, strong secrets, secure cookies, nothing left open that the user has to close.",
       evidence: "Production configuration and the default settings a new install starts with." },
     { ref: "Annex I Part I (2)(d)", title: "Protection from unauthorised access", inCode: "partly",
-      rules: ["auth.hardcoded-password", "jwt.unverified", "jwt.no-expiry", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "cookie.trusted-role", "path.user-input", "fs.world-writable"],
+      rules: ["auth.hardcoded-password", "jwt.unverified", "jwt.no-expiry", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "supabase.function-no-auth", "cookie.trusted-role", "path.user-input", "fs.world-writable"],
       plain: "Logins, tokens and permissions that keep people out of what isn't theirs: no built-in passwords, verified tokens that expire, and access rules on data.",
       evidence: "How users sign in, how roles are checked, and tests between two accounts." },
     { ref: "Annex I Part I (2)(e)", title: "Confidentiality of data", inCode: "yes",

@@ -2,6 +2,53 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.6 · 2026-11-10 · Fewer false alarms
+
+We ran Lintsure on 139 public repositories (82 of them written partly or mostly with AI tools) and hand-checked 249 of its findings against the actual code. Only 13% were real problems. This release fixes what that showed. On the same 139 repositories, Gaps fall from 792 to 284, 31 of the 33 confirmed real problems are still found, and 60 of the 152 confirmed false alarms are gone. There is more to do; most remaining false alarms need multi-line analysis, which is next.
+
+### How files are read
+- Tests, fixtures, examples, docs, demos, stories, seed data and test-runner configs are no longer checked, except for leaked secrets, which are reported there as Partial.
+- `vendor/`, `third_party/` and bundled library builds (`*.global.js`, `*.bundle.js`) are skipped as other people's code.
+- **Fixed:** in Python, code after a multi-line string (`PROMPT = """ ... """`) was skipped as if it were a docstring.
+- **Fixed:** `# noqa`, `# nosec` and `NOSONAR` no longer hide leaked secrets, and `lintsure-ignore` only counts in a comment.
+- **Fixed:** `.env.local` and other `.env.*` files, `.mts`/`.cts` files and `Dockerfile.*` are now read.
+- **Fixed:** one very long line (a data URL, a long prompt) no longer hides the whole file; only minified files are skipped.
+- **Fixed:** `/* note */ code();` is read as code, a Markdown bullet is no longer a comment, and a commented-out SQL line no longer counts as switching row level security on.
+- A rule with no files to read is no longer reported as Met.
+
+### New checks
+- `supabase.function-no-auth`: a Supabase Edge Function with `verify_jwt = false` whose own code never checks the caller (no user session, JWT, webhook signature or shared secret). It's a Gap when the function also uses the service-role key or a paid AI API. It reads `supabase/config.toml` and the function's code together.
+- `config.default-secret-key` now also catches signing secrets that fall back to text in the code, such as `os.getenv("JWT_SECRET", "change-me-in-production")` or `process.env.SESSION_SECRET || "dev-secret"`.
+
+### Fewer false alarms
+- **SQL:** needs a real statement shape (SELECT…FROM, INSERT INTO, UPDATE…SET, DELETE FROM). Error messages and constant table or column names are ignored.
+- **Shell commands:** `regex.exec()` and `db.exec()` are no longer read as shell commands.
+- **Weak password hash:** the hash must be applied to a password; HMAC and HTTP Digest are protocol choices.
+- **Plain HTTP:** private and local addresses and single-name service hosts (`http://redis:6379`) are skipped.
+- **CORS:** dev-server configs and API specs are skipped.
+- **Secrets in browser variables:** type declarations (`env.d.ts`) are skipped.
+- **Open database policies:** read-only `for select using (true)` policies are treated as intentional.
+- **`pull_request_target`:** only the actual checkout of pull-request code is flagged.
+- **Deserialisation:** `yaml.load` only with an unsafe loader; `node-serialize` still counts. It's a Gap only when request data is on the line.
+- **XML:** Python's standard XML parsers are no longer flagged.
+- **Script integrity (SRI):** payment, analytics and captcha scripts that can't use it are skipped.
+- **AI output into code:** only in files that actually call an AI model.
+- **iOS cleartext traffic:** `NSAllowsArbitraryLoads` only when set to true.
+- **AI rules:** decision words match whole words ("banner" is not "ban"), and "act as a human resources advisor" is a job title, not a disguise.
+- **Passwords in code:** validation messages such as `password: "Required"` are not passwords.
+
+### Honest severity
+- Empty catch blocks are now Partial and low; most are deliberate fallbacks.
+- Emotion or biometric analysis and "AI hides that it's an AI" are now Partial: whether they're banned depends on context the code can't show.
+- Raw HTML is now medium, cookie flags low and script integrity low.
+
+### Mappings
+- Removed GDPR Art. 28 from personal data sent to analytics; code can't show a missing processor agreement.
+- Removed the LLM06 tag from "AI call with no record kept"; logging isn't a consumption limit.
+- Added CWE-79, CWE-78 and CWE-89 to "AI output run as code".
+
+The benchmark now also runs file-level rules, and a new scanner-level test runs every case above through a real scan.
+
 ## 0.3.5 · 2026-11-09
 
 Findings now cite the **OWASP Top 10 for LLM Applications 2026**, published in August 2026, instead of the 2025 edition. No rule changed what it finds; only the references moved:

@@ -140,10 +140,6 @@
       {
         "line": "with_site = await _scalar(f\"SELECT COUNT(*) FROM companies WHERE {has_site}\")",
         "status": "partial"
-      },
-      {
-        "line": "db.query(`SELECT * FROM ${TABLE} WHERE active = 1`);",
-        "status": "partial"
       }
     ],
     "pass": [
@@ -152,7 +148,8 @@
       "const sql = 'SELECT COUNT(*) FROM companies';",
       "const msg = `Select a plan from the list ${name}`;",
       ".update(Buffer.from(`${talkRandom}${msg}`, \"utf8\"))",
-      "select(getattr(ChatMessage, key)).where(ChatMessage.id == f'{chat_id}-{message_id}')"
+      "select(getattr(ChatMessage, key)).where(ChatMessage.id == f'{chat_id}-{message_id}')",
+      "db.query(`SELECT * FROM ${TABLE} WHERE active = 1`);"
     ]
   },
   "cors.any-origin": {
@@ -313,11 +310,12 @@
     "flag": [
       "parser = etree.XMLParser(resolve_entities=True)",
       "libxmljs.parseXml(xml, { noent: true })",
-      "root = xml.etree.ElementTree.fromstring(body)"
+      "parser = etree.XMLParser(resolve_entities=True)"
     ],
     "pass": [
       "root = defusedxml.ElementTree.fromstring(body)",
-      "parser = etree.XMLParser(resolve_entities=False)"
+      "parser = etree.XMLParser(resolve_entities=False)",
+      "root = xml.etree.ElementTree.fromstring(body)"
     ]
   },
   "deps.unpinned-version": {
@@ -534,14 +532,14 @@
   "deserialize.unsafe": {
     "flag": [
       "data = pickle.loads(request.data)",
-      "cfg = yaml.load(text)",
       "obj = marshal.loads(blob)",
       "const o = serialize.unserialize(body);"
     ],
     "pass": [
       "data = json.loads(text)",
       "cfg = yaml.safe_load(text)",
-      "cfg = yaml.load(text, Loader=yaml.SafeLoader)"
+      "cfg = yaml.load(text, Loader=yaml.SafeLoader)",
+      "cfg = yaml.load(text)"
     ]
   },
   "html.script-no-sri": {
@@ -617,7 +615,8 @@
     ],
     "pass": [
       "create policy \"own\" on notes using (auth.uid() = user_id);",
-      "-- using true for public posts is fine when intended"
+      "-- using true for public posts is fine when intended",
+      "create policy \"read published\" on posts for select using (true);"
     ]
   },
   "secret.public-env": {
@@ -691,14 +690,15 @@
   },
   "llm.output-to-sink": {
     "flag": [
-      "eval(completion.choices[0].message.content);",
-      "el.innerHTML = response.choices[0].message.content;",
-      "await db.query(result.text);"
+      "const completion = await openai.chat.completions.create(req);\neval(completion.choices[0].message.content);",
+      "const completion = await openai.chat.completions.create(req);\nel.innerHTML = response.choices[0].message.content;",
+      "const completion = await openai.chat.completions.create(req);\nawait db.query(result.text);"
     ],
     "pass": [
       "return completion.choices[0].message.content;",
       "el.textContent = response.content;",
-      "eval(config.expr);"
+      "eval(config.expr);",
+      "const response = await fetch(\"/partials/nav.html\");\nnav.innerHTML = await response.text();"
     ]
   },
   "mobile.token-in-plain-storage": {
@@ -714,11 +714,12 @@
   "mobile.cleartext-traffic": {
     "flag": [
       "<application android:usesCleartextTraffic=\"true\">",
-      "<key>NSAllowsArbitraryLoads</key>",
+      "<key>NSAllowsArbitraryLoads</key>\n<true/>",
       "\"usesCleartextTraffic\": true"
     ],
     "pass": [
-      "<application android:usesCleartextTraffic=\"false\">"
+      "<application android:usesCleartextTraffic=\"false\">",
+      "<key>NSAllowsArbitraryLoads</key>\n<false/>"
     ]
   }
 }

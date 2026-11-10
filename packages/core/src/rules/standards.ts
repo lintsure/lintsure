@@ -22,14 +22,15 @@ export const standardsForExisting: Record<string, Control[]> = {
   "sql.string-built": [W(89, "SQL Injection")], "nosql.operator-input": [W(20, "Improper Input Validation")],
   "csrf.disabled": [W(352, "Cross-Site Request Forgery")], "path.user-input": [W(22, "Path Traversal")],
   "cmd.shell-built": [W(78, "OS Command Injection"), W(77, "Command Injection")], "code.eval": [W(94, "Code Injection")],
-  "llm.output-to-sink": [W(94, "Code Injection")], "upload.unrestricted": [W(434, "Unrestricted Upload of File with Dangerous Type")],
+  "llm.output-to-sink": [W(94, "Code Injection"), W(79, "Cross-site Scripting"), W(78, "OS Command Injection"), W(89, "SQL Injection")],
+  "supabase.function-no-auth": [W(306, "Missing Authentication for Critical Function")], "upload.unrestricted": [W(434, "Unrestricted Upload of File with Dangerous Type")],
   "deserialize.unsafe": [W(502, "Deserialization of Untrusted Data")], "ssrf.user-url": [W(918, "Server-Side Request Forgery")],
   "supabase.rls-disabled": [W(862, "Missing Authorization")], "supabase.policy-allows-all": [W(284, "Improper Access Control")],
   "supabase.service-key-in-client": [W(284, "Improper Access Control")], "cookie.trusted-role": [W(863, "Incorrect Authorization")],
   "fs.world-writable": [W(284, "Improper Access Control")], "mass-assignment": [W(20, "Improper Input Validation"), W(639, "Authorization Bypass Through User-Controlled Key")],
   "pii.in-url": [W(200, "Exposure of Sensitive Information")], "error.stack-to-client": [W(200, "Exposure of Sensitive Information")],
   "build.sourcemaps-public": [W(200, "Exposure of Sensitive Information")], "llm.no-output-limit": [W(770, "Allocation of Resources Without Limits or Throttling")],
-  "ai.call-not-logged": [LLM06],
+  // ai.call-not-logged: no LLM tag. Logging is record-keeping (AI Act Art. 12), not a limit on consumption (LLM06).
 };
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
@@ -51,7 +52,8 @@ export const standardsRules: Rule[] = [
     fix: "Treat model output like input from a stranger: validate it against what you expect, escape it for HTML, and never run it as code, a shell command or SQL.",
     note: "A model's reply can be steered by anyone who can influence its input. Passing it straight to eval, a shell, a database query or innerHTML lets them run code or change data.",
     extensions: CODE,
-    test: (l) => MODEL_OUTPUT.test(l) && SINKS.test(l) }),
+    // Only in a file that calls an AI model: `nav.innerHTML = await response.text()` after a plain fetch is not model output (field test).
+    fileTest: (lines) => (lines.some(isAiCall) ? lines.flatMap((l, i) => (MODEL_OUTPUT.test(l) && SINKS.test(l) ? [i + 1] : [])) : []) }),
   rule({ id: "llm.no-output-limit", title: "AI call with no limit on how much it may generate", status: "partial", severity: "low", controls: [LLM06],
     fix: "Set a maximum output size on each call (max_tokens, maxTokens or max_output_tokens), and limit how often each user can call it.",
     note: "Without a limit, one request can run up a large bill or tie up the service (unbounded consumption). Marked Partial: the limit may be set in a shared client or wrapper.",
@@ -68,7 +70,9 @@ export const standardsRules: Rule[] = [
     fix: "Turn off cleartext traffic (usesCleartextTraffic false on Android, no NSAllowsArbitraryLoads on iOS) and use HTTPS everywhere. Allow exceptions per domain only if you must.",
     note: "With cleartext allowed, anyone on the same Wi-Fi can read and change what the app sends and receives.",
     extensions: [".xml", ".plist", ".json"], fileName: /^(AndroidManifest\.xml|network_security_config\.xml|Info\.plist|app\.json|app\.config\.json)$/,
-    test: (l) => /usesCleartextTraffic["']?\s*[=:]\s*["']?true|cleartextTrafficPermitted\s*=\s*"true"|<key>NSAllowsArbitraryLoads<\/key>/.test(l) }),
+    // The iOS key counts only when its value is <true/> (on the same or next line), not <false/> (field test).
+    fileTest: (lines) => lines.flatMap((l, i) => /usesCleartextTraffic["']?\s*[=:]\s*["']?true|cleartextTrafficPermitted\s*=\s*"true"/.test(l)
+      || (/<key>NSAllowsArbitraryLoads<\/key>/.test(l) && /<true\s*\/>/.test(l + (lines[i + 1] ?? ""))) ? [i + 1] : []) }),
   rule({ id: "mobile.backup-allowed", title: "App data included in device backups", status: "partial", severity: "low", controls: [GDPR32],
     fix: "Set android:allowBackup=\"false\", or limit what's backed up with backup rules that leave out tokens and personal data.",
     note: "Backups can be copied off the phone and read elsewhere. Marked Partial: backing up non-sensitive settings is fine.",

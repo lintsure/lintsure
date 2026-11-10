@@ -52,7 +52,7 @@ export const gdpr: FrameworkKnowledge = {
       plain: "Keep a list of what personal data you process, why, with whom you share it and how long you keep it.",
       evidence: "The register of processing activities." },
     { ref: "Art. 32", title: "Security of processing", inCode: "yes",
-      rules: ["pii.logged", "secret.in-source", "transport.plain-http", "transport.tls-verify-off", "crypto.weak-password-hash", "sql.string-built", "pii.in-url", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "secret.public-env", "mobile.token-in-plain-storage", "mobile.cleartext-traffic", "mobile.backup-allowed"],
+      rules: ["pii.logged", "secret.in-source", "transport.plain-http", "transport.tls-verify-off", "crypto.weak-password-hash", "sql.string-built", "pii.in-url", "supabase.rls-disabled", "supabase.policy-allows-all", "supabase.service-key-in-client", "supabase.function-no-auth", "secret.public-env", "mobile.token-in-plain-storage", "mobile.cleartext-traffic", "mobile.backup-allowed"],
       plain: "Protect personal data with security that fits the risk: encryption, access control, testing and the ability to recover.",
       evidence: "Security measures and when they were last tested." },
     { ref: "Art. 33–34", title: "Breach notification", inCode: "no",

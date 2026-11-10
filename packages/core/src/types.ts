@@ -36,10 +36,13 @@ export interface Rule {
   test?(line: string): boolean | "partial";
   /** File rule, for checks that need context (e.g. "an AI call with no logging in this file").
    *  Returns 1-based line numbers to flag. Must be pure. */
-  fileTest?(lines: string[], shared?: string): number[];
+  fileTest?(lines: string[], shared?: string, files?: Record<string, string>): Array<number | { line: number; status: Status }>;
   /** Optional: fileTest also gets the text of every file this rule reads, joined (for example all Supabase
    *  migrations, so row level security switched on in a later file counts). */
   sharedContext?: boolean;
+  /** Optional: fileTest also gets these other files by path ("/"-separated, relative to the scanned folder),
+   *  for checks that need two files read together, such as a config entry and the code it points to. */
+  sharedFiles?: RegExp;
   /** Repository check: returns the path of a file the repo should have but doesn't (e.g. "SECURITY.md"),
    *  or null. Gets every file path relative to the scanned folder, "/"-separated. Must be pure. */
   repoTest?(files: string[]): string | null;

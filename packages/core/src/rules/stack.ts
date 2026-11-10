@@ -28,6 +28,29 @@ export function tablesWithoutRls(lines: string[], shared?: string): number[] {
   return out;
 }
 
+// Signs that a function checks its caller: a user session, a JWT, a webhook signature or a shared secret.
+const CALLER_CHECK = /auth\.getUser\(|auth\.getClaims\(|getClaims\(|jwtVerify\(|verify(Jwt|JWT|Token|Signature|Webhook|Request)\w*\(|constructEvent(Async)?\(|createHmac\(|timingSafeEqual|crypto\.subtle\.(verify|importKey)|headers\.get\(\s*["'](authorization|x-[\w-]*(secret|signature|token|key|api-key))["']\s*\)|Deno\.env\.get\(\s*["'][A-Z_]*(WEBHOOK|CRON|SHARED|SIGNING|CALLBACK|FUNCTION)[A-Z_]*SECRET["']/i;
+const HIGH_IMPACT = /SERVICE_ROLE|service_role|sb_secret_|api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY/;
+/** In supabase/config.toml: functions with verify_jwt = false whose code shows no caller check of its own. Pure. */
+export function functionsWithoutAuth(lines: string[], _shared?: string, files: Record<string, string> = {}): Array<{ line: number; status: "gap" | "partial" }> {
+  const out: Array<{ line: number; status: "gap" | "partial" }> = [];
+  let fn = "";
+  lines.forEach((l, i) => {
+    const head = /^\s*\[functions\.([\w-]+)\]/.exec(l);
+    if (head) { fn = head[1]; return; }
+    if (/^\s*\[/.test(l)) { fn = ""; return; }
+    if (!fn || !/^\s*verify_jwt\s*=\s*false\b/.test(l)) return;
+    const own = Object.entries(files).filter(([p]) => p.includes(`supabase/functions/${fn}/`));
+    if (!own.length) return; // the code isn't in this repo: nothing to judge
+    // Follow imports of shared helpers (../_shared/auth.ts), so a check kept in a helper counts.
+    const imported = Object.entries(files).filter(([p]) => /\/_shared\//.test(p) && own.some(([, t]) => t.includes(p.split("/").pop()!.replace(/\.(ts|js|mjs)$/, ""))));
+    const text = [...own, ...imported].map(([, t]) => t).join("\n");
+    if (CALLER_CHECK.test(text)) return;
+    out.push({ line: i + 1, status: HIGH_IMPACT.test(own.map(([, t]) => t).join("\n")) ? "gap" : "partial" });
+  });
+  return out;
+}
+
 // Browser-exposed env prefixes: Next.js, Vite, Expo, Create React App, Nuxt, SvelteKit/Astro (PUBLIC_).
 // No bare PUBLIC_: it matches ordinary constants like PUBLIC_WITH_PRIVATE_AGENT.
 const PUBLIC_ENV = /\b(NEXT_PUBLIC|VITE|EXPO_PUBLIC|REACT_APP|NUXT_PUBLIC)_[A-Z0-9_]*/g;
@@ -50,12 +73,26 @@ export const stackRules: Rule[] = [
     fix: "Limit the policy to the right people, for example `using (auth.uid() = user_id)`. Keep `using (true)` only for data that is meant to be public, such as published posts.",
     note: "`using (true)` or `with check (true)` turns row level security on but lets every request through, so the table is as open as having no security at all. Marked Partial: public read access can be intended.", extensions: [".sql"],
     pathMatch: SUPABASE_DIR,
-    test: (l) => /\b(using|with\s+check)\s*\(\s*true\s*\)/i.test(l) }),
+    // A read-only policy (for select) that is open on purpose, such as published posts, is common and fine;
+    // open insert, update, delete or "all" policies are the risk (field test, 139 repos).
+    fileTest: (lines) => lines.flatMap((l, i) => {
+      if (!/\b(using|with\s+check)\s*\(\s*true\s*\)/i.test(l)) return [];
+      const start = lines.slice(Math.max(0, i - 8), i + 1).join(" ");
+      return /\bfor\s+select\b/i.test(start.slice(start.toLowerCase().lastIndexOf("create policy"))) ? [] : [i + 1];
+    }) }),
+  rule({ id: "supabase.function-no-auth", title: "Supabase Edge Function anyone can call", status: "partial", severity: "high", controls: [GDPR32, A01],
+    fix: "Keep verify_jwt on for this function, or check the caller yourself at the top of the handler: supabase.auth.getUser() for users, or the provider's signature for a webhook.",
+    note: "verify_jwt = false switches off Supabase's check that the caller is logged in, so anyone who knows the URL can call the function. Webhooks do this on purpose and verify a signature instead. Lintsure flags it only when the function's own code shows no check of its own. Marked Gap when the function also uses the service-role key or a paid AI API, because then anyone can read or change data, or spend your credits.",
+    extensions: [".toml"], fileName: /^config\.toml$/, pathMatch: SUPABASE_DIR,
+    sharedFiles: /(^|\/)supabase\/functions\/.+\.(ts|js|mjs)$/,
+    fileTest: functionsWithoutAuth }),
   rule({ id: "secret.public-env", title: "Secret in a variable the browser can see", status: "gap", severity: "high", controls: [GDPR32, A04],
     fix: "Rename the variable without the public prefix (NEXT_PUBLIC_, VITE_ and so on), use it only in server code, and rotate the key, since it has already been shipped to browsers.",
     note: "Variables starting with NEXT_PUBLIC_, VITE_, EXPO_PUBLIC_ or REACT_APP_ are copied into the JavaScript every visitor downloads. Anyone can read a secret, service-role or private key put there. Keys that are public by design (Supabase anon, Stripe publishable, Firebase) are not flagged.",
     extensions: [...CODE, ".env"],
+    unlessPath: /\.d\.ts$/, // type declarations (env.d.ts) name variables, they don't ship values (field test)
     test: (l) => {
+      if (/^\s*(readonly\s+)?[A-Z0-9_]+\??\s*:\s*string\b/.test(l)) return false; // a typed field, not a value
       const names = l.match(PUBLIC_ENV) ?? [];
       const risky = names.filter((n) => !PUBLIC_BY_DESIGN.test(n));
       return risky.some((n) => /SECRET|PRIVATE|SERVICE_ROLE|PASSWORD|SB_SECRET/.test(n) || (SECRET_SERVICE.test(n) && /KEY|TOKEN/.test(n)));

@@ -1,0 +1,6 @@
+# Near misses: a webhook that verifies its signature, and a function that checks the user.
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.chat]
+verify_jwt = false
