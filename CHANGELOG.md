@@ -4,7 +4,7 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 
 ## 0.3.6 · 2026-11-10 · Fewer false alarms
 
-We ran Lintsure on 139 public repositories (82 of them written partly or mostly with AI tools) and hand-checked 249 of its findings against the actual code. Only 13% were real problems. This release fixes what that showed. On the same 139 repositories, Gaps fall from 792 to 284, 31 of the 33 confirmed real problems are still found, and 60 of the 152 confirmed false alarms are gone. There is more to do; most remaining false alarms need multi-line analysis, which is next.
+We ran Lintsure on 139 public repositories (82 of them written partly or mostly with AI tools) and reviewed 249 of its findings one by one against the actual code (AI reviewers reading the code, with a sample re-checked by us). Only 13% were real problems. This release fixes what that showed. On the same 139 repositories, Gaps fall from 792 to 284, 31 of the 33 confirmed real problems are still found, and 60 of the 152 confirmed false alarms are gone. There is more to do; most remaining false alarms need multi-line analysis, which is next.
 
 ### How files are read
 - Tests, fixtures, examples, docs, demos, stories, seed data and test-runner configs are no longer checked, except for leaked secrets, which are reported there as Partial.
