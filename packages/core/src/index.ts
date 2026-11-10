@@ -22,7 +22,7 @@ export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
 import { loadPacks } from "./packs.js";
-export const RULES_VERSION = "0.3.6";
+export const RULES_VERSION = "0.3.7";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -116,9 +116,27 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
 
 // Code that doesn't ship: tests, fixtures, examples, docs, demos, stories and seed data. Most false alarms in the
 // 139-repo field test came from here. Only the secret rules read these paths, and their findings there are Partial.
-export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)conftest\.py$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
+export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|factories|\.dev|benchmarks?)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
+// In Next.js, Remix and Supabase a folder name is a route or a function name: app/api/demo and a function called
+// "test" are live endpoints (review P3). Inside these roots only real test files count as non-shipping.
+// Example, demo, docs and sample folders inside application source (src/, lib/, server/) are shipping code too.
+const LIVE_ROOT = /(^|\/)(app|pages|api|routes|supabase\/functions|src|lib|server)\//;
+const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?)\//i;
+const TEST_FILE = /(^|\/)__tests__\/|[._-]tests?\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$/i;
+/** True for code that doesn't ship: tests, fixtures, examples, docs, stories and seed data. A folder name only counts
+ *  when it comes before any app or route root in the path: examples/site/app/page.tsx is an example, while
+ *  app/api/demo/route.ts and src/samples/handler.ts are live code. Pure. */
+export function isNonShipping(file: string): boolean {
+  if (TEST_FILE.test(file)) return true;
+  const live = LIVE_ROOT.exec(file), ns = NS_FOLDER.exec(file);
+  if (!live || (ns && ns.index < live.index)) return NON_SHIPPING.test(file);
+  // Under a route root every folder is a URL or function name, so only test files (handled above) are skipped.
+  if (/^(app|pages|api|routes|supabase\/functions)$/.test(live[2])) return false;
+  // Under src/, lib/ or server/, test folders are still tests; example, demo, docs and sample folders are app code.
+  return /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|seeds?|seeders|factories|stories|storybook)\//i.test(file.slice(live.index));
+}
 // Rules that also read test files. Not auth.hardcoded-password: test logins are fake by design (field test, 50 repos).
-const SECRET_RULES = new Set(["secret.in-source", "config.default-secret-key"]);
+const SECRET_RULES = new Set(["secret.in-source"]); // not config.default-secret-key: a test secret is a test value (review P19)
 // Lines a person already reviewed. lintsure-ignore and the secret allowlist pragma count only in a comment and apply
 // to every rule. Other linters' markers (noqa, nosec, NOSONAR) don't hide secrets: `# noqa: E501` is about line length.
 const REVIEWED = /(#|\/\/|\/\*|--)\s*(lintsure-ignore|pragma:\s*allowlist secret)\b/;
@@ -147,6 +165,7 @@ export function commentLines(lines: string[], ext: string): boolean[] {
     if (block) { if (t.includes("*/")) block = false; return true; }
     if (doc) { if (t.includes(quote)) doc = false; return true; }
     if (py) {
+      if (t.startsWith("#")) return true; // a comment that mentions """ opens no string (review P8)
       const q = t.match(/"""|'''/)?.[0];
       // An odd number of triple quotes opens a string that runs onto the next lines. A docstring line is text;
       // `PROMPT = """` is code whose string continues, and its closing quotes must not open a fake docstring (field test).
@@ -209,10 +228,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     if (isMinified(raw)) continue; // minified or generated
     // A single very long line (a data URL, a long prompt) is ignored on its own; the rest of the file is still read.
     const lines = raw.map((l) => (l.length > MAX_LINE ? "" : l));
-    filesChecked++;
-    checkPoints += relevant.length; // one rule applied to one file is one check point
-    for (const r of relevant) perRule[r.id] = (perRule[r.id] ?? 0) + 1;
-    const add = (r: (typeof relevant)[number], line: number, status: Finding["status"] = r.status) => {
+    let ran = 0;
+    const add =(r: (typeof relevant)[number], line: number, status: Finding["status"] = r.status) => {
       const controls = r.controls.filter((c) => frameworks.includes(c.framework));
       findings.push({
         id: "", ruleId: r.id, file, line, status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
@@ -222,11 +239,13 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     };
     // Tests, fixtures, examples and docs are full of fake tokens and planted examples: only secret rules look at them,
     // and what they find there is Partial (it may be a throwaway key).
-    const inTests = NON_SHIPPING.test(file);
+    const inTests = isNonShipping(file);
     const comment = commentLines(lines, ext);
     for (const r of relevant) {
       const secret = SECRET_RULES.has(r.id);
       if (inTests && !secret) continue;
+      // Count only what actually ran: a file skipped as a test is not a check point (review P1).
+      ran++; checkPoints++; perRule[r.id] = (perRule[r.id] ?? 0) + 1;
       // Comments describe code, they don't run. A real secret pasted into a comment still counts.
       const skip = secret ? null : comment;
       if (r.test) lines.forEach((text, i) => {
@@ -235,6 +254,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
         if (inTests && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."
+        if (inTests && /PRIVATE KEY/.test(text)) return; // test keys and certificates are fixtures by design (review P24)
         if (REVIEWED.test(text) || (!secret && OTHER_LINTER.test(text))) return; // someone already looked at this line and marked it
         add(r, i + 1, hit === "partial" || inTests ? "partial" : r.status);
       });
@@ -242,6 +262,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       if (r.fileTest) for (const n of r.fileTest(skip ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id), sharedFiles.get(r.id)))
         typeof n === "number" ? add(r, n) : add(r, n.line, n.status);
     }
+    if (ran) filesChecked++;
   }
   // Auditor: one finding per rule per line; stable order.
   const seen = new Set<string>();
@@ -270,7 +291,7 @@ const acceptedLine = (a: NonNullable<Finding["accepted"]>) =>
   `> Accepted by ${a.by} on ${a.date}: ${a.reason}` + (a.expired ? ` (review date ${a.reviewBy} has passed: look at it again)` : a.reviewBy ? ` (review by ${a.reviewBy})` : "");
 const ctl = (c: { framework: string; id: string }[]) => c.map((x) => `${x.framework.toUpperCase()} ${x.id}`).join(" · ");
 
-const RESULT = { finding: "Finding", observation: "Observation", "no issue found": "No issue found" } as const;
+const RESULT = { finding: "Finding", observation: "Observation", "no issue found": "No issue found", "not checked": "Not checked (no files)" } as const;
 
 /** The record block: identification, scope, what applies and why, counts, and results by control. */
 function recordLines(r: Report): string[] {
@@ -291,7 +312,7 @@ function recordLines(r: Report): string[] {
     "### What applies, and why", "",
     ...c.applies.map((a) => `- **${a.framework}**: ${a.why}`), "",
     "### Results by control", "",
-    "A finding is a Gap the code itself shows. An observation is a Partial that depends on context a person must confirm. No issue found means the rules found nothing in the files they read, not that the control is met.", "",
+    "A finding is a Gap the code itself shows. An observation is a Partial that depends on context a person must confirm. No issue found means the rules found nothing in the files they read, not that the control is met. Not checked means no file of the right kind was read for that control.", "",
     "| Framework | Control | Rules | Check points | Result | Items |", "|---|---|---|---|---|---|",
     ...c.byControl.map((b) => `| ${b.framework} | ${b.control} ${b.title} | ${b.rules.join(", ")} | ${b.checkPoints} | ${RESULT[b.result]} | ${b.findingIds.join(", ") || "-"} |`), "",
   ];

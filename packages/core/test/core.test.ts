@@ -442,3 +442,70 @@ test("rule packs: only @lintsure/pack-* names load, and a registered pack adds i
   const r = await scan(root, ["test-pack"]);
   assert.ok(r.findings.length > 0 && r.findings.every((f) => f.ruleId === "sql.string-built"));
 });
+
+// Cases from the improvement review (research/improvement-review.md, P-numbers). Each ran through scan(), and each
+// failed on 0.3.6. Fake keys are built at run time so this file never holds a key-shaped string.
+async function tinyRepo(files: Record<string, string>) {
+  const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os"); const { join, dirname } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "ls-review-"));
+  for (const [p, t] of Object.entries(files)) { await mkdir(dirname(join(dir, p)), { recursive: true }); await writeFile(join(dir, p), t); }
+  return dir;
+}
+const got = (r: Awaited<ReturnType<typeof scan>>) => new Set(r.findings.filter((f) => !f.ruleId.startsWith("repo.")).map((f) => `${f.ruleId}@${f.file}`));
+
+test("review P3/P1: route folders named demo, docs, samples or test are live code, and nothing skipped is Met", async () => {
+  const bad = "export async function POST(req) {\n  return Response.json(eval(req.body.code));\n}\n";
+  const paths = ["app/api/demo/route.ts", "app/docs/actions.ts", "src/samples/handler.ts", "supabase/functions/test/index.ts"];
+  const r = await scan(await tinyRepo(Object.fromEntries([...paths.map((p) => [p, bad]), ["examples/site/app/page.tsx", bad], ["src/tests/a.ts", bad]])));
+  for (const p of paths) assert.ok(got(r).has(`code.eval@${p}`), `missed ${p}`);
+  assert.ok(!got(r).has("code.eval@examples/site/app/page.tsx") && !got(r).has("code.eval@src/tests/a.ts"), "examples and tests stay skipped");
+  const only = await scan(await tinyRepo({ "tests/only.ts": bad }));
+  assert.ok(!only.met.some((m) => m.ruleId === "code.eval"), "a rule that only met skipped files is not Met");
+});
+
+test("review P2: controls with no check points say not checked", async () => {
+  const r = await scan(await tinyRepo({ "schema.sql": "select 1;\n" }));
+  const rows = r.record!.byControl;
+  assert.ok(rows.every((b) => b.checkPoints > 0 || b.result === "not checked"));
+  assert.ok(rows.some((b) => b.result === "not checked"));
+});
+
+test("review P8, P13, P14, P19-P21, P11, P17: misses and false alarms", async () => {
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const jwt = `${b64({ alg: "HS256" })}.${b64({ iss: "supabase", role: "service_role", exp: 2000000000 })}.q3Zk9vTn1LrXw8yB2mHc5dJf7gKs0p`;
+  const ak = "AKIA" + "QZ7MVN3KPL2XW8RT";
+  const r = await scan(await tinyRepo({
+    "app.py": 'import os\n# Use """ for docstrings in this module\ndef run():\n    os.system("rm -rf " + request.args["p"])\n',
+    "deploy.sh": `export AWS_ACCESS_KEY_ID=${ak}\n`, "infra/main.tf": `access_key = "${ak}"\n`, "Dockerfile": `ENV AWS_ACCESS_KEY_ID=${ak}\n`,
+    "src/admin.ts": `const key = "${jwt}";\n`,
+    "src/db.ts": `const url = "postgres://app:Xk92mQpL7v@db.prod-cluster.acmecorp.net:5432/app";\n`,
+    ".env": "NEXT_PUBLIC_FIREBASE_ADMIN_PRIVATE_KEY=abc\nVITE_POSTHOG_PERSONAL_API_KEY=abc\nNEXT_PUBLIC_DATABASE_URL=abc\nNEXT_PUBLIC_SUPABASE_ANON_KEY=abc\n",
+    "src/types.ts": "export const Fields = { Secret: 'secret', SECRET: \"SECRET\" };\nconst col = { password: 'String', PASSWORD: \"SECRET\" };\n",
+    "auth.py": "import jwt\nhdr = jwt.decode(token, options={\"verify_signature\": False})\nkey = keys[hdr[\"kid\"]]\ndata = jwt.decode(token, key, algorithms=[\"RS256\"])\n",
+    "supabase/config.toml": "[functions.wipe]\nverify_jwt = false\n[functions.note]\nverify_jwt = false\n",
+    "supabase/functions/wipe/index.ts": "const authHeader = req.headers.get(\"Authorization\");\nconst admin = createClient(url, Deno.env.get(\"SUPABASE_SERVICE_ROLE_KEY\"));\nawait admin.from(\"rows\").delete();\n",
+    "supabase/functions/note/index.ts": "// TODO: call verifyToken( ) here\nconst admin = createClient(url, Deno.env.get(\"SUPABASE_SERVICE_ROLE_KEY\"));\n",
+    ".github/workflows/a.yml": "on: issues\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: |\n            console.log(\"${{ github.event.issue.title }}\")\n",
+  }));
+  const g = got(r);
+  for (const want of ["cmd.shell-built@app.py", "secret.in-source@deploy.sh", "secret.in-source@infra/main.tf", "secret.in-source@Dockerfile",
+    "secret.in-source@src/admin.ts", "secret.in-source@src/db.ts", "secret.public-env@.env", "supabase.function-no-auth@supabase/config.toml",
+    "ci.script-injection@.github/workflows/a.yml"]) assert.ok(g.has(want), `missed ${want}`);
+  assert.equal(r.findings.filter((f) => f.ruleId === "secret.public-env").length, 3, "three secret names, the anon key is public");
+  assert.equal(r.findings.filter((f) => f.ruleId === "supabase.function-no-auth").length, 2, "an unused header and a comment are not checks");
+  for (const unwanted of ["config.default-secret-key@src/types.ts", "auth.hardcoded-password@src/types.ts", "jwt.unverified@auth.py"]) assert.ok(!g.has(unwanted), `flagged ${unwanted}`);
+});
+
+test("review P25: the CLI rejects unknown flags and bad --fail-on values instead of passing", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const cli = fileURLToPath(new URL("../../../cli/dist/src/index.js", import.meta.url));
+  const dir = await tinyRepo({ "a.ts": "eval(req.body.code);\n" });
+  const run = (...args: string[]) => spawnSync(process.execPath, [cli, "scan", dir, ...args], { cwd: dir, encoding: "utf8" }).status;
+  assert.equal(run("--fail-on", "gap"), 1);
+  assert.equal(run("--fail-on=gap"), 1);
+  assert.equal(run("--fail-on", "Gap"), 1);
+  assert.equal(run("--fail-on", "high"), 2);
+  assert.equal(run("--fial-on", "gap"), 2);
+});

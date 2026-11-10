@@ -46,7 +46,7 @@ export function toAssessmentHtml(r: Report, opts: AssessmentOptions): string {
   const sorted = [...r.findings].sort((a, b) => SEV.indexOf(a.severity) - SEV.indexOf(b.severity));
 
   const rec = r.record;
-  const RESULT = { finding: "Finding", observation: "Observation", "no issue found": "No issue found" } as const;
+  const RESULT = { finding: "Finding", observation: "Observation", "no issue found": "No issue found", "not checked": "Not checked (no files)" } as const;
   const recordBody = rec ? `<p>A dated record of what this run checked and what it saw. It is a readiness record of an automated code check, not an audit.</p>
 <table class="counts"><tr><th>Check points</th><th>Findings</th><th>Observations</th><th>Accepted</th><th>Fixed since baseline</th></tr>
 <tr><td>${rec.counts.checkPoints}</td><td>${rec.counts.findings}</td><td>${rec.counts.observations}</td><td>${rec.counts.accepted}</td><td>${rec.counts.fixedSinceBaseline}</td></tr></table>

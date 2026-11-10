@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { FrameworkId, Report, Severity } from "./types.js";
 
-export type ControlResult = "finding" | "observation" | "no issue found";
+export type ControlResult = "finding" | "observation" | "no issue found" | "not checked";
 
 export interface CheckRecord {
   /** Stable id for this run, for example LS-20261108-1a2b3c. */
@@ -78,6 +78,8 @@ export async function buildRecord(r: Report, root: string, checkPoints: number, 
     row.rules.push(rule.id); row.checkPoints += perRule[rule.id] ?? 0;
     controls.set(key, row);
   }
+  // A control whose rules ran on no file was not checked; "no issue found" would claim more than the scan did (review P2).
+  for (const row of controls.values()) if (row.checkPoints === 0) row.result = "not checked";
   for (const f of r.findings) {
     if (f.accepted && !f.accepted.expired) continue;
     for (const c of f.controls) {

@@ -85,7 +85,8 @@ export function untrustedInRun(lines: string[]): number[] {
   lines.forEach((l, i) => {
     const indent = l.search(/\S/);
     if (runIndent >= 0 && indent >= 0 && indent <= runIndent) runIndent = -1;
-    const run = /^(\s*-?\s*)run:\s*(.*)$/.exec(l);
+    // Also `script:` in actions/github-script, where the text becomes JavaScript instead of shell (review P17).
+    const run = /^(\s*-?\s*)(?:run|script):\s*(.*)$/.exec(l);
     if (run) { if (/^[|>][-+]?\s*$/.test(run[2])) { runIndent = run[1].length; return; } if (UNTRUSTED.test(run[2])) out.push(i + 1); return; }
     if (runIndent >= 0 && UNTRUSTED.test(l)) out.push(i + 1);
   });

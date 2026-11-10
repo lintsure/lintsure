@@ -44,6 +44,27 @@ const KEY_FORMATS = new RegExp([
 ].join("|"));
 // Example values from provider docs (AKIAIOSFODNN7EXAMPLE and the like) and obvious fill-ins.
 const DOC_EXAMPLE = /EXAMPLE|X{6,}|x{6,}|0{12,}|1234567890abcdef/;
+// More fixed-prefix secrets this audience leaks: Stripe webhook secrets, Supabase secret keys, Resend keys (review P13).
+const MORE_KEYS = /\bwhsec_[0-9A-Za-z]{24,}|\bsb_secret_[0-9A-Za-z_-]{20,}|\bre_[0-9A-Za-z]{8,}_[0-9A-Za-z]{16,}/;
+/** A Supabase (or any) JWT whose payload says role: service_role. Decoded exactly, so near-zero false alarms. Pure. */
+export function serviceRoleJwt(l: string): boolean {
+  for (const m of l.matchAll(/eyJ[\w-]{10,}\.(eyJ[\w-]{10,})\.[\w-]{10,}/g)) {
+    try { if (/"role"\s*:\s*"service_role"/.test(Buffer.from(m[1], "base64url").toString("utf8"))) return true; } catch { /* not a JWT */ }
+  }
+  return false;
+}
+/** A database connection URL with an inline password that isn't a local default or a placeholder. Pure. */
+export function dbUrlWithPassword(l: string): boolean {
+  if (/placeholder|e\.g\.|for example|format:/i.test(l)) return false; // documentation of the format, not a value
+  const m = /\b(postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?):\/\/([^:\s"'`/@]+):([^@\s"'`]{4,})@([^/\s"'`:?]+)/.exec(l);
+  if (!m) return false;
+  const [, , user, pass, host] = m;
+  // Only internet hosts: single names (db, hoppscotch-db) are containers on a private network; example.com is a sample.
+  if (!host.includes(".") || /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.)|(^|\.)example\.(com|org|net)$|\.local$|\.internal$/i.test(host)) return false;
+  // Values built at run time ({$pass}, ${pass}, %s) and stand-ins (pass, testpass, changeme) aren't stored passwords (field test, 139 repos).
+  if (/[{}$%<>[\]]/.test(user + pass + host)) return false;
+  return pass !== user && !/^(pass|pw|pwd|test\w*|dev\w*|demo\w*|local\w*)$|password|passwd|changeme|secret|example|xxx|your|\*{3}|placeholder|postgres$|root$|admin$/i.test(pass);
+}
 
 export const rules: Rule[] = [
   {
@@ -69,9 +90,13 @@ export const rules: Rule[] = [
     ],
     fix: "Move the secret to an environment variable or secrets manager, then rotate it: it is already in your git history.",
     note: "Anyone with read access to the repo, or a leaked copy of it, can use this key.",
-    extensions: [...CODE, ".env", ".json", ".yaml", ".yml", ".toml"],
+    // Every text format a key ends up in: shell, Terraform, Go, Ruby, PHP, notebooks, Vue and Svelte files, Dockerfiles
+    // ("" is extensionless files), not only JavaScript and Python (review P13).
+    extensions: [...CODE, ".env", ".json", ".yaml", ".yml", ".toml", ".sh", ".bash", ".zsh", ".ps1", ".vue", ".svelte", ".astro", ".tf", ".tfvars", ".go", ".rb", ".php", ".java", ".kt", ".cs", ".swift", ".ipynb", ".properties", ".ini", ".cfg", ".conf", ".xml", ".gradle", ""],
     // A key header that ends right at a quote (or "...") is code looking for a key, e.g. key.includes('-----BEGIN PRIVATE KEY-----').
-    test: (l) => { const m = l.match(KEY_FORMATS); return !!m && !DOC_EXAMPLE.test(m[0]) && !/PRIVATE KEY( BLOCK)?-----(["'`]|\.\.\.)/.test(l); },
+    test: (l) => { if (/\bplaceholder\s*[=:]/i.test(l)) return false; // a form's example text (placeholder="sk_live_...")
+      const m = l.match(KEY_FORMATS) ?? l.match(MORE_KEYS);
+      return (!!m && !DOC_EXAMPLE.test(m[0]) && !/PRIVATE KEY( BLOCK)?-----(["'`]|\.\.\.)/.test(l)) || serviceRoleJwt(l) || dbUrlWithPassword(l); },
     ...DRAFT,
   },
   {

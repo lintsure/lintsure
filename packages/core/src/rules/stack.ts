@@ -29,7 +29,13 @@ export function tablesWithoutRls(lines: string[], shared?: string): number[] {
 }
 
 // Signs that a function checks its caller: a user session, a JWT, a webhook signature or a shared secret.
-const CALLER_CHECK = /auth\.getUser\(|auth\.getClaims\(|getClaims\(|jwtVerify\(|verify(Jwt|JWT|Token|Signature|Webhook|Request)\w*\(|constructEvent(Async)?\(|createHmac\(|timingSafeEqual|crypto\.subtle\.(verify|importKey)|headers\.get\(\s*["'](authorization|x-[\w-]*(secret|signature|token|key|api-key))["']\s*\)|Deno\.env\.get\(\s*["'][A-Z_]*(WEBHOOK|CRON|SHARED|SIGNING|CALLBACK|FUNCTION)[A-Z_]*SECRET["']/i;
+const CALLER_CHECK = /auth\.getUser\(|auth\.getClaims\(|getClaims\(|jwtVerify\(|verify(Jwt|JWT|Token|Signature|Webhook|Request)\w*\(|constructEvent(Async)?\(|createHmac\(|timingSafeEqual|crypto\.subtle\.(verify|importKey)|Deno\.env\.get\(\s*["'][A-Z_]*(WEBHOOK|CRON|SHARED|SIGNING|CALLBACK|FUNCTION)[A-Z_]*SECRET["']/i;
+// Reading a header is not checking it: the header must be compared, or a request must be turned away with 401/403
+// (review P11: reading Authorization and passing it on, unchecked, is the stock template).
+const HEADER_COMPARED = /headers\.get\([^)]*\)[^;\n]*(!==?|===?)|(!==?|===?)[^;\n]*headers\.get\(/;
+const DENIES = /status\s*:\s*40[13]\b|\b40[13]\s*\)/;
+/** Code with comments removed, so "// TODO: call verifyToken()" doesn't count as a check. Pure. */
+const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");
 const HIGH_IMPACT = /SERVICE_ROLE|service_role|sb_secret_|api\.openai\.com|api\.anthropic\.com|generativelanguage\.googleapis|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY/;
 /** In supabase/config.toml: functions with verify_jwt = false whose code shows no caller check of its own. Pure. */
 export function functionsWithoutAuth(lines: string[], _shared?: string, files: Record<string, string> = {}): Array<{ line: number; status: "gap" | "partial" }> {
@@ -44,8 +50,8 @@ export function functionsWithoutAuth(lines: string[], _shared?: string, files: R
     if (!own.length) return; // the code isn't in this repo: nothing to judge
     // Follow imports of shared helpers (../_shared/auth.ts), so a check kept in a helper counts.
     const imported = Object.entries(files).filter(([p]) => /\/_shared\//.test(p) && own.some(([, t]) => t.includes(p.split("/").pop()!.replace(/\.(ts|js|mjs)$/, ""))));
-    const text = [...own, ...imported].map(([, t]) => t).join("\n");
-    if (CALLER_CHECK.test(text)) return;
+    const text = [...own, ...imported].map(([, t]) => stripComments(t)).join("\n");
+    if (CALLER_CHECK.test(text) || HEADER_COMPARED.test(text) || (DENIES.test(text) && /headers\.get\(/.test(text))) return;
     out.push({ line: i + 1, status: HIGH_IMPACT.test(own.map(([, t]) => t).join("\n")) ? "gap" : "partial" });
   });
   return out;
@@ -61,6 +67,16 @@ const SECRET_SERVICE = /OPENAI|ANTHROPIC|CLAUDE|GEMINI|GOOGLE_AI|GROQ|MISTRAL|DE
 const SUPABASE_DIR = /(^|\/)supabase\//;
 // Keys that are public by design and fine in the browser.
 const PUBLIC_BY_DESIGN = /ANON|PUBLISHABLE|_PK_|PUBLIC_KEY|FIREBASE|MAPS|MAPBOX|POSTHOG|SENTRY_DSN|ALGOLIA_SEARCH|SITE_KEY|MEASUREMENT_ID|URL$|_URL_/;
+// Words that make a name secret whatever service it belongs to. They win over the public list above:
+// NEXT_PUBLIC_FIREBASE_ADMIN_PRIVATE_KEY and VITE_POSTHOG_PERSONAL_API_KEY are secrets (review P14).
+const SECRET_WORD = /SECRET|PRIVATE|SERVICE_ROLE|SB_SECRET|PASSWORD|PERSONAL_(API_KEY|ACCESS_TOKEN|TOKEN)|(DATABASE|POSTGRES|DB|MONGO(DB)?|REDIS)_URL|CONNECTION_STRING/;
+/** A browser-exposed env name that holds a secret. Pure. */
+export function publicSecretName(n: string): boolean {
+  if (/FIREBASE\w*DATABASE_URL/.test(n)) return false; // Firebase's Realtime Database URL is public config
+  if (SECRET_WORD.test(n)) return true;
+  if (PUBLIC_BY_DESIGN.test(n)) return false;
+  return SECRET_SERVICE.test(n) && /KEY|TOKEN/.test(n);
+}
 
 export const stackRules: Rule[] = [
   rule({ id: "supabase.rls-disabled", title: "Database table without row level security", status: "partial", severity: "high", controls: [GDPR32, A01],
@@ -93,9 +109,7 @@ export const stackRules: Rule[] = [
     unlessPath: /\.d\.ts$/, // type declarations (env.d.ts) name variables, they don't ship values (field test)
     test: (l) => {
       if (/^\s*(readonly\s+)?[A-Z0-9_]+\??\s*:\s*string\b/.test(l)) return false; // a typed field, not a value
-      const names = l.match(PUBLIC_ENV) ?? [];
-      const risky = names.filter((n) => !PUBLIC_BY_DESIGN.test(n));
-      return risky.some((n) => /SECRET|PRIVATE|SERVICE_ROLE|PASSWORD|SB_SECRET/.test(n) || (SECRET_SERVICE.test(n) && /KEY|TOKEN/.test(n)));
+      return (l.match(PUBLIC_ENV) ?? []).some(publicSecretName);
     } }),
   rule({ id: "supabase.service-key-in-client", title: "Supabase service-role key used in browser code", status: "gap", severity: "high", controls: [GDPR32, A01],
     fix: "Use the service-role key only in server code (API routes, server actions, edge functions). In browser code, use the anon key with row level security, and rotate the service-role key if it was ever shipped.",

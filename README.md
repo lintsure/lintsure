@@ -48,7 +48,7 @@ gap      src/users.ts:5    Personal data written to logs
 
 ## Try it
 
-> **Status: v0.1, Beta.** All rules are in Beta: their mappings are our own reading of the public texts, not independently reviewed. 
+> **Status: Beta.** All rules are in Beta: their mappings are our own reading of the public texts, not independently reviewed. 
 
 ```bash
 npx lintsure scan

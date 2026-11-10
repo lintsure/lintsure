@@ -35,10 +35,35 @@ ${DISCLAIMER}
 Lintsure never sends your code anywhere.`;
 
 const VALUE_FLAGS = ["--framework", "--fail-on", "--project"];
+const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "--save-record"];
+const FAIL_ON = ["gap", "partial"];
+
+/** Splits --flag=value into two tokens and checks every flag, so a CI gate can't silently fail open
+ *  because of a typo or a bad value (improvement review, P25). Returns an error message or the parsed args. Pure. */
+export function parseArgs(argv: string[]): { rest: string[] } | { error: string } {
+  const rest = argv.flatMap((a) => (a.startsWith("--") && a.includes("=") ? [a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1)] : [a]));
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (!a.startsWith("--")) continue;
+    if (VALUE_FLAGS.includes(a)) {
+      const v = rest[i + 1];
+      if (v === undefined || v.startsWith("--")) return { error: `${a} needs a value.` };
+      if (a === "--fail-on" && !FAIL_ON.includes(v.toLowerCase())) return { error: `--fail-on must be "gap" or "partial", not "${v}".` };
+      i++; continue;
+    }
+    if (!BOOL_FLAGS.includes(a)) return { error: `Unknown option: ${a}. Run lintsure without arguments for help.` };
+  }
+  const positional = rest.filter((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1]));
+  if (positional.length > 1) return { error: `Expected one folder to scan, got: ${positional.join(", ")}` };
+  return { rest };
+}
 
 async function main(argv: string[]) {
-  const [cmd, ...rest] = argv;
+  const [cmd, ...raw] = argv;
   if (cmd !== "scan" && cmd !== "baseline") { console.log(HELP); return cmd ? 2 : 0; }
+  const parsed = parseArgs(raw);
+  if ("error" in parsed) { console.error(parsed.error); return 2; }
+  const { rest } = parsed;
   const flag = (n: string) => { const i = rest.indexOf(n); return i >= 0 ? rest[i + 1] : undefined; };
   const path = resolve(rest.find((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1])) ?? ".");
   const wanted = flag("--framework")?.split(",").map((s) => s.trim()) as FrameworkId[] | undefined;
@@ -77,7 +102,8 @@ async function main(argv: string[]) {
   const n = (s: string) => open.filter((f) => f.status === s).length;
   const accepted = report.findings.length - open.length;
   if (report.record) console.log(`Record ${report.record.id} · ${report.record.createdAt.replace("T", " ").slice(0, 16)} UTC · ${report.record.counts.checkPoints} check points`);
-  console.log(`✓ ${open.length} open findings · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
+  // A check mark only when nothing is open: "✓ 3 gaps" read as a pass.
+  console.log(`${open.length ? "!" : "✓"} ${open.length} open findings · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
   if (report.baseline) console.log(`  Since the baseline of ${report.baseline.created}: ${report.baseline.newCount} new, ${report.baseline.fixed.length} fixed, ${report.baseline.unchangedCount} unchanged`);
   for (const f of report.findings) console.log(`${(f.accepted && !f.accepted.expired ? "accepted" : f.status).padEnd(8)} ${f.file}:${f.line}  ${f.title}${f.change === "new" ? "  (new)" : ""}`);
   if (rest.includes("--github")) for (const f of open) {
@@ -90,7 +116,7 @@ async function main(argv: string[]) {
   nextSteps(report).forEach((x, i) => console.log(`  ${i + 1}. ${x}`));
   console.log(`\n${DISCLAIMER}`);
 
-  const failOn = flag("--fail-on");
+  const failOn = flag("--fail-on")?.toLowerCase();
   const counted = rest.includes("--new-only") && report.baseline ? open.filter((f) => f.change === "new") : open;
   if (failOn === "gap" && counted.some((f) => f.status === "gap")) return 1;
   if (failOn === "partial" && counted.length) return 1;

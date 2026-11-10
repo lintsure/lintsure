@@ -80,9 +80,13 @@ export const owaspRules: Rule[] = [
     fix: "Generate a long random secret per environment and load it from an environment variable or secret manager.",
     note: "With a known secret key, attackers can forge sessions, cookies or signed tokens (CWE-1394).", extensions: [...CODE, ".env"],
     // The value must be a quoted literal, or an env-style KEY=value line: `self.secret = secret` is a variable.
-    test: (l) => /\b(SECRET_KEY|JWT_SECRET|SESSION_SECRET|secret)\s*[:=]\s*["'](django-insecure-|changeme|change-me|secret\b|mysecret|keyboard cat|dev-secret|supersecret)/i.test(l)
-      || /^\s*(SECRET_KEY|JWT_SECRET|SESSION_SECRET)\s*=\s*(django-insecure-|changeme|change-me|secret\b|mysecret|dev-secret|supersecret)/i.test(l)
-      || fallbackSecret(l) }),
+    // Key names are matched as written (secret, SECRET_KEY, jwtSecret), not case-insensitively: a field-name enum such as
+    // `Secret: 'secret'` or a label `SECRET: "SECRET"` names a field, it doesn't set a key (review P19).
+    test: (l) => {
+      const m = /\b(SECRET_KEY|JWT_SECRET|SESSION_SECRET|secret|secretKey|jwtSecret|sessionSecret|secret_key|jwt_secret)\s*[:=]\s*["'](django-insecure-|changeme|change-me|secret\b|mysecret|keyboard cat|dev-secret|supersecret)([^"']*)["']?/.exec(l);
+      if (m && !(m[1] !== m[1].toLowerCase() && (m[2] + m[3]).toLowerCase() === m[1].toLowerCase())) return true;
+      return /^\s*(SECRET_KEY|JWT_SECRET|SESSION_SECRET)\s*=\s*(django-insecure-|changeme|change-me|secret\b|mysecret|dev-secret|supersecret)/.test(l) || fallbackSecret(l);
+    } }),
   // Python's standard XML parsers don't load external entities (since 3.7.1), so only explicit opt-ins count (field test).
   rule({ id: "xml.external-entities", title: "XML parser may load external entities", status: "partial", severity: "high", controls: [A02],
     fix: "Use defusedxml in Python, or turn off entity resolution and DTD loading in your parser.",
@@ -136,7 +140,8 @@ export const owaspRules: Rule[] = [
       return /\bjwt\.decode\(\s*[\w.]+\s*\)/.test(l) ? "partial" : false; // Node jwt.decode reads a token without verifying it
     },
     // Peeking at a claim before verifying it nearby is fine (field test, 139 repos).
-    unlessNear: /\bjwt\.verify\(|\bjwtVerify\(|\bverify(Token|Jwt|JWT)\(/ }),
+    // Python peek-then-verify: a second decode with a key and an algorithms list nearby (review P21).
+    unlessNear: /\bjwt\.verify\(|\bjwtVerify\(|\bverify(Token|Jwt|JWT)\(|\bjwt\.decode\([^)]*\balgorithms\s*=/ }),
 
   // A05 Injection
   rule({ id: "cmd.shell-built", title: "Shell command built from strings", status: "gap", severity: "high", controls: [A05],
@@ -187,7 +192,9 @@ export const owaspRules: Rule[] = [
       // Translations ("Парола", "Passwort") and obvious stand-ins ("new-password", "hashed-password", "hunter2") are not credentials (field test).
       && !/[:=]\s*["'][^"']*(passw|hash|redact|hidden|\bhunter2\b|[^\x00-\x7F])/i.test(l)
       // Validation messages and schema types ({ password: "Required" }, { password: "string" }) are not credentials (field test).
-      && !/[:=]\s*["'](required|string|text|str|number|optional|invalid[^"']*|[A-Z][a-z]+ [^"']*)["']/.test(l) }),
+      && !/[:=]\s*["'](required|string|text|str|number|optional|invalid[^"']*|[A-Z][a-z]+ [^"']*)["']/.test(l)
+      // Column types and ALL-CAPS labels (`password: 'String'`, `PASSWORD: "SECRET"`) aren't credentials (review P20).
+      && !/[:=]\s*["'](String|Number|Boolean|Text|varchar(\(\d+\))?|VARCHAR(\(\d+\))?|[A-Z][A-Z_]*)["']/.test(l) }),
   rule({ id: "jwt.no-expiry", title: "JWT signed without an expiry", status: "partial", severity: "medium", controls: [A07],
     fix: "Add expiresIn (Node) or an exp claim (Python), and keep access tokens short-lived.",
     note: "A stolen token without an expiry works forever (insufficient session expiration, CWE-613). Partial because the expiry may be set in a payload built elsewhere.", extensions: CODE,

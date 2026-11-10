@@ -2,6 +2,36 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.7 · 2026-11-10 · Honest gates and records
+
+An independent review of 0.3.6 reproduced 29 problems, each with a small test project. This release fixes the most serious ones, and every fix has a test that failed on 0.3.6. On the same 139 field-test repositories, 31 of the 33 confirmed real problems are still found, and confirmed false alarms drop from 92 to 82.
+
+### Fixed: a CI gate that could pass when it should fail
+- `--fail-on=gap`, `--fail-on Gap`, a bad value such as `--fail-on high`, and a mistyped option such as `--fial-on` used to exit 0, so a pipeline could pass with Gaps present. Now `--flag=value` works, values are case-insensitive, and an unknown option or a bad value exits 2.
+- The summary line no longer starts with a check mark when findings are open.
+
+### Fixed: live code skipped because of a folder name (a 0.3.6 regression)
+- In Next.js, Remix and Supabase, a folder name is a URL or a function name. `app/api/demo/route.ts`, `app/docs/actions.ts` and a Supabase function called `test` are live endpoints, and are checked again. Inside route folders only real test files are skipped.
+- Example, demo, docs and sample folders inside `src/`, `lib/` or `server/` are now checked as app code. Test, seed, factory and storybook folders are still skipped.
+
+### Fixed: the record saying more than the scan did
+- Check points and "files read" now count only rules that actually ran. A rule whose only files were skipped is no longer Met.
+- A control whose rules read no file now says "Not checked" instead of "No issue found".
+
+### Secrets
+- Secrets are found in every text format: shell scripts, Dockerfiles, Terraform, Go, Ruby, PHP, Java, Kotlin, C#, notebooks, Vue, Svelte and Astro files, and more.
+- New: Supabase service-role JWTs (decoded, so the role is read exactly), database URLs with a real inline password on an internet host, Stripe webhook secrets, Supabase secret keys and Resend keys.
+- Browser-exposed variable names: words that mean secret (SECRET, PRIVATE, SERVICE_ROLE, PASSWORD, PERSONAL API key, database URL) now win over the public-by-design list. `NEXT_PUBLIC_FIREBASE_ADMIN_PRIVATE_KEY` and `VITE_POSTHOG_PERSONAL_API_KEY` are found.
+- Test keys and certificates, form placeholders and documented URL formats are no longer reported.
+
+### Fewer misses and false alarms
+- **`supabase.function-no-auth`:** comments no longer count as a check, and reading the Authorization header is not a check unless it's compared or the request is turned away with 401/403.
+- **Python:** a comment that mentions `"""` no longer hides the code after it.
+- **Default secrets:** field-name enums and labels such as `Secret: 'secret'` and `SECRET: "SECRET"` are no longer default secrets, and test files are no longer checked for them.
+- **Hard-coded passwords:** column types and labels (`password: 'String'`) are not passwords.
+- **JWT:** Python peek-then-verify (an unverified decode followed by a verified one) is not reported.
+- **CI script injection:** `ci.script-injection` also reads `script:` blocks in `actions/github-script`.
+
 ## 0.3.6 · 2026-11-10 · Fewer false alarms
 
 We ran Lintsure on 139 public repositories (82 of them written partly or mostly with AI tools) and reviewed 249 of its findings one by one against the actual code (AI reviewers reading the code, with a sample re-checked by us). Only 13% were real problems. This release fixes what that showed. On the same 139 repositories, Gaps fall from 792 to 284, 31 of the 33 confirmed real problems are still found, and 60 of the 152 confirmed false alarms are gone. There is more to do; most remaining false alarms need multi-line analysis, which is next.
