@@ -59,7 +59,12 @@ export const craRules: Rule[] = [
     note: "Piping `curl` or `wget` straight into a shell runs whatever the server sends at that moment, with no check that it is the file you expect. Marked Partial: well-known installers over HTTPS are a common, accepted risk.",
     extensions: [".sh", ".bash", ".yml", ".yaml", ""], fileName: /\.(sh|bash|ya?ml)$|^Dockerfile/i,
     // Quoted text is dropped first: `echo "Install via: curl ... | bash"` tells a person what to run, it runs nothing (field test).
-    test: (l) => /\b(curl|wget)\b[^|#\n]*\|\s*(sudo\s+)?(-\S+\s+)*(ba|z|da)?sh\b/.test(l.replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, '""')), ...DRAFT },
+    // A script served from this machine (a CI test of the project's own installer) or an installer pinned to a version
+    // in its URL is not a moving download (0.3.9 review: 8 of 10 sampled findings were these, or prose).
+    test: (l) => /\b(curl|wget)\b[^|#\n]*\|\s*(sudo\s+)?(-\S+\s+)*(ba|z|da)?sh\b/.test(l.replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, '""'))
+      && !/\b(localhost|127\.0\.0\.1|0\.0\.0\.0)\b/.test(l) && !/https?:\/\/\S*\/v?\d+\.\d+(\.\d+)?\/\S*install/.test(l),
+    // YAML is only run as a script in CI and compose files; elsewhere (manifests, risk registers) it is prose.
+    unlessPath: /^(?!.*(\.github\/workflows|\.gitlab-ci|\.circleci|bitbucket-pipelines|azure-pipelines|\.buildkite|docker-compose|(^|\/)compose\.)).*\.ya?ml$/i, ...DRAFT },
   { id: "ci.write-all-permissions", title: "Workflow gives its token write access to everything", status: "gap", severity: "medium", controls: [UPDATES, A03],
     fix: "Replace `permissions: write-all` with only what the job needs, for example `permissions: contents: read`, and grant write access per job where it's really used.",
     note: "With write-all, any step that is compromised, including a third-party action, can push code, change releases or edit issues with the workflow's token.",

@@ -20,7 +20,9 @@
       "console.log(`sent ${count} emails`);",
       "logger.info(`signup ${mask(user.id)}`);",
       "sendEmail(user.email); logger.info('queued');",
-      "if (process.env.GITHUB_ACTIONS) console.log(`::add-mask::${ctx.admin.password}`);"
+      "if (process.env.GITHUB_ACTIONS) console.log(`::add-mask::${ctx.admin.password}`);",
+      "logger.info(\"[mail] login code sent\", { email: maskEmail(args.email) });",
+      "logger.info(f\"Wrote the profile of {pseudonym(email)}\")"
     ]
   },
   "secret.in-source": {
@@ -49,7 +51,9 @@
       "if (key.startsWith(\"npm_\")) return;",
       "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
       "const hasBeginMarker = key.includes('-----BEGIN PRIVATE KEY-----')",
-      "EC_KEY: '-----BEGIN EC PRIVATE KEY-----...',"
+      "EC_KEY: '-----BEGIN EC PRIVATE KEY-----...',",
+      "\"SLACK_BOT_TOKEN\": \"xoxb-your-bot-token\"",
+      "key: \"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n\","
     ]
   },
   "transport.plain-http": {
@@ -669,7 +673,9 @@
       "curl -s https://example.com/data.json | jq .name",
       "echo done | sh # local, no download",
       "  echo \"Install via: curl -fsSL https://deb.example.com/setup_22.x | sudo -E bash -\"",
-      "log_error \"Upgrade via: curl -fsSL https://x.example/setup | bash\""
+      "log_error \"Upgrade via: curl -fsSL https://x.example/setup | bash\"",
+      "curl -fsSL http://127.0.0.1:8080/get.sh | bash",
+      "curl -LsSf https://astral.sh/uv/0.6.10/install.sh | sh"
     ]
   },
   "ci.write-all-permissions": {

@@ -151,12 +151,12 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
 
 // Code that doesn't ship: tests, fixtures, examples, docs, demos, stories and seed data. Most false alarms in the
 // 139-repo field test came from here. Only the secret rules read these paths, and their findings there are Partial.
-export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|factories|\.dev|benchmarks?|scripts?|\.agents|\.claude|\.cursor)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
+export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|factories|\.dev|benchmarks?|scripts?|\.agents|\.claude|\.cursor|\.devcontainer)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
 // In Next.js, Remix and Supabase a folder name is a route or a function name: app/api/demo and a function called
 // "test" are live endpoints (review P3). Inside these roots only real test files count as non-shipping.
 // Example, demo, docs and sample folders inside application source (src/, lib/, server/) are shipping code too.
 const LIVE_ROOT = /(^|\/)(app|pages|api|routes|supabase\/functions|src|lib|server)\//;
-const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?|scripts?|\.agents|\.claude|\.cursor)\//i;
+const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?|scripts?|\.agents|\.claude|\.cursor|\.devcontainer)\//i;
 // Dev scripts at the top of a repo (scripts/test-*.mjs, build and seed helpers) and agent tooling (.agents/, .claude/)
 // don't ship: they were the largest single source of false alarms in the 0.3.9 labelled sample (44 of 242).
 const TEST_FILE = /(^|\/)__tests__\/|(^|\/)test[-_]?(utils?|helpers?|rig)\/|(^|\/)test-[^/]+\.[cm]?[jt]s$|[._-]tests?\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$/i;

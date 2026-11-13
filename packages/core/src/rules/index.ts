@@ -16,6 +16,8 @@ const LOG_CALL = /\b(console\.(log|info|warn|error|debug)|logger\.\w+|log\.(info
 // [^\\] keeps the two alternatives apart: with "." a run of backslashes could match two ways, which backtracks
 // exponentially on text such as an array of regular expressions (found when statements were joined).
 const codeOnly = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
+// Helpers that hide the raw value before it is logged.
+const MASKED = /\b\w*(mask|hash|pseudonym|redact|anonymi[sz]e|obfuscate|scrub)\w*\s*\(/i;
 const PII = /\b(e-?mail|phone|ssn|social_?security|passport|date_?of_?birth|dob|password|passwd|credit_?card|card_?number|iban)\b/i;
 // The arguments of the first log call on a line, up to its matching ")". Other code on the same line is ignored.
 function logArgs(l: string): string | null {
@@ -80,7 +82,9 @@ export const rules: Rule[] = [
     note: "Logs are copied to many places and kept for a long time. Personal data in them is hard to find and delete.",
     extensions: CODE,
     // ::add-mask:: tells GitHub Actions to hide the value in its logs.
-    test: (l) => { const a = logArgs(l); return a !== null && !l.includes("::add-mask::") && PII.test(codeOnly(a)); },
+    // A value passed through a masking or hashing helper first (maskEmail(), pseudonym(), hash()) is not the raw value:
+    // every false alarm on 56 new repos in the 0.3.9 review was masked this way (12 of 12).
+    test: (l) => { const a = logArgs(l); return a !== null && !l.includes("::add-mask::") && PII.test(codeOnly(a)) && !MASKED.test(a); },
     ...DRAFT,
   },
   {
@@ -98,9 +102,13 @@ export const rules: Rule[] = [
     // A key header that ends right at a quote (or "...") is code looking for a key, e.g. key.includes('-----BEGIN PRIVATE KEY-----').
     test: (l) => { if (/\bplaceholder\s*[=:]/i.test(l)) return false; // a form's example text (placeholder="sk_live_...")
       const m = l.match(KEY_FORMATS) ?? l.match(MORE_KEYS);
-      return (!!m && !DOC_EXAMPLE.test(m[0]) && !/PRIVATE KEY( BLOCK)?-----(["'`]|\.\.\.)/.test(l)) || serviceRoleJwt(l) || dbUrlWithPassword(l); },
-    // Translation files mention "API key" and "secret" in every language, never a real key (0.3.9 labels).
-    unlessPath: /(^|\/)(locales?|i18n|translations?|lang)\//i,
+      // Placeholders say so: xoxb-your-bot-token, ghp_...fake..., a PEM header followed by "...", or by prose
+      // ("starts with -----BEGIN PRIVATE KEY----- and"). 0 of 7 sampled secret findings were real (0.3.9 review).
+      return (!!m && !DOC_EXAMPLE.test(m[0]) && !/your[-_]|fake|dummy|placeholder|changeme|sample/.test(m[0]) /* lowercase words: real keys are random */
+        && !/PRIVATE KEY( BLOCK)?-----(["'`]|\.\.\.|\\n\s*\.\.\.|\s+[a-zA-Z])/.test(l)) || serviceRoleJwt(l) || dbUrlWithPassword(l); },
+    // Translation files mention "API key" and "secret" in every language, never a real key. Type definition files
+    // carry documentation examples, and secret-scanner configs list known test keys on purpose (0.3.9 review).
+    unlessPath: /(^|\/)(locales?|i18n|translations?|lang)\/|\.d\.ts$|(^|\/)(\.gitleaks\.toml|\.secrets\.baseline|\.trufflehog\.ya?ml)$/i,
     ...DRAFT,
   },
   {
@@ -383,6 +391,8 @@ const MEDIUM_CONFIDENCE = new Set(["xss.raw-html", "error.empty-catch", "sql.str
   "jwt.unverified", "jwt.no-expiry", "mass-assignment", "transport.tls-verify-off", "crypto.weak-cipher", "crypto.weak-random-token",
   "ci.script-injection", "log.injection", "log.secret", "auth.hardcoded-password", "mobile.cleartext-traffic", "config.debug-on",
   "mobile.token-in-plain-storage",
+  // 0 of 7 real in the 0.3.9 review: the data was the app's own database, cache or worker pipe.
+  "deserialize.unsafe",
   // Reworked in 0.3.9 to need credentials; not yet measured on a fresh sample.
   "cors.any-origin"]);
 for (const r of rules) if (MEDIUM_CONFIDENCE.has(r.id)) r.confidence = "medium";
