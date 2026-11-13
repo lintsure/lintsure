@@ -4,7 +4,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, relative, sep } from "node:path";
 import { outsideFor } from "./knowledge/index.js";
 import { rules } from "./rules/index.js";
-import type { Finding, FrameworkId, Report } from "./types.js";
+import type { Finding, FrameworkId, Report, Severity } from "./types.js";
 import { proposalFor } from "./guidance.js";
 import { applyReview, fingerprint, isOpen } from "./review.js";
 export * from "./review.js";
@@ -22,7 +22,7 @@ export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
 import { loadPacks } from "./packs.js";
-export const RULES_VERSION = "0.3.8";
+export const RULES_VERSION = "0.4.0";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -53,30 +53,65 @@ export function nextSteps(r: Report): string[] {
 export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "eu-ai-act", "owasp-top10", "cra", "owasp-llm", "cwe-top25"];
 
 /** Reads the frameworks list from lintsure.config.yaml in the repo root, if there is one.
- *  Only the simple list form is supported:
+ *  Lists can be written either way:
  *    frameworks:
  *      - gdpr
+ *    frameworks: [gdpr, owasp-top10]
+ *  `rules:` switches a rule off or changes its risk level; `show: all` includes medium-confidence findings.
+ *  Anything it can't read is returned in `problems`, never silently ignored.
  *  Ids Lintsure doesn't check yet (for example "soc2" without its pack) are returned in `skipped`.
  *  A `packs:` list loads installed @lintsure/pack-* rule packs first, so their frameworks count as known.
  *  An `ignore:` list of paths (relative to the root, for example tests/ or fixtures/) is skipped by scan(). */
-export async function readConfig(root: string): Promise<{ frameworks: FrameworkId[] | null; skipped: string[]; ignore: string[]; packsMissing?: string[] }> {
+export interface Config {
+  frameworks: FrameworkId[] | null; skipped: string[]; ignore: string[]; packsMissing?: string[];
+  /** Per-rule settings: "off" stops a rule; "low" | "medium" | "high" changes its risk level. */
+  rules: Record<string, "off" | Severity>;
+  /** "all" also shows medium-confidence findings. */
+  show?: "all";
+  /** Lines Lintsure could not read. The CLI stops with exit code 2 rather than guess (a typo must not widen a scan). */
+  problems: string[];
+}
+const KEYS = new Set(["frameworks", "ignore", "packs", "rules", "show"]);
+const RULE_SETTINGS = new Set(["off", "low", "medium", "high"]);
+
+export async function readConfig(root: string): Promise<Config> {
   let text: string;
-  try { text = await readFile(join(root, "lintsure.config.yaml"), "utf8"); } catch { return { frameworks: null, skipped: [], ignore: [] }; }
-  const lists: Record<string, string[]> = { frameworks: [], ignore: [], packs: [] }; let key = ""; let emptyFw = false;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/#.*$/, "").trimEnd();
-    if (/^frameworks\s*:\s*\[\s*\]\s*$/.test(line)) { emptyFw = true; key = ""; continue; }
-    const head = line.match(/^(frameworks|ignore|packs)\s*:\s*$/);
-    if (head) { key = head[1]; continue; }
-    if (key) { const m = line.match(/^\s+-\s*["']?([^"'\s]+)["']?\s*$/); if (m) lists[key].push(m[1]); else if (line.trim()) key = ""; }
-  }
+  try { text = await readFile(join(root, "lintsure.config.yaml"), "utf8"); } catch { return { frameworks: null, skipped: [], ignore: [], rules: {}, problems: [] }; }
+  const lists: Record<string, string[]> = { frameworks: [], ignore: [], packs: [] }, ruleSet: Config["rules"] = {}, problems: string[] = [];
+  let key = "", emptyFw = false, show: Config["show"];
+  const unquote = (s: string) => s.trim().replace(/^["']|["']$/g, "");
+  text.split(/\r?\n/).forEach((raw, n) => {
+    const line = raw.replace(/#.*$/, "").trimEnd(), at = `line ${n + 1}`;
+    if (!line.trim()) return;
+    const top = line.match(/^([\w-]+)\s*:\s*(.*)$/);
+    if (top) {
+      const [, k, value] = top; key = "";
+      if (!KEYS.has(k)) { problems.push(`${at}: unknown setting "${k}" (known: ${[...KEYS].join(", ")})`); return; }
+      if (k === "show") { if (unquote(value) === "all") show = "all"; else problems.push(`${at}: show can only be "all"`); return; }
+      const inline = value.match(/^\[(.*)\]$/); // frameworks: [gdpr, owasp-top10]
+      if (inline && k !== "rules") { const items = inline[1].split(",").map(unquote).filter(Boolean); if (k === "frameworks" && !items.length) emptyFw = true; lists[k].push(...items); return; }
+      if (value.trim()) { problems.push(`${at}: write ${k} as a list`); return; }
+      key = k; return;
+    }
+    if (key === "rules") {
+      const m = line.match(/^\s+([\w.-]+)\s*:\s*(\S+)\s*$/);
+      if (m && RULE_SETTINGS.has(unquote(m[2]))) ruleSet[m[1]] = unquote(m[2]) as Config["rules"][string];
+      else problems.push(`${at}: write a rule as "  rule.id: off" (or low, medium, high)`);
+      return;
+    }
+    const m = key && line.match(/^\s+-\s*(.+?)\s*$/);
+    if (m) lists[key].push(unquote(m[1])); else problems.push(`${at}: could not read "${line.trim()}"`);
+  });
   const ignore = lists.ignore.map((p) => p.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, ""));
   const packsMissing = lists.packs.length ? await loadPacks(lists.packs) : undefined;
-  if (emptyFw) return { frameworks: [], skipped: [], ignore, packsMissing };
+  const ruleIds = new Set(rules.map((r) => r.id));
+  for (const id of Object.keys(ruleSet)) if (!ruleIds.has(id)) problems.push(`rules: no rule called "${id}"`);
+  const base = { ignore, packsMissing, rules: ruleSet, show, problems };
+  if (emptyFw) return { frameworks: [], skipped: [], ...base };
   const ids = lists.frameworks;
-  if (!ids.length) return { frameworks: null, skipped: [], ignore, packsMissing };
+  if (!ids.length) return { frameworks: null, skipped: [], ...base };
   const known = ids.filter((i): i is FrameworkId => (ALL_FRAMEWORKS as string[]).includes(i));
-  return { frameworks: known, skipped: ids.filter((i) => !known.includes(i as FrameworkId)), ignore, packsMissing };
+  return { frameworks: known, skipped: ids.filter((i) => !known.includes(i as FrameworkId)), ...base };
 }
 
 // Dependencies, build output and caches: generated code, not code you wrote.
@@ -116,18 +151,22 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
 
 // Code that doesn't ship: tests, fixtures, examples, docs, demos, stories and seed data. Most false alarms in the
 // 139-repo field test came from here. Only the secret rules read these paths, and their findings there are Partial.
-export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|factories|\.dev|benchmarks?)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
+export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|factories|\.dev|benchmarks?|scripts?|\.agents|\.claude|\.cursor)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
 // In Next.js, Remix and Supabase a folder name is a route or a function name: app/api/demo and a function called
 // "test" are live endpoints (review P3). Inside these roots only real test files count as non-shipping.
 // Example, demo, docs and sample folders inside application source (src/, lib/, server/) are shipping code too.
 const LIVE_ROOT = /(^|\/)(app|pages|api|routes|supabase\/functions|src|lib|server)\//;
-const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?)\//i;
-const TEST_FILE = /(^|\/)__tests__\/|[._-]tests?\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$/i;
+const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?|scripts?|\.agents|\.claude|\.cursor)\//i;
+// Dev scripts at the top of a repo (scripts/test-*.mjs, build and seed helpers) and agent tooling (.agents/, .claude/)
+// don't ship: they were the largest single source of false alarms in the 0.4.0 labelled sample (44 of 242).
+const TEST_FILE = /(^|\/)__tests__\/|(^|\/)test[-_]?(utils?|helpers?|rig)\/|(^|\/)test-[^/]+\.[cm]?[jt]s$|[._-]tests?\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$/i;
 /** True for code that doesn't ship: tests, fixtures, examples, docs, stories and seed data. A folder name only counts
  *  when it comes before any app or route root in the path: examples/site/app/page.tsx is an example, while
  *  app/api/demo/route.ts and src/samples/handler.ts are live code. Pure. */
 export function isNonShipping(file: string): boolean {
   if (TEST_FILE.test(file)) return true;
+  // Shell scripts in scripts/ are often the installer people run (curl ... | sh): those still count.
+  if (/\.(sh|bash|zsh|ps1)$/i.test(file) && !/(^|\/)(tests?|__tests__|e2e|fixtures?|examples?|demos?)\//i.test(file)) return false;
   const live = LIVE_ROOT.exec(file), ns = NS_FOLDER.exec(file);
   if (!live || (ns && ns.index < live.index)) return NON_SHIPPING.test(file);
   // Under a route root every folder is a URL or function name, so only test files (handled above) are skipped.
@@ -226,12 +265,21 @@ export function commentLines(lines: string[], ext: string): boolean[] {
   });
 }
 
-export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWORKS, opts: RecordOptions = {}): Promise<Report> {
-  const active = rules.filter((r) => r.controls.some((c) => frameworks.includes(c.framework)));
+export interface ScanOptions extends RecordOptions {
+  /** Also list medium-confidence findings. Overrides `show:` in the config when set. */
+  all?: boolean;
+  /** --diff: only report findings on these changed lines ("/"-separated paths, 1-based lines). */
+  changed?: { base: string; lines: Record<string, number[]> };
+}
+
+export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWORKS, opts: ScanOptions = {}): Promise<Report> {
+  const config = await readConfig(root);
+  const { ignore } = config;
+  const rulesOff = Object.keys(config.rules).filter((id) => config.rules[id] === "off");
+  const active = rules.filter((r) => r.controls.some((c) => frameworks.includes(c.framework)) && !rulesOff.includes(r.id));
   const findings: Finding[] = [];
-  let filesChecked = 0, checkPoints = 0;
+  let filesChecked = 0, checkPoints = 0, nonShipping = 0;
   const perRule: Record<string, number> = {};
-  const { ignore } = await readConfig(root);
   const all = await listFiles(root, ignore);
   // Repository checks look at the file list once, not at file contents. The finding points at the file that's missing.
   const paths = all.map((p) => relative(root, p).split(sep).join("/"));
@@ -288,6 +336,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     // Tests, fixtures, examples and docs are full of fake tokens and planted examples: only secret rules look at them,
     // and what they find there is Partial (it may be a throwaway key).
     const inTests = isNonShipping(file);
+    if (inTests) nonShipping++;
     const comment = commentLines(lines, ext);
     // Statements are worked out once per file, on lines with comments blanked.
     const stmts = JOINABLE.has(ext) ? statements(lines.map((l, i) => (comment[i] ? "" : l)), ext === ".py") : [];
@@ -336,10 +385,20 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   }
   // Auditor: one finding per rule per line; stable order.
   const seen = new Set<string>();
-  const deduped = findings.filter((f) => { const k = `${f.ruleId}|${f.file}|${f.line}`; return seen.has(k) ? false : (seen.add(k), true); })
+  const unique = findings.filter((f) => { const k = `${f.ruleId}|${f.file}|${f.line}`; return seen.has(k) ? false : (seen.add(k), true); })
     .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.ruleId.localeCompare(b.ruleId));
+  // A rule that fired still counts as checked (not Met) even when its findings are held back or outside the diff.
+  const hit = new Set(unique.map((f) => f.ruleId));
+  for (const f of unique) { const s = config.rules[f.ruleId]; if (s && s !== "off") f.severity = s; }
+  const showAll = opts.all ?? config.show === "all";
+  const medium = new Set(active.filter((r) => r.confidence === "medium").map((r) => r.id));
+  // A key in a test or fixture file is usually a fake one (0 of 15 sampled were real): shown only with --all.
+  const isMedium = (f: Finding) => medium.has(f.ruleId) || (SECRET_RULES.has(f.ruleId) && isNonShipping(f.file));
+  const changed = opts.changed && new Map(Object.entries(opts.changed.lines).map(([k, v]) => [k, new Set(v)]));
+  const inDiff = (f: Finding) => !changed || changed.get(f.file)?.has(f.line) === true;
+  const held = showAll ? 0 : unique.filter((f) => isMedium(f) && inDiff(f)).length;
+  const deduped = unique.filter((f) => inDiff(f) && (showAll || !isMedium(f)));
   deduped.forEach((f, i) => { f.id = `F-${String(i + 1).padStart(3, "0")}`; });
-  const hit = new Set(deduped.map((f) => f.ruleId));
   const now = opts.now ?? new Date();
   const report = await applyReview({
     rulesVersion: RULES_VERSION,
@@ -351,6 +410,18 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     outside: outsideFor(frameworks),
     filesChecked,
     disclaimer: DISCLAIMER,
+    ...(held ? { held } : {}),
+    ...(rulesOff.length ? { rulesOff } : {}),
+    ...(opts.changed ? { diffBase: opts.changed.base } : {}),
+    notCovered: [
+      ...(opts.changed ? [`Only lines changed since ${opts.changed.base} are listed. Older findings in the same files are not shown.`] : []),
+      ...(held ? [`${held} medium-confidence finding${held === 1 ? " was" : "s were"} held back. Run with --all to see ${held === 1 ? "it" : "them"}.`] : []),
+      ...(rulesOff.length ? [`Switched off in lintsure.config.yaml: ${rulesOff.join(", ")}.`] : []),
+      ...(ignore.length ? [`Ignored by config: ${ignore.join(", ")}.`] : []),
+      ...(nonShipping ? [`${nonShipping} test, fixture or tooling file${nonShipping === 1 ? " was" : "s were"} checked for secrets only.`] : []),
+      "Each rule reads one file at a time. Data that flows between files, and how the app behaves when it runs, are not checked.",
+      "Languages beyond JavaScript, TypeScript and Python get secret and config checks only.",
+    ],
   }, root, now.toISOString().slice(0, 10));
   report.record = await buildRecord(report, root, checkPoints, perRule, active.map((r) => r.id), active, ignore, { ...opts, now });
   return report;
@@ -410,6 +481,7 @@ export function toMarkdown(r: Report): string {
   if (r.baseline?.fixed.length) lines.push(`## Fixed since baseline (${r.baseline.fixed.length})`, "", ...r.baseline.fixed.map((x) => `- ${x.ruleId} in \`${x.file}\``), "");
   lines.push(`## Met (${r.met.length})`, "", ...r.met.map((m) => `- ${m.title} · ${ctl(m.controls)}`), "");
   lines.push(`## Outside code (${r.outside.length})`, "", "Code can't prove these. They still need to be done before a full review.", "", ...r.outside.map((o) => `- ${o.framework.toUpperCase()} ${o.control} · ${o.title}: ${o.evidence}`), "");
+  if (r.notCovered?.length) lines.push("## Not covered", "", "No finding here does not mean no problem here.", "", ...r.notCovered.map((s) => `- ${s}`), "");
   lines.push("## What to do next", "", ...nextSteps(r).map((s, i) => `${i + 1}. ${s}`), "");
   lines.push("## What this report is not", "", NOT_A_VERDICT, "");
   return lines.join("\n");

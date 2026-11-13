@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { AGENT_GUIDANCE, APPROVAL_RULES, ALL_FRAMEWORKS, DISCLAIMER, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
-const server = new McpServer({ name: "lintsure", version: "0.3.8" }, { instructions: AGENT_GUIDANCE });
+const server = new McpServer({ name: "lintsure", version: "0.4.0" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const fw = z.array(z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]])).optional()
@@ -17,19 +17,41 @@ const fw = z.array(z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]])).op
 const reply = (...texts: string[]) => ({ content: [...texts, `---\n${DISCLAIMER}`].map((text) => ({ type: "text" as const, text })) });
 
 server.tool("scan",
-  "Scan a repository's source code for compliance and security gaps against the chosen frameworks. Use when the user asks things like 'is this ready to ship?', 'are we GDPR ready?' or 'check this repo for security issues'. Returns a Markdown report and the same data as JSON: each finding with file, line, status (Gap or Partial), the controls it relates to, a suggested fix and a proposal the user must approve, plus work that can't be checked in code. Read-only: it never changes files. Call classify first if you don't know which frameworks apply. Results are for a person to review, never a pass, certification or decision.",
+  "Scan a repository's source code for compliance and security gaps against the chosen frameworks. Use when the user asks things like 'is this ready to ship?', 'are we GDPR ready?' or 'check this repo for security issues'. By default returns a short list: Gaps first, each with file, line, rule, risk level and a one-line fix, plus counts and what was not covered. To check a fix, call it again with files and rules set to the file and rule you changed. Set format to \"full\" for the whole Markdown report and JSON. Read-only: it never changes files. Call classify first if you don't know which frameworks apply. Results are for a person to review, never a pass, certification or decision.",
   {
     path: z.string().default(".").describe("Folder to scan, absolute or relative to where the server runs. Example: \".\" for the current project, or \"apps/web\"."),
     frameworks: fw,
+    files: z.array(z.string()).optional().describe("Only list findings in these files or folders, relative to path. Example: [\"src/api/users.ts\"]. Use after a fix to re-check just that file."),
+    rules: z.array(z.string()).optional().describe("Only list findings from these rule ids, for example [\"pii.logged\"]. Use with files to confirm one fix."),
+    status: z.enum(["gap", "partial", "all"]).default("all").describe("\"gap\" for findings the code itself shows, \"partial\" for ones that need a person to confirm context, or \"all\"."),
+    limit: z.number().int().min(1).max(500).default(25).describe("Most findings to list. The counts always cover everything."),
+    all: z.boolean().default(false).describe("Also include medium-confidence findings, which are held back by default because they are often not real."),
+    format: z.enum(["summary", "full"]).default("summary").describe("\"summary\" keeps the reply small; \"full\" returns the Markdown report and the JSON."),
   }, RO,
-  async ({ path, frameworks }) => {
+  async ({ path, frameworks, files, rules: only, status, limit, all, format }) => {
     const root = resolve(path);
     const cfg = (await readConfig(root)).frameworks;
     const why = frameworks ? "Chosen by the user through their coding agent." : cfg ? "Listed in lintsure.config.yaml." : undefined;
-    const report = await scan(root, frameworks ?? cfg ?? ALL_FRAMEWORKS, { why, source: "mcp" });
+    const report = await scan(root, frameworks ?? cfg ?? ALL_FRAMEWORKS, { why, source: "mcp", all });
     const steps = nextSteps(report).map((s, i) => `${i + 1}. ${s}`).join("\n");
-    return reply(toMarkdown(report), JSON.stringify(report),
+    if (format === "full") return reply(toMarkdown(report), JSON.stringify(report),
       `${APPROVAL_RULES}\n\nEach finding above already has its proposal (where, what, why, benefit). Ask the user which one to work on first.\n\nNext steps for the user:\n${steps}`);
+    const norm = (p: string) => p.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, "");
+    const scope = files?.map(norm);
+    const picked = report.findings.filter((f) => (!scope || scope.some((p) => f.file === p || f.file.startsWith(p + "/")))
+      && (!only || only.includes(f.ruleId)) && (status === "all" || f.status === status) && !(f.accepted && !f.accepted.expired));
+    const rank = (f: (typeof picked)[number]) => (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity];
+    const shown = [...picked].sort((a, b) => rank(a) - rank(b)).slice(0, limit);
+    const gaps = picked.filter((f) => f.status === "gap").length;
+    return reply([
+      `Lintsure ${report.rulesVersion}: ${picked.length} open finding${picked.length === 1 ? "" : "s"} (${gaps} gap, ${picked.length - gaps} partial)${scope || only ? " in the files and rules asked for" : ""}, ${report.filesChecked} files read.`,
+      ...(picked.length > shown.length ? [`Showing the first ${shown.length}; raise limit or narrow with files to see more.`] : []),
+      "",
+      ...shown.map((f) => `- ${f.id} ${f.status === "gap" ? "Gap" : "Partial"} · ${f.severity} · ${f.file}:${f.line} · ${f.ruleId}: ${f.title}. Fix: ${f.fix}`),
+      ...(picked.length ? [] : [scope || only ? "No open findings for these files and rules. If you just fixed one, it is no longer reported." : "No open findings from the rules that ran."]),
+      "", "Not covered:", ...(report.notCovered ?? []).map((s) => `- ${s}`),
+      "", `${APPROVAL_RULES}\n\nAsk the user which finding to work on first. Call explain_rule for detail on a rule, or format "full" for the complete report.`,
+    ].join("\n"));
   });
 
 server.tool("explain_rule",

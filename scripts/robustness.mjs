@@ -22,7 +22,7 @@ for (const [id, c] of Object.entries(cases)) {
     const root = join(dir, `${id.replace(/\W/g, "_")}-${kind}-${n + newAlarms}`); rmSync(root, { recursive: true, force: true });
     const { mkdirSync } = await import("node:fs"); mkdirSync(root, { recursive: true });
     writeFileSync(join(root, "app" + ext), w + "\n");
-    const r = await core.scan(root, core.ALL_FRAMEWORKS);
+    const r = await core.scan(root, core.ALL_FRAMEWORKS, { all: true });
     const hit = r.findings.some((f) => f.ruleId === id);
     if (kind === "flag") { n++; if (hit) found++; else lost[id] = (lost[id] ?? 0) + 1; }
     else if (hit) { newAlarms++; console.log(`  false alarm after wrapping [${id}]: ${line.slice(0, 90)}`); }

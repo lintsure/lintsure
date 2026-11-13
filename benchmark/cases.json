@@ -82,12 +82,15 @@
     "flag": [
       "fetch(`/api/reset?email=${user.email}`);",
       "const url = 'https://api.example.com/v1?api_key=' + key;",
-      "redirect(`/login?token=${t}`)"
+      "fetch(`/api/sms?phone=${user.phone}`)"
     ],
     "pass": [
       "fetch('/api/reset', { method: 'POST', body: JSON.stringify({ email }) });",
       "const url = `/users?page=${page}`;",
-      "const label = 'Enter your email';"
+      "const label = 'Enter your email';",
+      "redirect(`/login?token=${t}`)",
+      "const docs = 'postgres://user:[YOUR-PASSWORD]@db?password=[YOUR-PASSWORD]';",
+      "fetch(`http://localhost:3000/dev?email=test`)"
     ]
   },
   "crypto.weak-password-hash": {
@@ -154,15 +157,20 @@
   },
   "cors.any-origin": {
     "flag": [
-      "app.use(cors({ origin: \"*\" }));",
-      "'Access-Control-Allow-Origin': '*',",
-      "CORS_ALLOW_ALL_ORIGINS = True",
-      "app.add_middleware(CORSMiddleware, allow_origins=[\"*\"])"
+      "app.use(cors({ origin: \"*\", credentials: true }));",
+      "app.use(cors({\n  origin: true,\n  credentials: true,\n}));",
+      "res.setHeader('Access-Control-Allow-Origin', req.headers.origin);\nres.setHeader('Access-Control-Allow-Credentials', 'true');",
+      "CORS_ALLOW_ALL_ORIGINS = True\nCORS_ALLOW_CREDENTIALS = True",
+      "app.add_middleware(CORSMiddleware, allow_origins=[\"*\"], allow_credentials=True)"
     ],
     "pass": [
       "app.use(cors({ origin: \"https://app.example.com\" }));",
       "'Access-Control-Allow-Origin': origin,",
-      "allow_origins=[\"https://app.example.com\"]"
+      "allow_origins=[\"https://app.example.com\"]",
+      "app.use(cors({ origin: \"*\" }));",
+      "'Access-Control-Allow-Origin': '*',",
+      "app.use(cors({ origin: \"*\", credentials: false }));",
+      "CORS_ALLOW_ALL_ORIGINS = True"
     ]
   },
   "session.cookie-insecure": {

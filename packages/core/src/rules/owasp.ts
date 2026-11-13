@@ -161,7 +161,7 @@ export const owaspRules: Rule[] = [
     note: "If the HTML contains user input, attackers can run scripts in your users' browsers (cross-site scripting, CWE-79). Partial because fixed HTML from your own code is safe.", extensions: MARKUP,
     // Clearing an element, DOMPurify-cleaned HTML and JSON-LD made with JSON.stringify are safe (field test).
     test: (l) => /\.(innerHTML|outerHTML)\s*[+]?=|\bdocument\.write(ln)?\(|\bdangerouslySetInnerHTML\b|\bv-html=|\{@html\b|\|\s*safe\b|\bmark_safe\(|\bMarkup\(/.test(l)
-      && !/innerHTML\s*=\s*(""|''|``)\s*;?\s*$|DOMPurify\.sanitize|\bsanitize(Html)?\(|\b(esc|escape|escapeHtml|htmlEscape|xss)\(|__html:\s*JSON\.stringify\(/.test(l)
+      && !/innerHTML\s*=\s*(""|''|``)\s*;?\s*$|DOMPurify\.sanitize|\bsanitize\w*\(|\b(esc|escape|html_?escape)\w*\(|\bxss\(|__html:\s*JSON\.stringify\(/.test(l)
       // Fixed markup written in the code, with nothing inserted, can't carry someone else's input.
       && !/innerHTML\s*=\s*("[^"$]*"|'[^'$]*'|`[^`$]*`)\s*;?\s*$/.test(l) }),
   rule({ id: "template.user-string", title: "Template built from request data", status: "gap", severity: "high", controls: [A05],

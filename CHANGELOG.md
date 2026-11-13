@@ -2,6 +2,50 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.4.0 · 2026-11-13 · Fewer, truer findings
+
+Most findings on real projects were not real problems: in a hand-checked sample of 270 findings from 139 public repositories, 28 were. A tool that cries wolf gets switched off, and then the real findings are ignored too. This release measures every loud rule and shows only what is usually right.
+
+### Confidence levels
+- Every rule is now high or medium confidence, set from hand-checked findings on the 139 repositories. A normal run lists high-confidence findings and counts the rest: "47 more at medium confidence: run with --all". Use `--all`, `show: all` in the config, `all: true` in MCP or `show-all: true` in the Action to see them.
+- 25 rules are medium confidence for now, including raw HTML, empty catch blocks, SQL and shell commands built from strings, `eval`, AI logging and output limits, and JWT checks. Most were real in one finding of five or fewer. Samples for some rules are small (5 or 6 findings), so each rule is measured again every release and moves back when a fresh sample shows it is usually right.
+- Secrets found in test and fixture files are held back the same way: none of 15 sampled was real.
+- **Result on the 139 repositories:** a default run lists 1,366 findings instead of 5,947. Of the hand-checked findings it still lists, 58% are real, up from 16%. Every finding hand-checked as real in 0.3.8 is still found, with `--all` where it is medium confidence.
+
+### Rules that changed
+- **`cors.any-origin`** reports only the dangerous pairing: an open or reflected origin together with credentials. An open origin alone is normal for a public API (none of 19 sampled was a problem), as in CodeQL's CORS check.
+- **`session.cookie-insecure`** needs a cookie being set nearby. A bare `secure: false` is usually a client, proxy or database option. CSRF cookies are meant to be readable.
+- **`pii.in-url`** no longer reports tokens, which OAuth and vendor APIs put in URLs by design, or placeholders such as `[YOUR-PASSWORD]`.
+- **`sql.string-built`** skips migrations folders: schema text the team writes and runs once.
+- **`xss.raw-html`** treats any `sanitize...()` or `esc...()` / `escape...()` helper as escaping.
+- **`secret.in-source`** skips translation files, which say "API key" in every language.
+- **Code that doesn't ship:** top-level `scripts/` folders, `test-*.js` scripts, `test-utils` folders and agent tooling (`.agents/`, `.claude/`, `.cursor/`) are checked for secrets only, like tests. They were the largest single source of false alarms (44 of 242). Shell scripts in `scripts/` still count, since they are often the installer people run.
+
+### New: check only what changed
+- `lintsure scan --diff origin/main` lists only findings on lines changed since that base. The GitHub Action does this on pull requests by default (`changed-only: auto`).
+
+### New: setup and settings that explain themselves
+- `lintsure init` asks three questions (what to check, does the app use AI, EU users) and writes `lintsure.config.yaml`. It never overwrites a file and never runs in CI.
+- `lintsure info` shows the settings a scan would use and where each came from.
+- The config file takes `rules:` to switch a rule off or change its risk level, `show: all`, and inline lists such as `frameworks: [gdpr, owasp-top10]`. Unknown settings, unknown rule ids and unreadable lines now stop the CLI with exit code 2. Before, `frameworks: [gdpr]` was silently ignored and all six frameworks ran.
+- Rules switched off are listed in the report and the record.
+
+### New: a "Not covered" section in every report
+- It lists what this run did not look at: medium-confidence findings held back, rules switched off, ignored paths, files checked for secrets only, lines outside the diff, and the fixed limits (one file at a time, no runtime behaviour, secret and config checks only beyond JavaScript, TypeScript and Python). No finding in a place does not mean no problem there.
+
+### MCP: a reply an agent can use
+- `scan` now returns a short list by default: Gaps first, each with file and line, rule, risk level and a one-line fix, then counts and Not covered. 200 findings used to produce about 129,000 tokens; the default reply now lists 25.
+- New inputs: `files`, `rules`, `status`, `limit`, `all` and `format` (`full` gives the complete report and JSON). After a fix, call `scan` with the file and rule to confirm it is gone.
+
+### New: a triage skill for coding agents
+- `skills/lintsure-triage/SKILL.md` teaches Claude, Codex or Cursor to sort each finding into confirmed, not a problem or needs a person, by following where the value comes from, what checks it, and where it ends up. It reads code only and changes nothing without the user's yes. Its approach follows the triage method in OpenAI's Codex Security (Apache-2.0).
+
+### SARIF
+- Results now carry a level by risk (high, medium, low) and rules carry `security-severity` and `precision`, so GitHub code scanning can rank them.
+
+### Scan time
+- 313 seconds for the 139 repositories (305 in 0.3.8).
+
 ## 0.3.8 · 2026-11-10 · Code the way formatters write it
 
 Formatters such as Prettier and Black split one call over several lines, and a check that reads one line at a time never saw `logger.info("signup", {` and `email: user.email,` together. Selected checks now read the whole statement.

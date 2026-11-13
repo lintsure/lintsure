@@ -3,7 +3,10 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { classify, knowledge, outsideFor, readConfig, rules, scan } from "../src/index.js";
+import { classify, knowledge, outsideFor, readConfig, rules, scan as coreScan, type ScanOptions } from "../src/index.js";
+
+// Rule tests look at every finding, including the medium-confidence ones a normal run holds back.
+const scan = (dir: string, fw?: Parameters<typeof coreScan>[1], opts: ScanOptions = {}) => coreScan(dir, fw, { all: true, ...opts });
 
 const root = fileURLToPath(new URL("../../../../fixtures/sample-app", import.meta.url));
 
@@ -94,7 +97,7 @@ test("reads lintsure.config.yaml and skips frameworks not checked yet", async ()
   assert.deepEqual(c.frameworks, ["gdpr", "cra"]);
   assert.deepEqual(c.skipped, ["pci-dss"]);
   assert.deepEqual(c.ignore, ["vendor"]);
-  assert.deepEqual(await readConfig(root), { frameworks: null, skipped: [], ignore: [] });
+  assert.deepEqual(await readConfig(root), { frameworks: null, skipped: [], ignore: [], rules: {}, problems: [] });
 });
 
 import { DISCLAIMER, FORBIDDEN_CLAIMS, NOT_A_VERDICT, toMarkdown } from "../src/index.js";
@@ -271,7 +274,7 @@ test("baseline marks new, unchanged and fixed; accepted findings are set aside a
   const { tmpdir } = await import("node:os");
   const dir = await mkdtemp(join(tmpdir(), "ls-bl-"));
   await mkdir(join(dir, "src")); await mkdir(join(dir, ".lintsure"));
-  await writeFile(join(dir, "src/a.ts"), "console.log(user.email);\napp.use(cors({ origin: \"*\" }));\n");
+  await writeFile(join(dir, "src/a.ts"), "console.log(user.email);\napp.use(cors({ origin: \"*\", credentials: true }));\n");
   const first = await scan(dir);
   await writeFile(join(dir, BASELINE_FILE), JSON.stringify(toBaseline(first, "2026-01-01")));
   const baseText = JSON.stringify(toBaseline(first, "2026-01-01"));
@@ -279,7 +282,7 @@ test("baseline marks new, unchanged and fixed; accepted findings are set aside a
 
   const cors = first.findings.find((f) => f.ruleId === "cors.any-origin")!;
   await writeFile(join(dir, ACCEPTED_FILE), `- rule: cors.any-origin\n  where: src/a.ts\n  fingerprint: ${cors.fingerprint}\n  reason: Public read-only API\n  accepted_by: J. Smith\n  date: 2026-01-01\n  review_by: 2099-01-01\n`);
-  await writeFile(join(dir, "src/a.ts"), "// moved\napp.use(cors({ origin: \"*\" }));\nconst h = md5(user.password);\n");
+  await writeFile(join(dir, "src/a.ts"), "// moved\napp.use(cors({ origin: \"*\", credentials: true }));\nconst h = md5(user.password);\n");
   const second = await scan(dir);
   assert.equal(second.baseline?.fixed.length, 1, "the email log was fixed");
   assert.equal(second.findings.find((f) => f.ruleId === "cors.any-origin")?.change, "unchanged", "moving a line keeps it the same finding");
@@ -501,7 +504,7 @@ test("review P25: the CLI rejects unknown flags and bad --fail-on values instead
   const { spawnSync } = await import("node:child_process");
   const { fileURLToPath } = await import("node:url");
   const cli = fileURLToPath(new URL("../../../cli/dist/src/index.js", import.meta.url));
-  const dir = await tinyRepo({ "a.ts": "eval(req.body.code);\n" });
+  const dir = await tinyRepo({ "a.ts": "const h = md5(user.password);\n" }); // a high-confidence Gap, shown by default
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, "scan", dir, ...args], { cwd: dir, encoding: "utf8" }).status;
   assert.equal(run("--fail-on", "gap"), 1);
   assert.equal(run("--fail-on=gap"), 1);
@@ -527,4 +530,42 @@ test("no catastrophic backtracking on lines full of backslashes and quotes", asy
   const t = Date.now();
   await scan(await tinyRepo({ "p.ts": nasty }));
   assert.ok(Date.now() - t < 5000, `scan took ${Date.now() - t} ms`);
+});
+
+test("0.4.0: medium-confidence findings are held back by default and counted, --all shows them", async () => {
+  const dir = await tinyRepo({ "src/a.ts": "el.innerHTML = data.html;\nconst h = md5(user.password);\n", "scripts/dev.mjs": "const h = md5(user.password);\n" });
+  const quiet = await coreScan(dir), loud = await coreScan(dir, undefined, { all: true });
+  assert.deepEqual(quiet.findings.filter((f) => !f.ruleId.startsWith("repo.")).map((f) => `${f.ruleId}@${f.file}`), ["crypto.weak-password-hash@src/a.ts"], "xss is medium confidence; scripts/ doesn't ship");
+  assert.equal(quiet.held, 1);
+  assert.ok(quiet.notCovered?.some((s) => s.includes("--all")));
+  assert.ok(loud.findings.some((f) => f.ruleId === "xss.raw-html") && !loud.held);
+});
+
+test("0.4.0: config reads inline lists and per-rule settings, and reports what it can't read", async () => {
+  const dir = await tinyRepo({
+    "lintsure.config.yaml": "frameworks: [gdpr, owasp-top10]\nrules:\n  crypto.weak-password-hash: off\n  pii.logged: low\n",
+    "a.ts": "const h = md5(user.password);\nconsole.log(user.email);\n",
+  });
+  const c = await readConfig(dir);
+  assert.deepEqual(c.frameworks, ["gdpr", "owasp-top10"]);
+  assert.deepEqual(c.problems, []);
+  const r = await coreScan(dir, c.frameworks!);
+  assert.deepEqual(r.findings.map((f) => `${f.ruleId}:${f.severity}`), ["pii.logged:low"]);
+  assert.deepEqual(r.rulesOff, ["crypto.weak-password-hash"]);
+  const bad = await readConfig(await tinyRepo({ "lintsure.config.yaml": "framework: [gdpr]\nrules:\n  no.such-rule: off\n  pii.logged: maybe\n" }));
+  assert.equal(bad.problems.length, 3, bad.problems.join("; "));
+});
+
+test("0.4.0: --diff lists only findings on changed lines; a bad config stops the CLI", async () => {
+  const { spawnSync, execFileSync } = await import("node:child_process");
+  const { writeFile } = await import("node:fs/promises");
+  const cli = fileURLToPath(new URL("../../../cli/dist/src/index.js", import.meta.url));
+  const dir = await tinyRepo({ "a.ts": "const h = md5(user.password);\n" });
+  const git = (...a: string[]) => execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...a], { cwd: dir });
+  git("init", "-q"); git("add", "."); git("commit", "-qm", "base");
+  await writeFile(join(dir, "a.ts"), "const h = md5(user.password);\nconst k = sha1(req.body.password);\n");
+  const out = spawnSync(process.execPath, [cli, "scan", dir, "--diff", "HEAD"], { cwd: dir, encoding: "utf8" }).stdout;
+  assert.match(out, /a\.ts:2/); assert.doesNotMatch(out, /a\.ts:1 /);
+  await writeFile(join(dir, "lintsure.config.yaml"), "framworks: [gdpr]\n");
+  assert.equal(spawnSync(process.execPath, [cli, "scan", dir], { cwd: dir, encoding: "utf8" }).status, 2);
 });

@@ -46,6 +46,9 @@ export interface Rule {
   /** Repository check: returns the path of a file the repo should have but doesn't (e.g. "SECURITY.md"),
    *  or null. Gets every file path relative to the scanned folder, "/"-separated. Must be pure. */
   repoTest?(files: string[]): string | null;
+  /** How often this rule's findings were real in hand-checked samples. Medium-confidence findings are only shown
+   *  with --all (show: all), and the report says how many were held back. Default: high. */
+  confidence?: "high" | "medium";
   mappedBy: string;
   reviewedAt: string;
 }
@@ -108,6 +111,14 @@ export interface Report {
   filesChecked: number;
   /** Present when the repo has a .lintsure/baseline.json. */
   baseline?: BaselineDiff;
+  /** Medium-confidence findings not shown because --all (show: all) was off. */
+  held?: number;
+  /** Rules switched off in lintsure.config.yaml. They did not run. */
+  rulesOff?: string[];
+  /** Set for --diff scans: the base the changes were compared with. Only findings on changed lines are listed. */
+  diffBase?: string;
+  /** What this run did not look at, in plain words, so nobody reads silence as a pass. */
+  notCovered?: string[];
   /** The dated record of this run: scope, what applies and why, check points, results by control, counts. */
   record?: import("./record.js").CheckRecord;
 }
