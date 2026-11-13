@@ -1,6 +1,6 @@
 {
   "name": "@lintsure/core",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Lintsure engine: rules, framework knowledge and reports for readiness checks of AI-written code. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",

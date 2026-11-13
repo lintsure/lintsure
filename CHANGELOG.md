@@ -2,6 +2,21 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.10 · 2026-11-13 · Tested on new projects
+
+We ran 0.3.9 on 56 public projects it had never seen, created since June and built with Lovable, Bolt, Supabase, Claude Code and Cursor, and reviewed 110 more findings one by one against the code. A normal run was right 44% of the time on the new projects and 48% on a fresh sample from the original 139. Four checks caused most of the false alarms. This release fixes them.
+
+### Fewer false alarms
+- **Personal data in logs:** a value passed through a masking or hashing helper first, such as `maskEmail()`, `pseudonym()` or `hash()`, is no longer counted. Every false alarm from this check on the new projects was masked this way.
+- **Downloaded scripts run without a check:** a script served from `localhost` or `127.0.0.1` (a CI test of a project's own installer) and an installer pinned to a version in its URL are no longer reported. YAML files outside CI and compose files are read as text, not scripts.
+- **Secrets in code:** obvious placeholders (`xoxb-your-bot-token`, `...fake...`, a key header followed by `...` or by prose), TypeScript `.d.ts` files and secret-scanner config files such as `.gitleaks.toml` are skipped. None of the 7 sampled secret findings was real.
+- **Unsafe deserialization** is now medium confidence and held back by default: none of 7 sampled was real (the data was the app's own database, cache or worker pipe).
+- `.devcontainer/` is treated as dev tooling, like `scripts/`.
+
+### Result
+- On the reviewed findings a normal run shows: 52% real before, 61% now (59% on the 139, 67% on the 56 new projects), with no finding reviewed as real lost. These are measured on the same findings the fixes were chosen from, so they lean optimistic; the next fresh sample will check them.
+- A normal run on the 139 lists 1,328 findings (1,366 in 0.3.9). On the 56 new projects it lists 222 (246).
+
 ## 0.3.9 · 2026-11-13 · Fewer, truer findings
 
 Most findings on real projects were not real problems: in a sample of 270 findings reviewed one by one against the code from 139 public repositories, 28 were. A tool that cries wolf gets switched off, and then the real findings are ignored too. This release measures every loud rule and shows only what is usually right.
