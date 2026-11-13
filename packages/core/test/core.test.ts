@@ -569,3 +569,9 @@ test("0.4.0: --diff lists only findings on changed lines; a bad config stops the
   await writeFile(join(dir, "lintsure.config.yaml"), "framworks: [gdpr]\n");
   assert.equal(spawnSync(process.execPath, [cli, "scan", dir], { cwd: dir, encoding: "utf8" }).status, 2);
 });
+
+test("the triage skill file and the MCP triage prompt carry the same text", async () => {
+  const { TRIAGE_GUIDE } = await import("../src/index.js");
+  const md = (await readFile(fileURLToPath(new URL("../../../../skills/lintsure-triage/SKILL.md", import.meta.url)), "utf8")).replace(/\r\n/g, "\n");
+  assert.equal(md.replace(/^---\n[\s\S]*?\n---\n\n/, "").trimEnd(), TRIAGE_GUIDE);
+});

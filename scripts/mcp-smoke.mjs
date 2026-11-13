@@ -1,7 +1,7 @@
 // Starts the MCP server and checks every tool reply ends with the disclaimer
 // and that the server sends its agent guidance. Run: node scripts/mcp-smoke.mjs
 import { spawn } from "node:child_process";
-import { DISCLAIMER, AGENT_GUIDANCE, APPROVAL_RULES, FORBIDDEN_CLAIMS, NOT_A_VERDICT } from "../packages/core/dist/src/index.js";
+import { DISCLAIMER, AGENT_GUIDANCE, APPROVAL_RULES, FORBIDDEN_CLAIMS, NOT_A_VERDICT, TRIAGE_GUIDE } from "../packages/core/dist/src/index.js";
 
 const p = spawn(process.execPath, ["packages/mcp/dist/src/index.js"], { stdio: ["pipe", "pipe", "inherit"] });
 let buf = ""; const waiters = new Map();
@@ -37,4 +37,9 @@ for (const [name, args] of calls) {
   if (name === "classify" && args.digitalProductEU && !texts.join(" ").includes("Cyber Resilience Act")) fail("classify should suggest the Cyber Resilience Act");
   console.log("ok", name);
 }
+const prompts = (await call("prompts/list", {})).result?.prompts ?? [];
+if (!prompts.some((x) => x.name === "triage")) fail("triage prompt missing");
+const tri = (await call("prompts/get", { name: "triage", arguments: { files: "src" } })).result?.messages?.[0]?.content?.text ?? "";
+if (!tri.includes(TRIAGE_GUIDE) || !tri.includes('["src"]')) fail("triage prompt text wrong");
+console.log("ok triage prompt");
 p.kill(); console.log("MCP smoke test passed");

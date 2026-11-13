@@ -38,7 +38,8 @@ Most findings on real projects were not real problems: in a hand-checked sample 
 - New inputs: `files`, `rules`, `status`, `limit`, `all` and `format` (`full` gives the complete report and JSON). After a fix, call `scan` with the file and rule to confirm it is gone.
 
 ### New: a triage skill for coding agents
-- `skills/lintsure-triage/SKILL.md` teaches Claude, Codex or Cursor to sort each finding into confirmed, not a problem or needs a person, by following where the value comes from, what checks it, and where it ends up. It reads code only and changes nothing without the user's yes. Its approach follows the triage method in OpenAI's Codex Security (Apache-2.0).
+- The MCP server now offers a `triage` prompt (in Claude Code: `/mcp__lintsure__triage`), so every MCP client gets it with nothing to install, and the server's instructions point agents to it. The same text is in `skills/lintsure-triage/SKILL.md`, and a test keeps the two equal.
+- It teaches Claude, Codex or Cursor to sort each finding into confirmed, not a problem or needs a person, by following where the value comes from, what checks it, and where it ends up. It reads code only and changes nothing without the user's yes. Its approach follows the triage method in OpenAI's Codex Security (Apache-2.0).
 
 ### SARIF
 - Results now carry a level by risk (high, medium, low) and rules carry `security-severity` and `precision`, so GitHub code scanning can rank them.

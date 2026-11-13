@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { AGENT_GUIDANCE, APPROVAL_RULES, ALL_FRAMEWORKS, DISCLAIMER, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
+import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIMER, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
 const server = new McpServer({ name: "lintsure", version: "0.4.0" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
@@ -129,5 +129,15 @@ server.tool("explain_framework",
       "", `Summary in our own words, checked on ${k.checkedOn}. Read the official text for anything you rely on.`,
     ].join("\n"));
   });
+
+// The triage method as an MCP prompt, so every client gets it without installing anything
+// (in Claude Code it shows as /mcp__lintsure__triage). Same text as skills/lintsure-triage/SKILL.md.
+server.registerPrompt("triage", {
+  title: "Triage Lintsure findings",
+  description: "Sort each Lintsure finding into confirmed, not a problem, or needs a person, by reading the code around it. Read-only.",
+  argsSchema: { path: z.string().optional().describe("Folder to scan and triage. Default: the current project."),
+    files: z.string().optional().describe("Optional: comma-separated files or folders to focus on, for example \"src/api\".") },
+}, ({ path, files }) => ({ messages: [{ role: "user" as const, content: { type: "text" as const, text:
+  `${TRIAGE_GUIDE}\n\nStart now: run the Lintsure scan tool on ${path ? `"${path}"` : "this project"}${files ? ` with files ${JSON.stringify(files.split(",").map((s) => s.trim()).filter(Boolean))}` : ""}, then triage the findings as described above.` } }] }));
 
 await server.connect(new StdioServerTransport());
