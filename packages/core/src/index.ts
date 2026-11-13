@@ -22,7 +22,7 @@ export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
 import { loadPacks } from "./packs.js";
-export const RULES_VERSION = "0.4.0";
+export const RULES_VERSION = "0.3.9";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -158,7 +158,7 @@ export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtu
 const LIVE_ROOT = /(^|\/)(app|pages|api|routes|supabase\/functions|src|lib|server)\//;
 const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?|scripts?|\.agents|\.claude|\.cursor)\//i;
 // Dev scripts at the top of a repo (scripts/test-*.mjs, build and seed helpers) and agent tooling (.agents/, .claude/)
-// don't ship: they were the largest single source of false alarms in the 0.4.0 labelled sample (44 of 242).
+// don't ship: they were the largest single source of false alarms in the 0.3.9 labelled sample (44 of 242).
 const TEST_FILE = /(^|\/)__tests__\/|(^|\/)test[-_]?(utils?|helpers?|rig)\/|(^|\/)test-[^/]+\.[cm]?[jt]s$|[._-]tests?\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$/i;
 /** True for code that doesn't ship: tests, fixtures, examples, docs, stories and seed data. A folder name only counts
  *  when it comes before any app or route root in the path: examples/site/app/page.tsx is an example, while

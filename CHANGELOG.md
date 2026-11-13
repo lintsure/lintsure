@@ -2,7 +2,7 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
-## 0.4.0 · 2026-11-13 · Fewer, truer findings
+## 0.3.9 · 2026-11-13 · Fewer, truer findings
 
 Most findings on real projects were not real problems: in a hand-checked sample of 270 findings from 139 public repositories, 28 were. A tool that cries wolf gets switched off, and then the real findings are ignored too. This release measures every loud rule and shows only what is usually right.
 

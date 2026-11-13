@@ -99,7 +99,7 @@ export const rules: Rule[] = [
     test: (l) => { if (/\bplaceholder\s*[=:]/i.test(l)) return false; // a form's example text (placeholder="sk_live_...")
       const m = l.match(KEY_FORMATS) ?? l.match(MORE_KEYS);
       return (!!m && !DOC_EXAMPLE.test(m[0]) && !/PRIVATE KEY( BLOCK)?-----(["'`]|\.\.\.)/.test(l)) || serviceRoleJwt(l) || dbUrlWithPassword(l); },
-    // Translation files mention "API key" and "secret" in every language, never a real key (0.4.0 labels).
+    // Translation files mention "API key" and "secret" in every language, never a real key (0.3.9 labels).
     unlessPath: /(^|\/)(locales?|i18n|translations?|lang)\//i,
     ...DRAFT,
   },
@@ -140,7 +140,7 @@ export const rules: Rule[] = [
     fix: "Send it in the request body or a header instead of the query string.",
     note: "URLs end up in server logs, browser history and referrer headers. Marked Partial: confirm the value is real personal data.",
     extensions: CODE,
-    // OAuth and vendor APIs require tokens in some URLs; a sampled token param was never a real problem (0.4.0 labels).
+    // OAuth and vendor APIs require tokens in some URLs; a sampled token param was never a real problem (0.3.9 labels).
     // Placeholders ([YOUR-PASSWORD], {email}) and localhost examples are documentation.
     test: (l) => /["'`][^"'`]*[?&](e-?mail|phone|ssn|api_?key|password)=(?![[{<]|\$\{?[A-Z_]+\}?["'`&])/i.test(l) && !/localhost|127\.0\.0\.1/.test(l),
     ...DRAFT,
@@ -199,7 +199,7 @@ export const rules: Rule[] = [
     },
     // Tagged templates from Postgres.js, Drizzle, Prisma and similar send ${} values as parameters, not as SQL text (field test).
     unlessNear: /(?<![.\w])(sql|safeSql|tx|Prisma\.sql)(<[^>`]*>)?\s*`|\$queryRaw\s*`/,
-    // Migrations are schema text the team writes and runs once; 6 of 24 sampled false alarms were migrations (0.4.0).
+    // Migrations are schema text the team writes and runs once; 6 of 24 sampled false alarms were migrations (0.3.9).
     unlessPath: /(^|\/)(migrations?|alembic\/versions)\//,
     ...DRAFT,
   },
@@ -213,7 +213,7 @@ export const rules: Rule[] = [
     note: "Any website can then make logged-in requests on your users' behalf and read the answers. An open origin without credentials is fine for a public API and is not reported (as in CodeQL's CORS check). Marked Partial: confirm the endpoint returns private data.",
     extensions: CODE,
     // Only the dangerous pairing: an open or reflected origin plus credentials in the same config (0 of 19 sampled
-    // open-origin findings without credentials were real, 0.4.0 labels).
+    // open-origin findings without credentials were real, 0.3.9 labels).
     fileTest: (lines) => lines.flatMap((l, i) => {
       if (!/Access-Control-Allow-Origin["']?\s*[,:]\s*(["']\*["']|[\w.]*(req|request)\.headers?(\.get\(|\[|\.)\s*["']?origin)|origin\s*:\s*(["']\*["']|true\b|[\w.]*(req|request)\.headers?\.origin)|CORS_ALLOW_ALL_ORIGINS\s*=\s*True|CORS_ORIGIN_ALLOW_ALL\s*=\s*True|allow_origins\s*=\s*\[\s*["']\*["']|allow_origin_regex\s*=\s*["']\.\*/.test(l)) return [];
       const near = lines.slice(Math.max(0, i - 12), i + 13).join("\n");
@@ -232,7 +232,7 @@ export const rules: Rule[] = [
     note: "Without these flags a session cookie can be read by scripts or sent over plain HTTP. Marked Partial: confirm it is a session cookie.",
     extensions: CODE,
     // A bare `secure: false` is usually a client, proxy or database option: it counts only near a cookie being set
-    // (0.4.0 labels: 9 of 14 false alarms had no cookie in sight). CSRF cookies are meant to be readable by scripts.
+    // (0.3.9 labels: 9 of 14 false alarms had no cookie in sight). CSRF cookies are meant to be readable by scripts.
     fileTest: (lines) => lines.flatMap((l, i) => {
       if (!/\b(httpOnly|secure)\s*:\s*false\b|SESSION_COOKIE_(SECURE|HTTPONLY)\s*=\s*False/.test(l)) return [];
       const near = lines.slice(Math.max(0, i - 6), i + 4).join("\n");
@@ -374,7 +374,7 @@ rules.push(...standardsRules);
 // After the push, so the new LLM rules also get their CWE tags.
 for (const r of rules) r.controls.push(...(standardsForExisting[r.id] ?? []));
 
-// Measured on 270 hand-labelled findings from 139 public repositories (0.4.0). These rules were real in fewer than
+// Measured on 270 hand-labelled findings from 139 public repositories (0.3.9). These rules were real in fewer than
 // half of their sampled findings, so they are held back unless --all (show: all) is set, and the report says how many.
 // A rule moves back to high confidence when a fresh labelled sample shows it is real in most findings.
 const MEDIUM_CONFIDENCE = new Set(["xss.raw-html", "error.empty-catch", "sql.string-built", "code.eval", "cmd.shell-built",
@@ -383,6 +383,6 @@ const MEDIUM_CONFIDENCE = new Set(["xss.raw-html", "error.empty-catch", "sql.str
   "jwt.unverified", "jwt.no-expiry", "mass-assignment", "transport.tls-verify-off", "crypto.weak-cipher", "crypto.weak-random-token",
   "ci.script-injection", "log.injection", "log.secret", "auth.hardcoded-password", "mobile.cleartext-traffic", "config.debug-on",
   "mobile.token-in-plain-storage",
-  // Reworked in 0.4.0 to need credentials; not yet measured on a fresh sample.
+  // Reworked in 0.3.9 to need credentials; not yet measured on a fresh sample.
   "cors.any-origin"]);
 for (const r of rules) if (MEDIUM_CONFIDENCE.has(r.id)) r.confidence = "medium";

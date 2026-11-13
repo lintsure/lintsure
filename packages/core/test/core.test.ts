@@ -532,7 +532,7 @@ test("no catastrophic backtracking on lines full of backslashes and quotes", asy
   assert.ok(Date.now() - t < 5000, `scan took ${Date.now() - t} ms`);
 });
 
-test("0.4.0: medium-confidence findings are held back by default and counted, --all shows them", async () => {
+test("0.3.9: medium-confidence findings are held back by default and counted, --all shows them", async () => {
   const dir = await tinyRepo({ "src/a.ts": "el.innerHTML = data.html;\nconst h = md5(user.password);\n", "scripts/dev.mjs": "const h = md5(user.password);\n" });
   const quiet = await coreScan(dir), loud = await coreScan(dir, undefined, { all: true });
   assert.deepEqual(quiet.findings.filter((f) => !f.ruleId.startsWith("repo.")).map((f) => `${f.ruleId}@${f.file}`), ["crypto.weak-password-hash@src/a.ts"], "xss is medium confidence; scripts/ doesn't ship");
@@ -541,7 +541,7 @@ test("0.4.0: medium-confidence findings are held back by default and counted, --
   assert.ok(loud.findings.some((f) => f.ruleId === "xss.raw-html") && !loud.held);
 });
 
-test("0.4.0: config reads inline lists and per-rule settings, and reports what it can't read", async () => {
+test("0.3.9: config reads inline lists and per-rule settings, and reports what it can't read", async () => {
   const dir = await tinyRepo({
     "lintsure.config.yaml": "frameworks: [gdpr, owasp-top10]\nrules:\n  crypto.weak-password-hash: off\n  pii.logged: low\n",
     "a.ts": "const h = md5(user.password);\nconsole.log(user.email);\n",
@@ -556,7 +556,7 @@ test("0.4.0: config reads inline lists and per-rule settings, and reports what i
   assert.equal(bad.problems.length, 3, bad.problems.join("; "));
 });
 
-test("0.4.0: --diff lists only findings on changed lines; a bad config stops the CLI", async () => {
+test("0.3.9: --diff lists only findings on changed lines; a bad config stops the CLI", async () => {
   const { spawnSync, execFileSync } = await import("node:child_process");
   const { writeFile } = await import("node:fs/promises");
   const cli = fileURLToPath(new URL("../../../cli/dist/src/index.js", import.meta.url));
