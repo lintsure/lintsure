@@ -4,13 +4,13 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 
 ## 0.3.9 · 2026-11-13 · Fewer, truer findings
 
-Most findings on real projects were not real problems: in a hand-checked sample of 270 findings from 139 public repositories, 28 were. A tool that cries wolf gets switched off, and then the real findings are ignored too. This release measures every loud rule and shows only what is usually right.
+Most findings on real projects were not real problems: in a sample of 270 findings reviewed one by one against the code from 139 public repositories, 28 were. A tool that cries wolf gets switched off, and then the real findings are ignored too. This release measures every loud rule and shows only what is usually right.
 
 ### Confidence levels
-- Every rule is now high or medium confidence, set from hand-checked findings on the 139 repositories. A normal run lists high-confidence findings and counts the rest: "47 more at medium confidence: run with --all". Use `--all`, `show: all` in the config, `all: true` in MCP or `show-all: true` in the Action to see them.
+- Every rule is now high or medium confidence, set from findings reviewed one by one on the 139 repositories. A normal run lists high-confidence findings and counts the rest: "47 more at medium confidence: run with --all". Use `--all`, `show: all` in the config, `all: true` in MCP or `show-all: true` in the Action to see them.
 - 25 rules are medium confidence for now, including raw HTML, empty catch blocks, SQL and shell commands built from strings, `eval`, AI logging and output limits, and JWT checks. Most were real in one finding of five or fewer. Samples for some rules are small (5 or 6 findings), so each rule is measured again every release and moves back when a fresh sample shows it is usually right.
 - Secrets found in test and fixture files are held back the same way: none of 15 sampled was real.
-- **Result on the 139 repositories:** a default run lists 1,366 findings instead of 5,947. Of the hand-checked findings it still lists, 58% are real, up from 16%. Every finding hand-checked as real in 0.3.8 is still found, with `--all` where it is medium confidence.
+- **Result on the 139 repositories:** a default run lists 1,366 findings instead of 5,947. Of the reviewed findings it still lists, 58% are real, up from 16%. Every finding reviewed as real in 0.3.8 is still found, with `--all` where it is medium confidence.
 
 ### Rules that changed
 - **`cors.any-origin`** reports only the dangerous pairing: an open or reflected origin together with credentials. An open origin alone is normal for a public API (none of 19 sampled was a problem), as in CodeQL's CORS check.

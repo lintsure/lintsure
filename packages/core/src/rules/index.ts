@@ -374,7 +374,7 @@ rules.push(...standardsRules);
 // After the push, so the new LLM rules also get their CWE tags.
 for (const r of rules) r.controls.push(...(standardsForExisting[r.id] ?? []));
 
-// Measured on 270 hand-labelled findings from 139 public repositories (0.3.9). These rules were real in fewer than
+// Measured on 270 findings reviewed one by one from 139 public repositories (0.3.9). These rules were real in fewer than
 // half of their sampled findings, so they are held back unless --all (show: all) is set, and the report says how many.
 // A rule moves back to high confidence when a fresh labelled sample shows it is real in most findings.
 const MEDIUM_CONFIDENCE = new Set(["xss.raw-html", "error.empty-catch", "sql.string-built", "code.eval", "cmd.shell-built",

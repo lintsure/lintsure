@@ -46,7 +46,7 @@ export interface Rule {
   /** Repository check: returns the path of a file the repo should have but doesn't (e.g. "SECURITY.md"),
    *  or null. Gets every file path relative to the scanned folder, "/"-separated. Must be pure. */
   repoTest?(files: string[]): string | null;
-  /** How often this rule's findings were real in hand-checked samples. Medium-confidence findings are only shown
+  /** How often this rule's findings were real in samples reviewed one by one against the code. Medium-confidence findings are only shown
    *  with --all (show: all), and the report says how many were held back. Default: high. */
   confidence?: "high" | "medium";
   mappedBy: string;
