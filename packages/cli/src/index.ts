@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { doctor, pick, setup, undo } from "./agents.js";
+import { status, pick, setup, undo } from "./agents.js";
 import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
 const HELP = `lintsure scan [path] [options]
@@ -15,7 +15,7 @@ lintsure info [path]     Show the settings a scan would use, and where each come
 lintsure setup [path]    Add the Lintsure MCP server to this project's agent configs
                          (shows the change; --yes writes it; --undo takes it out;
                          --agents claude,cursor,vscode,gemini)
-lintsure doctor [path]   Check that this project is ready: Node, config, rules, agents
+lintsure status [path]   Check that this project is ready: Node, config, rules, agents
 
 scan options:
   --framework <ids>   Comma list: ${ALL_FRAMEWORKS.join(", ")}
@@ -132,9 +132,9 @@ export function parseArgs(argv: string[]): { rest: string[] } | { error: string 
 
 async function main(argv: string[]) {
   const [cmd, ...raw] = argv;
-  if (cmd === "setup" || cmd === "doctor") {
+  if (cmd === "setup" || cmd === "status") {
     const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents") ?? ".");
-    if (cmd === "doctor") return doctor(root);
+    if (cmd === "status") return status(root);
     const i = raw.indexOf("--agents");
     const agents = await pick(root, i >= 0 ? raw[i + 1]?.split(",").map((s) => s.trim()) : undefined);
     if (typeof agents === "string") { console.error(agents); return 2; }

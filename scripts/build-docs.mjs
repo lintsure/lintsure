@@ -30,7 +30,7 @@ writeFileSync(new URL("README.md", dir), head("Lintsure docs for coding agents")
   "- `rules.md`: every rule: what it looks for, the controls it maps to, how to fix it.",
   "- `frameworks.md`: each framework in plain words, its dates and which parts code can show.",
   "- `agents.md`: how to talk about Lintsure results.", "",
-  "Commands: `npx lintsure scan`, `baseline`, `init`, `info`, `setup`, `doctor`. Run `npx lintsure` for every option.",
+  "Commands: `npx lintsure scan`, `baseline`, `init`, `info`, `setup`, `status`. Run `npx lintsure` for every option.",
   "Full docs: https://lintsure.com/docs", "", core.DISCLAIMER, "",
 ].join("\n"));
 

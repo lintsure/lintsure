@@ -1,4 +1,4 @@
-// lintsure setup and doctor in a temporary project: preview writes nothing, --yes writes and backs up,
+// lintsure setup and status in a temporary project: preview writes nothing, --yes writes and backs up,
 // other servers are kept, a second run changes nothing, a file with comments is left alone.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
@@ -20,7 +20,7 @@ assert.ok(cur.other && cur.lintsure.args.join(" ").match(/@lintsure\/mcp@\d+\.\d
 assert.ok(existsSync(join(T, ".cursor/mcp.json.lintsure-backup")));
 assert.equal(readFileSync(join(T, ".vscode/mcp.json"), "utf8"), "// comment\n{}");
 assert.match(run("setup", T, "--yes"), /Cursor: already set up/);
-const doc = run("doctor", T);
+const doc = run("status", T);
 assert.match(doc, /ok +Cursor: Lintsure MCP server/);
 assert.throws(() => run("setup", T, "--agents", "nope"));
 // A second --yes run must not overwrite the first backup (it holds the user's original).
@@ -35,4 +35,4 @@ const after = JSON.parse(readFileSync(join(T, ".cursor/mcp.json"), "utf8")).mcpS
 assert.ok(after.other && !after.lintsure);
 assert.ok(!existsSync(join(T, ".gemini/settings.json")));
 rmSync(T, { recursive: true, force: true });
-console.log("CLI setup/doctor smoke test passed");
+console.log("CLI setup/status smoke test passed");

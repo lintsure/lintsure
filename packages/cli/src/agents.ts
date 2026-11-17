@@ -1,4 +1,4 @@
-// lintsure setup and lintsure doctor: register the Lintsure MCP server with the coding agents a project uses,
+// lintsure setup and lintsure status: register the Lintsure MCP server with the coding agents a project uses,
 // and check that a project is ready. Only project files are written, each shown first and backed up. Nothing is
 // downloaded or sent; the agent itself starts the server later with npx.
 import { access, chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -62,13 +62,13 @@ export async function setup(root: string, agents: Agent[], apply: boolean): Prom
     await writeFile(p.path, p.text!);
   }
   console.log("Undo any time with: lintsure setup --undo");
-  console.log(`\nWritten. Restart the agent so it starts the Lintsure MCP server. Run "lintsure doctor" to check.`);
+  console.log(`\nWritten. Restart the agent so it starts the Lintsure MCP server. Run "lintsure status" to check.`);
   console.log("For the guards (Drift Guard, Danger Guard) in Claude Code, also install the plugin: /plugin marketplace add lintsure/claude-plugin");
   return 0;
 }
 
 /** Readiness check. Never prints secret values. Exit 2 only when the config has problems a scan would refuse. */
-export async function doctor(root: string): Promise<number> {
+export async function status(root: string): Promise<number> {
   const line = (ok: boolean | null, what: string, next?: string) => console.log(`${ok === null ? "info" : ok ? "ok  " : "todo"}  ${what}${!ok && next ? `\n      ${next}` : ""}`);
   const major = Number(process.versions.node.split(".")[0]);
   line(major >= 20, `Node.js ${process.versions.node}`, "Lintsure needs Node.js 20 or newer.");
