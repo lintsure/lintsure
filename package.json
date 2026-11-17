@@ -11,7 +11,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "npm run clean && tsc -b packages/core packages/cli packages/mcp",
+    "build": "npm run clean && tsc -b packages/core packages/cli packages/mcp && node scripts/build-docs.mjs",
     "test": "npm run build && node --test \"packages/core/dist/test/**/*.test.js\" && node scripts/mcp-smoke.mjs && node scripts/cli-smoke.mjs && node scripts/benchmark.mjs && node scripts/robustness.mjs 80",
     "scan:sample": "node packages/cli/dist/src/index.js scan fixtures/sample-app",
     "benchmark": "npm run build && node scripts/benchmark.mjs && node scripts/robustness.mjs 80",

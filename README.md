@@ -81,6 +81,8 @@ Then ask: *check this repo for compliance*. Setup for Cursor, Codex and Devin De
 
 Run it on every pull request with **[lintsure/action](https://github.com/lintsure/action)**.
 
+**Docs offline:** the `@lintsure/core` package includes plain Markdown docs (`docs/rules.md`, `docs/frameworks.md`, `docs/agents.md`), generated from the rules themselves, so a coding agent can read them from `node_modules/@lintsure/core/docs` without going online.
+
 ## What's inside
 
 | Path | What |
