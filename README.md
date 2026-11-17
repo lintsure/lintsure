@@ -65,11 +65,15 @@ We'd rather say this up front than have you find out later:
 npx lintsure scan
 ```
 
-Use it inside Claude Code:
+Add it to the coding agents this project uses (Claude Code, Cursor, VS Code, Gemini CLI). It shows the change first and backs up any file it edits:
 
 ```bash
-claude mcp add lintsure -- npx -y @lintsure/mcp
+npx lintsure setup          # preview
+npx lintsure setup --yes    # write it
+npx lintsure doctor         # check Node, config, rules and agents
 ```
+
+Or by hand in Claude Code: `claude mcp add lintsure -- npx -y @lintsure/mcp`.
 
 From source: `git clone`, `npm install`, `npm test`, then `node packages/cli/dist/src/index.js scan /path/to/your-app`.
 
@@ -81,11 +85,17 @@ Run it on every pull request with **[lintsure/action](https://github.com/lintsur
 
 | Path | What |
 |---|---|
-| `packages/core` | Finding schema, 16 rules, framework knowledge, scan, config reader, report writer, safety wording |
-| `packages/cli` | The `lintsure` command |
-| `packages/mcp` | MCP server: `scan`, `classify`, `explain_framework`, `explain_rule` |
+| `packages/core` | Finding schema, 69 rules, framework knowledge, scan, config reader, report writer, policy fingerprint, pack loader, safety wording |
+| `packages/cli` | The `lintsure` command: `scan`, `baseline`, `init`, `info`, `setup`, `doctor` |
+| `packages/mcp` | MCP server: `scan`, `plan_checks`, `classify`, `explain_framework`, `explain_rule` |
 | `fixtures/` | Planted problems, near misses and a config example used by the tests |
-| `scripts/mcp-smoke.mjs` | Starts the MCP server and checks every reply carries the disclaimer |
+| `scripts/mcp-smoke.mjs` | Starts the MCP server: every reply carries the disclaimer, bad input is rejected, the tool list stays small |
+| `scripts/cli-smoke.mjs` | `setup` and `doctor` in a temporary project |
+| `scripts/check-sources.mjs` | Checks the real-incident links on rules still answer (run by hand before a release) |
+
+## Get it from the official places only
+
+Lintsure is published only as `lintsure`, `@lintsure/core` and `@lintsure/mcp` on npm, from [github.com/lintsure](https://github.com/lintsure), and at [lintsure.com](https://lintsure.com). A security tool is a good target for lookalikes: a repo or package with a similar name is not ours.
 
 ## Help Lintsure grow
 
