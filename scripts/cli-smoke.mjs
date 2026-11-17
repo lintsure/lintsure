@@ -37,8 +37,7 @@ assert.ok(after.other && !after.lintsure);
 assert.ok(!existsSync(join(T, ".gemini/settings.json")));
 // export --otlp-json: activity log -> OpenTelemetry file, run inside the project folder; bad lines skipped.
 mkdirSync(join(T, ".lintsure"), { recursive: true });
-writeFileSync(join(T, ".lintsure/activity.jsonl"), [JSON.stringify({ at: "2026-11-18T09:00:00.000Z", type: "catch", kind: "made_up", file: "src/a.ts", line: 3, outcome: "caught", session: "s1" }), "not json", ""].join("
-"));
+writeFileSync(join(T, ".lintsure/activity.jsonl"), [JSON.stringify({ at: "2026-11-18T09:00:00.000Z", type: "catch", kind: "made_up", file: "src/a.ts", line: 3, outcome: "caught", session: "s1" }), "not json", ""].join("\n"));
 execFileSync(process.execPath, [CLI, "export", "--otlp-json", "."], { cwd: T, encoding: "utf8" });
 const spans = JSON.parse(readFileSync(join(T, "lintsure.otlp.json"), "utf8")).resourceSpans[0].scopeSpans[0].spans;
 assert.equal(spans.length, 2);
