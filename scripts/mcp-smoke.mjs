@@ -51,6 +51,28 @@ for (const [name, args] of bad) {
   const r = await call("tools/call", { name, arguments: args });
   if (!r.error && !r.result?.isError) fail(`${name} accepted bad input ${JSON.stringify(args).slice(0, 60)}`);
 }
+// Generated from each tool's own input schema (HexBrain's lesson): every field gets a wrong type, and every tool gets
+// non-object arguments, a __proto__ key and an oversized value. Each must be refused or answered as an error, fast.
+const wrong = { string: 42, number: "x", integer: "x", boolean: "yes", array: "not-a-list", object: "not-an-object" };
+let generated = 0;
+for (const t of tools) {
+  const props = t.inputSchema?.properties ?? {};
+  const cases = [["string-args", "just text"], ["proto", JSON.parse('{"__proto__": {"polluted": true}}')]];
+  for (const [k, v] of Object.entries(props)) {
+    if (v.type && wrong[v.type] !== undefined) cases.push([`${k}:wrong-type`, { [k]: wrong[v.type] }]);
+    if (v.type === "string") cases.push([`${k}:huge`, { [k]: "a".repeat(200_000) }]);
+  }
+  for (const [label, args] of cases) {
+    const t0 = Date.now();
+    const r = await call("tools/call", { name: t.name, arguments: args });
+    generated++;
+    if (Date.now() - t0 > 10_000) fail(`${t.name} ${label} took ${Date.now() - t0} ms`);
+    const ok = r.error || r.result?.isError || label === "proto" || (label.endsWith(":huge") && r.result);
+    if (!ok) fail(`${t.name} accepted ${label}`);
+    if ({}.polluted) fail("prototype polluted");
+  }
+}
+console.log("ok schema-generated bad input:", generated, "cases");
 if (!(await call("tools/list", {})).result?.tools?.length) fail("server stopped answering after bad input");
 console.log("ok bad input rejected,", bad.length, "cases");
 const prompts = (await call("prompts/list", {})).result?.prompts ?? [];
