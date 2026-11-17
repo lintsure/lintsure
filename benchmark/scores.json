@@ -2,276 +2,349 @@
   "pii.logged": {
     "precision": 100,
     "recall": 100,
-    "cases": 19
+    "cases": 19,
+    "casesHash": "37f6dd6be500"
   },
   "secret.in-source": {
     "precision": 100,
     "recall": 100,
-    "cases": 25
+    "cases": 25,
+    "casesHash": "3a8fb11c7d53"
   },
   "transport.plain-http": {
     "precision": 100,
     "recall": 100,
-    "cases": 7
+    "cases": 7,
+    "casesHash": "a213ca265112"
   },
   "pii.to-analytics": {
     "precision": 100,
     "recall": 100,
-    "cases": 7
+    "cases": 7,
+    "casesHash": "37f39210a4ce"
   },
   "pii.in-url": {
     "precision": 100,
     "recall": 100,
-    "cases": 9
+    "cases": 9,
+    "casesHash": "1cd7208b4d13"
   },
   "crypto.weak-password-hash": {
     "precision": 100,
     "recall": 100,
-    "cases": 7
+    "cases": 7,
+    "casesHash": "a9fe18edd4a4"
   },
   "transport.tls-verify-off": {
     "precision": 100,
     "recall": 100,
-    "cases": 10
+    "cases": 10,
+    "casesHash": "a12e2928aec0"
   },
   "sql.string-built": {
     "precision": 100,
     "recall": 100,
-    "cases": 12
+    "cases": 12,
+    "casesHash": "86d5deeb1d6e"
   },
   "cors.any-origin": {
     "precision": 100,
     "recall": 100,
-    "cases": 12
+    "cases": 12,
+    "casesHash": "a54fee8edba1"
   },
   "session.cookie-insecure": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "66a885eb09be"
   },
   "config.debug-on": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "0e3af62dbc75"
   },
   "ai.automated-decision": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "7edbc1fa1fa6"
   },
   "ai.hides-being-ai": {
     "precision": 100,
     "recall": 100,
-    "cases": 6
+    "cases": 6,
+    "casesHash": "6496503c5025"
   },
   "ai.synthetic-media": {
     "precision": 100,
     "recall": 100,
-    "cases": 7
+    "cases": 7,
+    "casesHash": "c7bb443b8db6"
   },
   "ai.emotion-or-biometric": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "ea7b8ffc7091"
   },
   "path.user-input": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "00d1fa157c5b"
   },
   "redirect.open": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "6b0000788a08"
   },
   "ssrf.user-url": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "db3078dca1d1"
   },
   "csrf.disabled": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "5addc4eb9874"
   },
   "fs.world-writable": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "a092927c45bf"
   },
   "config.allowed-hosts-any": {
     "precision": 100,
     "recall": 100,
-    "cases": 3
+    "cases": 3,
+    "casesHash": "3f4ae048dfc8"
   },
   "config.default-secret-key": {
     "precision": 100,
     "recall": 100,
-    "cases": 6
+    "cases": 6,
+    "casesHash": "1571fc93cb3f"
   },
   "xml.external-entities": {
     "precision": 100,
     "recall": 100,
-    "cases": 6
+    "cases": 6,
+    "casesHash": "6d58d51c3a0b"
   },
   "deps.unpinned-version": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "a963b7cd5c96"
   },
   "deps.install-script": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "69433d34dddc"
   },
   "ci.action-unpinned": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "a635c48db97f"
   },
   "crypto.weak-random-token": {
     "precision": 100,
     "recall": 100,
-    "cases": 6
+    "cases": 6,
+    "casesHash": "e8da37a6b557"
   },
   "crypto.weak-cipher": {
     "precision": 100,
     "recall": 100,
-    "cases": 7
+    "cases": 7,
+    "casesHash": "1153a9110919"
   },
   "jwt.unverified": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "3555057bd851"
   },
   "cmd.shell-built": {
     "precision": 100,
     "recall": 100,
-    "cases": 7
+    "cases": 7,
+    "casesHash": "493e0cd13b92"
   },
   "code.eval": {
     "precision": 100,
     "recall": 100,
-    "cases": 11
+    "cases": 11,
+    "casesHash": "d0c67478078c"
   },
   "xss.raw-html": {
     "precision": 100,
     "recall": 100,
-    "cases": 11
+    "cases": 11,
+    "casesHash": "cfd59203463a"
   },
   "template.user-string": {
     "precision": 100,
     "recall": 100,
-    "cases": 3
+    "cases": 3,
+    "casesHash": "4cc8264014d8"
   },
   "nosql.operator-input": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "3b50482a3073"
   },
   "upload.unrestricted": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "feb679c413c6"
   },
   "mass-assignment": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "3027078524cb"
   },
   "auth.hardcoded-password": {
     "precision": 100,
     "recall": 100,
-    "cases": 11
+    "cases": 11,
+    "casesHash": "a1f1064ff135"
   },
   "jwt.no-expiry": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "2145a3aa6b36"
   },
   "deserialize.unsafe": {
     "precision": 100,
     "recall": 100,
-    "cases": 7
+    "cases": 7,
+    "casesHash": "616310d04d7a"
   },
   "html.script-no-sri": {
     "precision": 100,
     "recall": 100,
-    "cases": 3
+    "cases": 3,
+    "casesHash": "7ea1d668f1ce"
   },
   "cookie.trusted-role": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "48076641b09c"
   },
   "log.secret": {
     "precision": 100,
     "recall": 100,
-    "cases": 8
+    "cases": 8,
+    "casesHash": "3eef2bff4485"
   },
   "log.injection": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "cffd6bfd6f93"
   },
   "error.empty-catch": {
     "precision": 100,
     "recall": 100,
-    "cases": 6
+    "cases": 6,
+    "casesHash": "1cf83a6db4e0"
   },
   "error.stack-to-client": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "2f1fee617925"
   },
   "supabase.policy-allows-all": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "cd51a7622f23"
   },
   "secret.public-env": {
     "precision": 100,
     "recall": 100,
-    "cases": 13
+    "cases": 13,
+    "casesHash": "f98fe2cf79ac"
   },
   "build.sourcemaps-public": {
     "precision": 100,
     "recall": 100,
-    "cases": 3
+    "cases": 3,
+    "casesHash": "0a8603061a68"
   },
   "update.unverified-download": {
     "precision": 100,
     "recall": 100,
-    "cases": 13
+    "cases": 13,
+    "casesHash": "09af74a26356"
   },
   "ci.write-all-permissions": {
     "precision": 100,
     "recall": 100,
-    "cases": 6
+    "cases": 6,
+    "casesHash": "ca345f7d85b8"
   },
   "llm.user-input-in-system-prompt": {
     "precision": 100,
     "recall": 100,
-    "cases": 6
+    "cases": 6,
+    "casesHash": "6d7f79d9cf77"
   },
   "llm.output-to-sink": {
     "precision": 100,
     "recall": 100,
-    "cases": 7
+    "cases": 7,
+    "casesHash": "3eca68d72255"
   },
   "mobile.token-in-plain-storage": {
     "precision": 100,
     "recall": 100,
-    "cases": 4
+    "cases": 4,
+    "casesHash": "081444f4a152"
   },
   "mobile.cleartext-traffic": {
     "precision": 100,
     "recall": 100,
-    "cases": 5
+    "cases": 5,
+    "casesHash": "b72e540bf2c6"
   },
   "agent.config-runs-remote-code": {
     "precision": 100,
     "recall": 100,
-    "cases": 14
+    "cases": 14,
+    "casesHash": "8aa0afd8d09e"
+  },
+  "agent.instructions-unsafe": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 16,
+    "casesHash": "de5220e0f026"
+  },
+  "agent.permissions-allow-all": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 16,
+    "casesHash": "60c3dbb0527b"
+  },
+  "auth.no-rate-limit": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 8,
+    "casesHash": "1db5b54f06d0"
   }
 }

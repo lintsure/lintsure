@@ -3,6 +3,7 @@
 // Fails if any rule scores below its recorded minimum in benchmark/scores.json, or gets a status wrong.
 // Run: node scripts/benchmark.mjs        Record new minimums: node scripts/benchmark.mjs --record
 import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { rules } from "../packages/core/dist/src/index.js";
 
 // Fake keys are stored split with {{}} so secret scanners (GitHub push protection) don't mistake them for real ones.
@@ -11,7 +12,7 @@ const scoresUrl = new URL("../benchmark/scores.json", import.meta.url);
 const recorded = (() => { try { return JSON.parse(readFileSync(scoresUrl, "utf8")); } catch { return {}; } })();
 const pct = (n) => Math.round(n * 1000) / 10;
 
-const out = {}; let failed = false;
+const out = {}; let failed = false, stale = 0;
 for (const [id, c] of Object.entries(cases)) {
   if (id.startsWith("_")) continue;
   const rule = rules.find((r) => r.id === id);
@@ -30,15 +31,19 @@ for (const [id, c] of Object.entries(cases)) {
   }
   for (const line of c.pass) if (check(line)) { fp++; problems.push(`false alarm: ${line}`); }
   const precision = tp + fp ? tp / (tp + fp) : 1, recall = tp + fn ? tp / (tp + fn) : 1;
-  out[id] = { precision: pct(precision), recall: pct(recall), cases: c.flag.length + c.pass.length };
+  // The recorded minimum only counts for the cases it was measured on: a changed case set makes it stale.
+  const casesHash = createHash("sha256").update(JSON.stringify(c)).digest("hex").slice(0, 12);
+  out[id] = { precision: pct(precision), recall: pct(recall), cases: c.flag.length + c.pass.length, casesHash };
   const min = recorded[id];
-  const below = min && (out[id].precision < min.precision || out[id].recall < min.recall);
+  const isStale = !!(min?.casesHash && min.casesHash !== casesHash);
+  if (isStale) { stale++; problems.push("stale: the cases changed since the recorded minimum; review, then run with --record"); }
+  const below = min && !isStale && (out[id].precision < min.precision || out[id].recall < min.recall);
   const statusWrong = problems.some((p) => p.startsWith("status"));
-  if (below || statusWrong) failed = true;
-  console.log(`${below || statusWrong ? "FAIL" : "ok  "} ${id.padEnd(26)} precision ${String(out[id].precision).padStart(5)}%  recall ${String(out[id].recall).padStart(5)}%  (${out[id].cases} cases)`);
+  if (below || statusWrong || isStale) failed = true;
+  console.log(`${below || statusWrong ? "FAIL" : isStale ? "STALE" : "ok  "} ${id.padEnd(26)} precision ${String(out[id].precision).padStart(5)}%  recall ${String(out[id].recall).padStart(5)}%  (${out[id].cases} cases)`);
   for (const p of problems) console.log(`       ${p}`);
 }
 
 if (process.argv.includes("--record")) { writeFileSync(scoresUrl, JSON.stringify(out, null, 2) + "\n"); console.log("Recorded new minimums in benchmark/scores.json"); }
-else if (failed) { console.error("Benchmark failed: a rule got worse or gave the wrong status."); process.exit(1); }
+else if (failed) { console.error(`Benchmark failed: a rule got worse, gave the wrong status${stale ? `, or has ${stale} stale minimum(s)` : ""}.`); process.exit(1); }
 else console.log("Benchmark passed.");
