@@ -637,3 +637,10 @@ test("plan_checks: a described feature maps to the checks it is likely to meet",
   assert.equal(checksFor("dark mode toggle").length, 0);
   assert.deepEqual(checksFor("login page with password"), checksFor("login page with password"));
 });
+
+test("policy fingerprint is the same on every OS", async () => {
+  // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
+  // It moves with every rules version: update it in the release commit.
+  const r = await scan(root);
+  assert.equal(r.policy?.fingerprint, "67A8-7CD1");
+});
