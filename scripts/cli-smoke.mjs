@@ -23,5 +23,16 @@ assert.match(run("setup", T, "--yes"), /Cursor: already set up/);
 const doc = run("doctor", T);
 assert.match(doc, /ok +Cursor: Lintsure MCP server/);
 assert.throws(() => run("setup", T, "--agents", "nope"));
+// A second --yes run must not overwrite the first backup (it holds the user's original).
+writeFileSync(join(T, ".cursor/mcp.json.lintsure-backup"), "ORIGINAL");
+run("setup", T, "--yes");
+assert.equal(readFileSync(join(T, ".cursor/mcp.json.lintsure-backup"), "utf8"), "ORIGINAL");
+// --undo takes only Lintsure's entry out; other servers stay; a file Lintsure created alone is removed.
+mkdirSync(join(T, ".gemini")); run("setup", T, "--agents", "gemini", "--yes");
+assert.ok(existsSync(join(T, ".gemini/settings.json")));
+run("setup", T, "--undo");
+const after = JSON.parse(readFileSync(join(T, ".cursor/mcp.json"), "utf8")).mcpServers;
+assert.ok(after.other && !after.lintsure);
+assert.ok(!existsSync(join(T, ".gemini/settings.json")));
 rmSync(T, { recursive: true, force: true });
 console.log("CLI setup/doctor smoke test passed");

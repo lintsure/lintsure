@@ -1,7 +1,8 @@
 // lintsure setup and lintsure doctor: register the Lintsure MCP server with the coding agents a project uses,
 // and check that a project is ready. Only project files are written, each shown first and backed up. Nothing is
 // downloaded or sent; the agent itself starts the server later with npx.
-import { access, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { RULES_VERSION, readConfig } from "@lintsure/core";
 
@@ -53,9 +54,14 @@ export async function setup(root: string, agents: Agent[], apply: boolean): Prom
   if (!apply) { console.log("\nNothing written. Run again with --yes to apply. Existing files are backed up first (<file>.lintsure-backup)."); return 0; }
   for (const p of todo) {
     await mkdir(dirname(p.path), { recursive: true });
-    if (p.existed) await copyFile(p.path, p.path + ".lintsure-backup");
+    // The first backup is the user's original: never overwrite it on a later run. Owner-only, it may hold tokens.
+    if (p.existed) {
+      try { await copyFile(p.path, p.path + ".lintsure-backup", constants.COPYFILE_EXCL); await chmod(p.path + ".lintsure-backup", 0o600).catch(() => {}); }
+      catch (e) { if ((e as NodeJS.ErrnoException).code !== "EEXIST") { console.error(`Couldn't back up ${p.agent.file}, so it was left alone.`); continue; } }
+    }
     await writeFile(p.path, p.text!);
   }
+  console.log("Undo any time with: lintsure setup --undo");
   console.log(`\nWritten. Restart the agent so it starts the Lintsure MCP server. Run "lintsure doctor" to check.`);
   console.log("For the guards (Drift Guard, Danger Guard) in Claude Code, also install the plugin: /plugin marketplace add lintsure/claude-plugin");
   return 0;
@@ -81,4 +87,22 @@ export async function doctor(root: string): Promise<number> {
   }
   line(null, process.env.LINTSURE_API_KEY ? "LINTSURE_API_KEY is set: the plugin will use the hosted workspace" : "No LINTSURE_API_KEY: everything stays on this machine");
   return hasConfig && config.problems.length ? 2 : 0;
+}
+
+/** Takes Lintsure's own entry back out, leaving everything else in the file as it is now (later edits included).
+ *  A file Lintsure created that is now empty is removed. The original backup is kept. */
+export async function undo(root: string, agents: Agent[]): Promise<number> {
+  for (const a of agents) {
+    const path = join(root, a.file);
+    let json: Record<string, unknown>;
+    try { json = JSON.parse(await readFile(path, "utf8")); } catch { continue; }
+    const servers = (json[a.key] ?? {}) as Record<string, unknown>;
+    if (!("lintsure" in servers)) continue;
+    delete servers.lintsure;
+    const empty = !Object.keys(servers).length && Object.keys(json).length === 1;
+    const backup = await exists(path + ".lintsure-backup");
+    if (empty && !backup) { await rm(path); console.log(`- ${a.name}: removed ${a.file} (Lintsure had created it)`); }
+    else { await writeFile(path, JSON.stringify(json, null, 2) + "\n"); console.log(`- ${a.name}: removed the Lintsure entry from ${a.file}${backup ? ` (your original is still in ${a.file}.lintsure-backup)` : ""}`); }
+  }
+  return 0;
 }
