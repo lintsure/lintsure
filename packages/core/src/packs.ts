@@ -11,6 +11,8 @@ import type { Control, Rule } from "./types.js";
 export interface Pack {
   /** Package name, for example "@lintsure/pack-pci-dss". */
   id: string;
+  /** Pack version. Goes into the policy fingerprint, so a pack update gives a new code. */
+  version?: string;
   rules: Rule[];
   knowledge: FrameworkKnowledge[];
   /** Controls this pack adds to rules that already exist, by rule id. */
@@ -19,11 +21,14 @@ export interface Pack {
 
 const PACK_NAME = /^@lintsure\/pack-[a-z0-9-]+$/;
 const loaded = new Set<string>();
+/** Packs registered in this process, as "id@version", for the policy fingerprint. */
+export const packsLoaded: string[] = [];
 
 /** Adds a pack's frameworks, rules and mappings. Loading the same pack twice does nothing. */
 export function registerPack(p: Pack): void {
   if (loaded.has(p.id)) return;
   loaded.add(p.id);
+  packsLoaded.push(`${p.id}@${p.version ?? "0"}`);
   for (const [id, cs] of Object.entries(p.forExisting ?? {})) rules.find((r) => r.id === id)?.controls.push(...cs);
   rules.push(...p.rules);
   for (const k of p.knowledge) {

@@ -2,6 +2,16 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.11 · Unreleased · Policy fingerprint
+
+### New
+- **Policy fingerprint:** every scan report (JSON, Markdown, SARIF and the CLI summary line) names the policy it ran under as a short code like `#3F2A-9C1D`. The same rules and settings give the same code on any machine; switching a rule off, re-rating it, or changing frameworks, ignore paths, `.lintsure/rules.yml` or installed rule packs gives a new one. It names the policy; it doesn't sign anything.
+- **Agent config downloads and runs code** (`agent.config-runs-remote-code`): flags Claude Code hooks, MCP server commands, Cursor, VS Code and Gemini CLI settings that pipe a download into a shell or run it straight away.
+- Rule packs can carry a `version`, which goes into the policy fingerprint.
+
+### Fewer false alarms
+- **Code run from a string:** a call or method head that a formatter split over several lines is now read as one statement, and text inside a string left open at the end of a line is ignored. Wrapping no longer creates false alarms in the format test (2 before, 0 now).
+
 ## 0.3.10 · 2026-11-13 · Tested on new projects
 
 We ran 0.3.9 on 56 public projects it had never seen, created since June and built with Lovable, Bolt, Supabase, Claude Code and Cursor, and reviewed 110 more findings one by one against the code. A normal run was right 44% of the time on the new projects and 48% on a fresh sample from the original 139. Four checks caused most of the false alarms. This release fixes them.

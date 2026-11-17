@@ -173,9 +173,10 @@ export const owaspRules: Rule[] = [
     fix: "Avoid eval and new Function. Parse data with JSON.parse or a real parser, and map names to functions with a lookup table.",
     note: "If any part of the string comes from outside, it runs as your code (code injection, CWE-94). Partial when the input isn't visible on the line.", extensions: CODE,
     // A method named eval is a definition, not a call (also TypeScript class methods, field test); $$eval is Playwright's;
-    // "eval" inside a string is text.
-    test: (l) => /\b(def|function|async)\s+eval\s*\(|^\s*((public|private|protected|static|override)\s+)*eval\s*\([^)]*\)\s*(:[^{=]+)?\{\s*$/.test(l) ? false
-      : /(^|[^.\w$])eval\s*\(|\bnew Function\s*\(/.test(l.replace(/(["'])(?:\\.|(?!\1)[^\\])*\1/g, '""')) ? byInput(l) : false }),
+    // "eval" inside a string is text, also a string left open at the line end. A bare `eval(` ending the line is a
+    // wrapped call or method head: the joined statement decides (format robustness).
+    test: (l) => /\b(def|function|async)\s+eval\s*\(|^\s*((public|private|protected|static|override)\s+)*eval\s*\([^)]*\)\s*(:[^{=]+)?\{\s*$|^\s*eval\s*\(\s*$/.test(l) ? false
+      : /(^|[^.\w$])eval\s*\(|\bnew Function\s*\(/.test(l.replace(/(["'])(?:\\.|(?!\1)[^\\])*\1/g, '""').replace(/(["'])(?:\\.|(?!\1)[^\\])*$/, '""')) ? byInput(l) : false }),
   rule({ id: "xss.raw-html", title: "HTML inserted without escaping", status: "partial", severity: "medium", controls: [A05],
     fix: "Set text with textContent, let your framework escape values, or sanitise with DOMPurify before inserting HTML.",
     note: "If the HTML contains user input, attackers can run scripts in your users' browsers (cross-site scripting, CWE-79). Partial because fixed HTML from your own code is safe.", extensions: MARKUP,

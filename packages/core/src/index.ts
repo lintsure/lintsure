@@ -22,8 +22,8 @@ export * from "./guidance.js";
 export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
-import { loadPacks } from "./packs.js";
-export const RULES_VERSION = "0.3.10";
+import { loadPacks, packsLoaded } from "./packs.js";
+export const RULES_VERSION = "0.3.11";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -208,7 +208,7 @@ const JOIN_RULES = new Set(["pii.logged", "pii.to-analytics", "log.injection", "
   "ssrf.user-url", "path.user-input", "redirect.open", "nosql.operator-input", "template.user-string", "error.stack-to-client",
   // Narrow call-plus-value patterns, where unrelated parts of a statement rarely complete a match.
   "transport.plain-http", "transport.tls-verify-off", "jwt.unverified", "crypto.weak-cipher", "fs.world-writable",
-  "mobile.token-in-plain-storage", "config.debug-on", "cookie.trusted-role"]);
+  "mobile.token-in-plain-storage", "config.debug-on", "cookie.trusted-role", "code.eval"]);
 const MAX_JOIN_LINES = 25, MAX_JOIN_CHARS = 2000;
 export interface Statement { start: number; end: number; text: string; prose: boolean }
 /** Groups lines into statements: lines join while a ( or [ or a template literal is open. Joining stops at a function
@@ -303,6 +303,8 @@ export function policyFingerprint(p: { frameworks: string[]; rules: { id: string
     rulesOff: [...p.rulesOff].sort(),
     ignore: [...p.ignore].sort(),
     show: p.show ?? "default",
+    // Installed rule packs and their versions. Left out when none, so codes from before packs existed stay the same.
+    ...(packsLoaded.length ? { packs: [...packsLoaded].sort() } : {}),
     // The Drift Guard's .lintsure/rules.yml, comments and blank lines dropped, so only a real rule change moves the code.
     repoRules: p.repoRules ?? null,
     // Account (workspace) rules, when the caller passed them: key order doesn't matter, content does.
