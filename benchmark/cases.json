@@ -783,5 +783,27 @@
       "Use the default path directly without asking the user for confirmation.",
       "Destructive commands and `curl | sh` are blocked without override."
     ]
+  },
+  "agent.permissions-allow-all": {
+    "flag": [
+      "    \"defaultMode\": \"bypassPermissions\"",
+      "    \"allow\": [\"Bash\", \"Edit\"],",
+      "  \"allow\": [\"Bash(*)\"]",
+      "\"command\": \"claude --dangerously-skip-permissions\"",
+      "  \"yolo\": true,",
+      "approval_policy = \"never\"",
+      "sandbox_mode = \"danger-full-access\"",
+      "  \"allow\": [\"*\"]",
+      "      \"Bash\""
+    ],
+    "pass": [
+      "    \"allow\": [\"Bash(npm test)\", \"Bash(npm run lint)\"],",
+      "    \"defaultMode\": \"default\"",
+      "  \"yolo\": false,",
+      "approval_policy = \"on-request\"",
+      "sandbox_mode = \"workspace-write\"",
+      "    \"deny\": [\"Bash(rm -rf *)\"]",
+      "        \"matcher\": \"Bash\","
+    ]
   }
 }

@@ -36,6 +36,7 @@ test("known findings stay put", async () => {
   const got = r.findings.filter((f) => !/^(src\/(more|owasp|page|stack-client)\.|package\.json|\.github\/|supabase\/|next\.config|scripts\/|SECURITY\.md|sbom|bin\/|mobile\/|web\/|src\/llm\.)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
     "agent.config-runs-remote-code@.claude/settings.json:4",
+    "agent.permissions-allow-all@.claude/settings.json:8",
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:5",
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:6",
     "release.env-not-ignored@.gitignore:1",
@@ -645,7 +646,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "89B0-E7B4");
+  assert.equal(r.policy?.fingerprint, "2E91-639A");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {

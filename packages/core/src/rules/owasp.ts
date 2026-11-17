@@ -34,7 +34,7 @@ export function instructionsUnsafe(l: string): boolean | "partial" {
   return RUNS_REMOTE.test(l) && !FORBIDS.test(l) ? "partial" : false;
 }
 const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
-const LLM01: Control = { framework: "owasp-llm", id: "LLM01:2026", title: "Prompt Injection" };
+const LLM01: Control = { framework: "owasp-llm", id: "LLM01:2026", title: "Prompt Injection" }, LLM03: Control = { framework: "owasp-llm", id: "LLM03:2026", title: "Excessive Agency" };
 const A = (n: string, title: string): Control => ({ framework: "owasp-top10", id: `A${n}:2025`, title });
 const A01 = A("01", "Broken Access Control"), A02 = A("02", "Security Misconfiguration"), A03 = A("03", "Software Supply Chain Failures"),
   A04 = A("04", "Cryptographic Failures"), A05 = A("05", "Injection"), A06 = A("06", "Insecure Design"),
@@ -154,6 +154,13 @@ export const owaspRules: Rule[] = [
     extensions: [".md", ".mdc", ""], pathMatch: AGENT_INSTRUCTIONS,
     unseen: "Lintsure reads the line, not who wrote it or whether the file came from a trusted skill. Check where this file came from before an agent uses it.",
     test: instructionsUnsafe }),
+  // A project file that switches off the agent's own permission prompts: every agent that opens the repo then runs any
+  // command or edit without asking (Continue's headless default allows every tool, field study 2026-11).
+  rule({ id: "agent.permissions-allow-all", title: "Agent settings that skip every permission prompt", status: "gap", severity: "high", controls: [A02, LLM03],
+    fix: "Remove the bypass from the shared project file. Allow the few commands you trust by name (for example Bash(npm test)), and keep wider permissions in your own local settings, not in the repo.",
+    note: "Committed agent settings apply to everyone who opens the repo with that agent. Skipping prompts or allowing every shell command lets a bad instruction, a poisoned file or a mistake run without a person seeing it (CWE-250, OWASP LLM03 Excessive Agency).",
+    extensions: [".json", ".toml"], pathMatch: /(^|\/)(\.claude\/settings\.json|\.gemini\/settings\.json|\.codex\/config\.toml|\.continue\/(config|permissions)\.ya?ml|\.vscode\/settings\.json)$/,
+    test: (l) => /"defaultMode"\s*:\s*"bypassPermissions"|(?:^|[[,])\s*"(Bash|Bash\(\*\)|Bash\(:\*\)|\*)"\s*(?:[,\]]|$)|--dangerously-skip-permissions|"(yolo|autoAccept)"\s*:\s*true|\bapproval_policy\s*=\s*["']never["']|\bsandbox_mode\s*=\s*["']danger-full-access["']|"chat\.tools\.autoApprove"\s*:\s*true/.test(l) }),
   rule({ id: "ci.action-unpinned", title: "Third-party GitHub Action not pinned to a commit", status: "partial", severity: "medium", controls: [A03],
     fix: "Pin third-party actions to a full commit SHA, with the version as a comment, for example uses: owner/action@<40-character sha> # v2.",
     note: "A tag like @v1 can be moved by the action's owner, or by whoever takes over their account (CWE-829).", extensions: YAML,
