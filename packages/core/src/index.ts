@@ -188,7 +188,7 @@ export function isNonShipping(file: string): boolean {
 // Rules that also read test files. Not auth.hardcoded-password: test logins are fake by design (field test, 50 repos).
 const SECRET_RULES = new Set(["secret.in-source"]); // not config.default-secret-key: a test secret is a test value (review P19)
 // Rules that read agent tooling folders on purpose: an agent hook in .claude/ runs on real machines.
-const TOOLING_RULES = new Set(["agent.config-runs-remote-code"]);
+const TOOLING_RULES = new Set(["agent.config-runs-remote-code", "agent.instructions-unsafe"]);
 // Lines a person already reviewed. lintsure-ignore and the secret allowlist pragma count only in a comment and apply
 // to every rule. Other linters' markers (noqa, nosec, NOSONAR) don't hide secrets: `# noqa: E501` is about line length.
 const REVIEWED = /(#|\/\/|\/\*|--)\s*(lintsure-ignore|pragma:\s*allowlist secret)\b/;

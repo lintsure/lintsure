@@ -12,7 +12,7 @@ export const owaspLlm: FrameworkKnowledge = {
     return null;
   },
   obligations: [
-    { ref: "LLM01:2026", title: "Prompt Injection", inCode: "partly", rules: ["llm.user-input-in-system-prompt"],
+    { ref: "LLM01:2026", title: "Prompt Injection", inCode: "partly", rules: ["llm.user-input-in-system-prompt", "agent.instructions-unsafe"],
       plain: "User text, web pages or files can carry instructions that change what the model does. Keep instructions and user content apart, and limit what the model can do.",
       evidence: "How prompts are built, and tests with hostile input." },
     { ref: "LLM02:2026", title: "Sensitive Information Disclosure", inCode: "partly", rules: ["secret.in-source", "secret.public-env", "pii.logged", "log.secret"],

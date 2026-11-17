@@ -18,7 +18,23 @@ const RUNS_REMOTE = new RegExp([
   String.raw`\b(powershell|pwsh)\b.*\s-e(nc|ncodedcommand)?\s+[A-Za-z0-9+/=]{24,}`,
   String.raw`\b(curl|wget)\b[^;&|]*(&&|;)\s*(chmod\s+\+x|\.\/|sh\s|bash\s)`,
 ].join("|"), "i");
+// Files an agent reads as its own instructions.
+const AGENT_INSTRUCTIONS = /(^|\/)(SKILL\.md|AGENTS\.md|CLAUDE\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|copilot-instructions\.md)$|(^|\/)\.cursor\/rules\/[^/]+\.mdc?$|(^|\/)\.(claude|agents|codex|gemini)\/(skills|commands|agents)\/.+\.md$/i;
+const OVERRIDE = /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+)?(of\s+)?(your\s+|the\s+)?(previous|prior|above|earlier|system|original|user'?s?)\s+(instructions|rules|prompts?|messages|guidelines)\b/i;
+const CONCEAL = /\b(do not|don'?t|never)\s+(tell|inform|mention|show|reveal|disclose)\s+(this\s+|it\s+|anything\s+)?(to\s+)?the\s+user\b|\bwithout\s+(telling|informing)\s+the\s+user\b/i;
+// A line that says a download-and-run is blocked or forbidden describes a guard, it doesn't ask for one.
+const FORBIDS = /\b(block(ed|s)?|forbid(den)?|never run|don'?t run|do not run|not allowed|denied)\b/i;
+const EXFIL = /\b(curl|wget|Invoke-WebRequest|iwr|fetch)\b.*(\s-d\b|--data|--upload-file|\s-F\b|\s-T\b|-Method\s+Post|method:\s*["']POST).*(\.env\b|\.ssh|id_rsa|\.aws\/credentials|\$\{?[A-Z_]*(KEY|TOKEN|SECRET|PASSWORD)\b)/i;
+// A line that names the attack to warn about it ("if a page says 'ignore previous instructions', don't follow it") is advice.
+const WARNS = /["'`“”]|\b(if|when|e\.g\.|for example|such as|treat .* as data|never follow|don'?t follow|do not follow|watch out|be careful)\b/i;
+/** Agent instruction line: Gap for override, concealment or sending secrets out; Partial for download-and-run. Pure. */
+export function instructionsUnsafe(l: string): boolean | "partial" {
+  if (EXFIL.test(l)) return true;
+  if ((OVERRIDE.test(l) || CONCEAL.test(l)) && !WARNS.test(l)) return true;
+  return RUNS_REMOTE.test(l) && !FORBIDS.test(l) ? "partial" : false;
+}
 const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
+const LLM01: Control = { framework: "owasp-llm", id: "LLM01:2026", title: "Prompt Injection" };
 const A = (n: string, title: string): Control => ({ framework: "owasp-top10", id: `A${n}:2025`, title });
 const A01 = A("01", "Broken Access Control"), A02 = A("02", "Security Misconfiguration"), A03 = A("03", "Software Supply Chain Failures"),
   A04 = A("04", "Cryptographic Failures"), A05 = A("05", "Injection"), A06 = A("06", "Insecure Design"),
@@ -129,6 +145,15 @@ export const owaspRules: Rule[] = [
     extensions: [".json"], pathMatch: AGENT_CONFIG,
     seenIn: [{ title: "CVE-2025-59536: commands in a cloned repo's Claude Code project settings ran when it was opened (Check Point Research)", url: "https://research.checkpoint.com/2026/rce-and-api-token-exfiltration-through-claude-code-project-files-cve-2025-59536/" }],
     test: (l) => RUNS_REMOTE.test(l) }),
+  // Instruction files are now code an agent follows: skills, AGENTS.md, CLAUDE.md, Cursor and Copilot rules. A line that
+  // tells the agent to drop earlier instructions, hide something from the user, send secrets out, or download and run a
+  // script is acted on the next time any agent opens the repo (skill collections spread these widely).
+  rule({ id: "agent.instructions-unsafe", title: "Agent instructions that override, hide or download and run", status: "gap", severity: "high", controls: [A03, LLM01],
+    fix: "Remove the line, or rewrite it so the agent asks the user first. Install tools with a pinned, reviewed command instead of piping a download into a shell, and never tell an agent to keep something from the user.",
+    note: "Agents read these files as instructions and act on them with your permissions. Gap when the line overrides earlier instructions, hides something from the user or sends secrets out. Partial when it downloads and runs a script, which some setup guides do on purpose (CWE-829, OWASP LLM01).",
+    extensions: [".md", ".mdc", ""], pathMatch: AGENT_INSTRUCTIONS,
+    unseen: "Lintsure reads the line, not who wrote it or whether the file came from a trusted skill. Check where this file came from before an agent uses it.",
+    test: instructionsUnsafe }),
   rule({ id: "ci.action-unpinned", title: "Third-party GitHub Action not pinned to a commit", status: "partial", severity: "medium", controls: [A03],
     fix: "Pin third-party actions to a full commit SHA, with the version as a comment, for example uses: owner/action@<40-character sha> # v2.",
     note: "A tag like @v1 can be moved by the action's owner, or by whoever takes over their account (CWE-829).", extensions: YAML,

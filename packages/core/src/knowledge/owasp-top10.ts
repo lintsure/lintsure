@@ -32,7 +32,7 @@ export const owaspTop10: FrameworkKnowledge = {
       plain: "What is actually running: server and cloud settings, open ports, default accounts, security headers on real responses. These need a scan of the deployed system.",
       evidence: "Infrastructure configuration, a header scan and a cloud configuration review." },
     { ref: "A03:2025", title: "Software Supply Chain Failures", inCode: "partly",
-      rules: ["deps.unpinned-version", "deps.install-script", "agent.config-runs-remote-code", "ci.action-unpinned", "ci.prt-checkout-head", "ci.write-all-permissions", "ci.script-injection", "update.unverified-download"],
+      rules: ["deps.unpinned-version", "deps.install-script", "agent.config-runs-remote-code", "agent.instructions-unsafe", "ci.action-unpinned", "ci.prt-checkout-head", "ci.write-all-permissions", "ci.script-injection", "update.unverified-download"],
       plain: "The code you didn't write: dependencies, build tools and CI. Versions should be pinned, install scripts shouldn't fetch code, CI actions should be pinned, untrusted pull requests must not run with your secrets, and text from issues or pull requests must never become part of a CI command.",
       evidence: "Lockfiles, CI workflow files and the dependency update process." },
     { ref: "A03:2025 (known vulnerabilities)", title: "Dependencies with known vulnerabilities", inCode: "no",
