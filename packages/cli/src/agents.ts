@@ -85,6 +85,9 @@ export async function status(root: string): Promise<number> {
     const p = await plan(root, a);
     line(p.skip === "already set up", `${a.name}: Lintsure MCP server in ${a.file}`, p.skip && p.skip !== "already set up" ? p.skip : `Run: lintsure setup --agents ${a.id}`);
   }
+  const mcp = await mcpRoundTrip();
+  if (!mcp) line(null, "MCP server not installed next to this CLI: agents start it with npx, which downloads it on first use");
+  else line(!mcp.problems.length, mcp.problems.length ? `MCP server: ${mcp.problems.join("; ")}` : `MCP server ${mcp.version} answers: ${mcp.tools} tools, test call ok`);
   line(null, process.env.LINTSURE_API_KEY ? "LINTSURE_API_KEY is set: the plugin will use the hosted workspace" : "No LINTSURE_API_KEY: everything stays on this machine");
   return hasConfig && config.problems.length ? 2 : 0;
 }
@@ -105,4 +108,40 @@ export async function undo(root: string, agents: Agent[]): Promise<number> {
     else { await writeFile(path, JSON.stringify(json, null, 2) + "\n"); console.log(`- ${a.name}: removed the Lintsure entry from ${a.file}${backup ? ` (your original is still in ${a.file}.lintsure-backup)` : ""}`); }
   }
   return 0;
+}
+
+/** Starts the locally installed Lintsure MCP server and talks to it the way an agent would: initialize (version must
+ *  match these rules), tools/list, and one read-only call. Never downloads: when @lintsure/mcp isn't installed next
+ *  to this CLI, it says so. Returns problems found, or null when the server isn't installed here. */
+export async function mcpRoundTrip(timeoutMs = 15000): Promise<{ problems: string[]; tools: number; version: string } | null> {
+  const { createRequire } = await import("node:module");
+  const { spawn } = await import("node:child_process");
+  let entry: string;
+  try {
+    const req = createRequire(import.meta.url), pkgPath = req.resolve("@lintsure/mcp/package.json");
+    const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+    entry = join(dirname(pkgPath), typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.["lintsure-mcp"] ?? "dist/src/index.js");
+  } catch { return null; }
+  const p = spawn(process.execPath, [entry], { stdio: ["pipe", "pipe", "ignore"] });
+  let buf = ""; const waiting = new Map<number, (m: any) => void>();
+  p.stdout.on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\n")) >= 0) { try { const m = JSON.parse(buf.slice(0, i)); waiting.get(m.id)?.(m); } catch { /* not ours */ } buf = buf.slice(i + 1); } });
+  let id = 0;
+  const call = (method: string, params: unknown) => new Promise<any>((res, rej) => {
+    const n = ++id, t = setTimeout(() => rej(new Error(`${method} took longer than ${timeoutMs / 1000}s`)), timeoutMs);
+    waiting.set(n, (m) => { clearTimeout(t); res(m); });
+    p.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: n, method, params }) + "\n");
+  });
+  const problems: string[] = []; let tools = 0, version = "";
+  try {
+    const init = await call("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "lintsure-status", version: RULES_VERSION } });
+    version = init.result?.serverInfo?.version ?? "";
+    if (version !== RULES_VERSION) problems.push(`MCP server is ${version || "unknown"}, the CLI is ${RULES_VERSION}: update both to the same version`);
+    p.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
+    tools = (await call("tools/list", {})).result?.tools?.length ?? 0;
+    if (!tools) problems.push("MCP server listed no tools");
+    const r = await call("tools/call", { name: "explain_rule", arguments: { ruleId: "pii.logged" } });
+    if (r.error || r.result?.isError || !r.result?.content?.length) problems.push("MCP server didn't answer a test call");
+  } catch (e) { problems.push(e instanceof Error ? e.message : String(e)); }
+  finally { p.kill(); }
+  return { problems, tools, version };
 }

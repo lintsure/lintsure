@@ -22,6 +22,7 @@ assert.equal(readFileSync(join(T, ".vscode/mcp.json"), "utf8"), "// comment\n{}"
 assert.match(run("setup", T, "--yes"), /Cursor: already set up/);
 const doc = run("status", T);
 assert.match(doc, /ok +Cursor: Lintsure MCP server/);
+assert.match(doc, /ok +MCP server \d+\.\d+\.\d+ answers: \d+ tools, test call ok/);
 assert.throws(() => run("setup", T, "--agents", "nope"));
 // A second --yes run must not overwrite the first backup (it holds the user's original).
 writeFileSync(join(T, ".cursor/mcp.json.lintsure-backup"), "ORIGINAL");
