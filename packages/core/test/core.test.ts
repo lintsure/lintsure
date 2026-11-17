@@ -655,3 +655,18 @@ test("env files not ignored: Gap with a secret, Partial with public settings, qu
   assert.deepEqual(envNotIgnored(gi, "", { ".env.example": "SECRET_KEY=changeme-please" }), []);
   assert.deepEqual(envNotIgnored(["!.env.example"], "", { ".env": "A=1" }), [{ line: 1, status: "partial" }]);
 });
+
+test("patch fixes: exact changes only where the fix is unambiguous", async () => {
+  const t = (id: string, l: string) => rules.find((r) => r.id === id)!.patch!(l);
+  assert.equal(t("transport.tls-verify-off", "requests.get(url, verify=False)"), "requests.get(url, verify=True)");
+  assert.equal(t("transport.tls-verify-off", "https.Agent({ rejectUnauthorized: false })"), "https.Agent({ rejectUnauthorized: true })");
+  assert.equal(t("transport.tls-verify-off", "process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'"), "process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'");
+  assert.equal(t("session.cookie-insecure", "res.cookie('sid', v, { httpOnly: false, secure: false })"), "res.cookie('sid', v, { httpOnly: true, secure: true })");
+  const r = await scan(root);
+  const env = r.findings.find((f) => f.ruleId === "release.env-not-ignored")!;
+  assert.equal(env.patch?.old, null);
+  assert.match(env.patch!.text, /^# .*\n\.env\n/);
+  const maps = r.findings.find((f) => f.ruleId === "build.sourcemaps-public")!;
+  assert.match(maps.patch!.text, /productionBrowserSourceMaps: false/);
+  assert.ok(r.findings.filter((f) => f.patch && f.patch.old != null).every((f) => f.patch!.text !== f.patch!.old));
+});

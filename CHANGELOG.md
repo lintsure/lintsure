@@ -14,6 +14,7 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **`lintsure setup`** adds the Lintsure MCP server to the agents a project uses (Claude Code, Cursor, VS Code, Gemini CLI). It shows the change first, writes only with `--yes`, backs up files it edits, pins the MCP version and leaves files with comments alone.
 - **`lintsure doctor`** checks Node, `lintsure.config.yaml`, rule packs, `.lintsure/rules.yml` and which agents have the MCP server, without printing any secret.
 - **`plan_checks` MCP tool:** describe a feature before building it and get the checks it is likely to meet, with how to avoid each. Word matching on the description, not a code review.
+- **Exact fixes:** where the fix is unambiguous, a finding carries the exact change, shown as a diff in the report, as `patch` in JSON and as SARIF `fixes` that editors and code scanning can offer. First rules: env lines for `.gitignore`, Next.js browser source maps off, TLS checks back on (`verify=True`, `rejectUnauthorized: true`), and Secure/HttpOnly on session cookies. Lintsure never writes it; a person approves it.
 - **Docs inside the package:** `@lintsure/core` now ships `docs/` (every rule, every framework, how agents should use the results), generated from the code on every build, so agents can read them offline.
 - The MCP server is tested with bad input (wrong types, unknown tools, oversized text) and its tool list is kept under a size budget, since agents read it every session.
 

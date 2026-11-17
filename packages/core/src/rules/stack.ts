@@ -122,13 +122,15 @@ export const stackRules: Rule[] = [
     note: "Public source maps let anyone read your original front-end code, comments and file structure, which makes other weaknesses easier to find. Marked Partial: some teams publish them on purpose.", extensions: CODE,
     // Only Next.js's browser source maps: Vite's sourcemap: true is normal in libraries and CLIs (field test: 5 false alarms).
     fileName: /^next\.config\./,
-    test: (l) => /productionBrowserSourceMaps\s*:\s*true/.test(l) }),
+    test: (l) => /productionBrowserSourceMaps\s*:\s*true/.test(l),
+    patch: (l) => l.replace(/productionBrowserSourceMaps\s*:\s*true/, "productionBrowserSourceMaps: false") }),
   rule({ id: "release.env-not-ignored", title: "Env files not kept out of git", status: "partial", severity: "medium", controls: [GDPR32, A02],
     fix: "Add .env and .env.* to .gitignore (keep !.env.example if you share one), then check `git ls-files` for env files already committed and rotate any secret keys they held.",
     note: "The project keeps settings in .env files, but .gitignore has no line for them, so the next `git add .` can publish them. Marked Gap when a file holds a secret-looking value (a key, token or password without a public prefix such as VITE_ or NEXT_PUBLIC_). Partial when only public settings are in it. Example and template files (.env.example) don't count.",
     unseen: "Lintsure reads files, not git, so it can't tell whether the env file is already committed. Check with git ls-files.",
     extensions: [""], fileName: /^\.gitignore$/, pathMatch: /^\.gitignore$/,
     sharedFiles: /(^|\/)\.env(\.[\w.-]+)?$/,
+    insert: "# Local settings and keys (added by Lintsure, review before committing)\n.env\n.env.*\n!.env.example\n",
     fileTest: envNotIgnored }),
 ];
 

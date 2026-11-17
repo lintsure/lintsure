@@ -30,6 +30,10 @@ export function toSarif(r: Report, version: string) {
         locations: [{ physicalLocation: { artifactLocation: { uri: f.file }, region: { startLine: f.line } } }],
         ...(f.unseen ? { properties: { "lintsure/unseen": f.unseen } } : {}),
         partialFingerprints: { "lintsure/v1": f.fingerprint },
+        // SARIF fixes: replace the whole flagged line, or insert before it. Editors and code scanning can offer it.
+        ...(f.patch ? { fixes: [{ description: { text: `${f.proposal.what} (needs your approval)` }, artifactChanges: [{ artifactLocation: { uri: f.file }, replacements: [{
+          deletedRegion: f.patch.old == null ? { startLine: f.patch.line, startColumn: 1, endLine: f.patch.line, endColumn: 1 } : { startLine: f.patch.line, startColumn: 1, endLine: f.patch.line, endColumn: f.patch.old.length + 1 },
+          insertedContent: { text: f.patch.text } }] }] }] } : {}),
         ...(f.change ? { baselineState: f.change } : {}),
         ...(f.accepted && !f.accepted.expired ? { suppressions: [{ kind: "external", justification: `${f.accepted.reason} (accepted by ${f.accepted.by}, ${f.accepted.date})` }] } : {}),
       })),

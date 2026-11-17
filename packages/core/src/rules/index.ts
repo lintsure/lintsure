@@ -181,6 +181,8 @@ export const rules: Rule[] = [
     note: "With checks off, anyone on the network path can read or change the traffic.",
     extensions: [...CODE, ".env"],
     test: (l) => /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|\b(requests|httpx|session|client|Client|AsyncClient|urlopen)\b.*\bverify\s*=\s*False|InsecureSkipVerify\s*:\s*true|verify_mode\s*=\s*ssl\.CERT_NONE|cert_reqs\s*=\s*ssl\.CERT_NONE/.test(l), // naming CERT_NONE in a settings map isn't switching it on
+    // Only the switches with one safe opposite; env vars and ssl modes need a person.
+    patch: (l) => l.replace(/rejectUnauthorized(\s*):(\s*)false/, "rejectUnauthorized$1:$2true").replace(/\bverify(\s*)=(\s*)False\b/, "verify$1=$2True").replace(/InsecureSkipVerify(\s*):(\s*)true/, "InsecureSkipVerify$1:$2false"),
     ...DRAFT,
   },
   {
@@ -247,6 +249,7 @@ export const rules: Rule[] = [
       return /\b(res|response|reply|ctx|cookies?)\.(cookie|set|setCookie)\s*\(|Set-Cookie|\bcookie\s*:\s*\{|cookieOptions|serialize\(|SESSION_COOKIE/i.test(near)
         && !/csrf|xsrf/i.test(near) && !/\b(smtp|createTransport|nodemailer|ignoreTLS|requireTLS)\b/i.test(near) ? [i + 1] : [];
     }),
+    patch: (l) => l.replace(/\b(httpOnly|secure)(\s*):(\s*)false\b/g, "$1$2:$3true").replace(/(SESSION_COOKIE_(?:SECURE|HTTPONLY)\s*=\s*)False\b/, "$1True"),
     ...DRAFT,
   },
   {

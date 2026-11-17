@@ -26,6 +26,11 @@ export interface Rule {
   /** Optional: public incidents where this kind of problem was exploited, with a primary source.
    *  `node scripts/check-sources.mjs` checks every link still answers. */
   seenIn?: { title: string; url: string }[];
+  /** Optional: the fixed version of a flagged line, when the fix is unambiguous; null when this line can't be fixed
+   *  mechanically. Shown as a proposed change; Lintsure never writes it. Pure. */
+  patch?(line: string): string | null;
+  /** Optional: lines to insert before the flagged line (for file rules that point at line 1, like .gitignore). */
+  insert?: string;
   /** Optional: only files whose name matches, e.g. /^package\.json$/ so lockfiles are skipped. */
   fileName?: RegExp;
   /** Optional: only files whose path (relative to the scanned folder) matches, e.g. /(^|\/)supabase\//. */
@@ -91,6 +96,9 @@ export interface Finding {
   fingerprint: string;
   /** Partial findings only: what Lintsure couldn't see, so a person knows what to check. */
   unseen?: string;
+  /** A change Lintsure can state exactly: replace line `line` (whose text was `old`) with `text`, or insert `text`
+   *  before it when `old` is null. It still needs a person's approval. */
+  patch?: Patch;
   /** Set when .lintsure/baseline.json exists: whether the finding is new since then. */
   change?: "new" | "unchanged";
   /** Set when a person accepted this finding in .lintsure/accepted.yaml. */
@@ -133,3 +141,5 @@ export interface Report {
   /** The dated record of this run: scope, what applies and why, check points, results by control, counts. */
   record?: import("./record.js").CheckRecord;
 }
+
+export interface Patch { line: number; old: string | null; text: string }

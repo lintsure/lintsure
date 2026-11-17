@@ -5,7 +5,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, relative, sep } from "node:path";
 import { outsideFor } from "./knowledge/index.js";
 import { rules } from "./rules/index.js";
-import type { Finding, FrameworkId, Report, Severity } from "./types.js";
+import type { Finding, FrameworkId, Patch, Report, Severity } from "./types.js";
 import { proposalFor } from "./guidance.js";
 import { applyReview, fingerprint, isOpen } from "./review.js";
 export * from "./review.js";
@@ -118,6 +118,12 @@ export async function readConfig(root: string): Promise<Config> {
 
 // Dependencies, build output and caches: generated code, not code you wrote.
 // Also other people's code copied in (vendor, third_party): not code you wrote (field test, 139 repos).
+/** The exact change for a finding, when its rule knows one. Pure. */
+function patchFor(r: { patch?(l: string): string | null; insert?: string }, line: number, old: string): { patch?: Patch } {
+  if (r.insert) return { patch: { line, old: null, text: r.insert } };
+  const text = r.patch?.(old);
+  return text != null && text !== old ? { patch: { line, old, text } } : {};
+}
 // What a Partial finding can't show. Rules read lines and statements, not how data moves through the program.
 const UNSEEN = "Lintsure reads this code on its own. It can't see where the values come from or whether they're checked elsewhere, so a person needs to look.";
 const UNSEEN_TESTS = "This is in a test, fixture or example file. Lintsure can't tell whether it ships or is a throwaway value.";
@@ -379,6 +385,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         proposal: proposalFor({ file, line, title: r.title, fix: r.fix, note: r.note, controls }),
         fingerprint: fingerprint(r.id, file, lines[line - 1] ?? ""),
         ...(status === "partial" ? { unseen: inTests && !TOOLING_RULES.has(r.id) ? UNSEEN_TESTS : r.unseen ?? UNSEEN } : {}),
+        ...patchFor(r, line, lines[line - 1] ?? ""),
       });
     };
     // Tests, fixtures, examples and docs are full of fake tokens and planted examples: only secret rules look at them,
@@ -530,6 +537,8 @@ export function toMarkdown(r: Report): string {
     ...(rules.find((x) => x.id === f.ruleId)?.seenIn ?? []).map((s) => `- Seen in a real incident: ${s.title} (${s.url})`), "",
     `**${PROPOSAL_HEADING}**`, "",
     `- Where: \`${f.proposal.where}\``, `- What: ${f.proposal.what}`, `- Why: ${f.proposal.why}`, `- Benefit: ${f.proposal.benefit}`, "",
+    ...(f.patch ? [`Exact change (still needs your approval), line ${f.patch.line}:`, "", "```diff",
+      ...(f.patch.old != null ? [`- ${f.patch.old}`] : []), ...f.patch.text.replace(/\n$/, "").split("\n").map((t) => `+ ${t}`), "```", ""] : []),
   );
   if (r.baseline?.fixed.length) lines.push(`## Fixed since baseline (${r.baseline.fixed.length})`, "", ...r.baseline.fixed.map((x) => `- ${x.ruleId} in \`${x.file}\``), "");
   lines.push(`## Met (${r.met.length})`, "", ...r.met.map((m) => `- ${m.title} · ${ctl(m.controls)}`), "");
