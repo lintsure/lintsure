@@ -87,7 +87,7 @@ Run it on every pull request with **[lintsure/action](https://github.com/lintsur
 
 | Path | What |
 |---|---|
-| `packages/core` | Finding schema, 71 rules, framework knowledge, scan, config reader, report writer, policy fingerprint, pack loader, safety wording |
+| `packages/core` | Finding schema, 72 rules, framework knowledge, scan, config reader, report writer, policy fingerprint, pack loader, safety wording |
 | `packages/cli` | The `lintsure` command: `scan`, `baseline`, `init`, `info`, `setup`, `status` |
 | `packages/mcp` | MCP server: `scan`, `plan_checks`, `classify`, `explain_framework`, `explain_rule` |
 | `fixtures/` | Planted problems, near misses and a config example used by the tests |

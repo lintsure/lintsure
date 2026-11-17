@@ -40,6 +40,7 @@ test("known findings stay put", async () => {
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:5",
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:6",
     "release.env-not-ignored@.gitignore:1",
+    "auth.no-rate-limit@app/api/login/route.ts:3",
     "ai.call-not-logged@src/ai.ts:3",
     "llm.no-output-limit@src/ai.ts:3",
     "ai.automated-decision@src/ai.ts:4",
@@ -646,7 +647,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "2E91-639A");
+  assert.equal(r.policy?.fingerprint, "9178-62BF");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {

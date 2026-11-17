@@ -805,5 +805,28 @@
       "    \"deny\": [\"Bash(rm -rf *)\"]",
       "        \"matcher\": \"Bash\","
     ]
+  },
+  "auth.no-rate-limit": {
+    "flag": [
+      {
+        "line": "export async function POST(req: Request) {\n  const { email, password } = await req.json();\n  return check(email, password);\n}",
+        "status": "partial"
+      },
+      {
+        "line": "router.post(\"/login\", async (req, res) => {\n  res.json(await login(req.body));\n});",
+        "status": "partial"
+      },
+      {
+        "line": "export const actions = {\n  default: async ({ request }) => resetPassword(await request.formData())\n};",
+        "status": "partial"
+      }
+    ],
+    "pass": [
+      "import { Ratelimit } from \"@upstash/ratelimit\";\nexport async function POST(req: Request) { return limited(req); }",
+      "const { error } = await supabase.auth.signInWithPassword({ email, password });\nexport async function POST() { return Response.json({ error }); }",
+      "export async function GET() { return Response.json({ page: \"login\" }); }",
+      "import rateLimit from \"express-rate-limit\";\nrouter.post(\"/login\", rateLimit({ max: 5 }), handler);",
+      "const styles = StyleSheet.create({\n  actions: { flexDirection: \"row\" },\n});"
+    ]
   }
 }

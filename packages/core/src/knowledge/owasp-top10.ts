@@ -57,7 +57,7 @@ export const owaspTop10: FrameworkKnowledge = {
       plain: "Thinking through how a feature could be misused before building it: rate limits, business rule abuse, trust boundaries. Code checks can't show whether this happened.",
       evidence: "Threat models or security design reviews for key features." },
     { ref: "A07:2025", title: "Authentication Failures", inCode: "partly",
-      rules: ["auth.hardcoded-password", "jwt.no-expiry", "jwt.unverified", "config.default-secret-key", "session.cookie-insecure", "secret.in-source", "transport.tls-verify-off"],
+      rules: ["auth.hardcoded-password", "jwt.no-expiry", "jwt.unverified", "config.default-secret-key", "session.cookie-insecure", "secret.in-source", "transport.tls-verify-off", "auth.no-rate-limit"],
       plain: "Logins and sessions that hold up: no passwords in code, strong secrets, tokens that expire and are verified, and session cookies protected from scripts and plain HTTP.",
       evidence: "Login, session and token settings." },
     { ref: "A07:2025 (login protections)", title: "Brute-force protection, MFA and account recovery", inCode: "no",

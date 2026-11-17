@@ -7,7 +7,7 @@ const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 const GDPR32: Control = { framework: "gdpr", id: "Art. 32", title: "Security of processing" };
 const OW = (n: string, title: string): Control => ({ framework: "owasp-top10", id: `A${n}:2025`, title });
-const A01 = OW("01", "Broken Access Control"), A02 = OW("02", "Security Misconfiguration"), A04 = OW("04", "Cryptographic Failures");
+const A01 = OW("01", "Broken Access Control"), A02 = OW("02", "Security Misconfiguration"), A04 = OW("04", "Cryptographic Failures"), A07 = OW("07", "Authentication Failures");
 const rule = (r: Omit<Rule, "mappedBy" | "reviewedAt">): Rule => ({ ...r, ...DRAFT });
 
 // Tables in schemas Supabase manages itself; RLS on these is not the app's job.
@@ -78,6 +78,13 @@ export function publicSecretName(n: string): boolean {
   return SECRET_SERVICE.test(n) && /KEY|TOKEN/.test(n);
 }
 
+// Route files for sign-in, sign-up, one-time codes and password resets (Next.js, SvelteKit, Remix, Express-style folders).
+const AUTH_ROUTE = /(^|\/)(api\/|app\/|routes\/|pages\/api\/|server\/|functions\/)(.*\/)?[^/]*(login|log-in|signin|sign-in|signup|sign-up|(?<![\w-])register(?![\w-])|otp|one-time|magic-link|reset-password|forgot-password|password-reset|verify-code|2fa|mfa)[^/]*(\/[^/]+)?\.[cm]?[jt]s$/i;
+const LIMITER = /rate.?limit|ratelimiter|throttl|slowDown|slow-down|@upstash\/ratelimit|rate-limiter-flexible|@arcjet|limiter\b|express-brute|bottleneck/i;
+// Auth providers that limit sign-in attempts on their own servers: the route only hands the request over.
+const PROVIDER_AUTH = /\bauth\.signInWith\w*\(|\bauth\.signUp\(|\bauth\.resetPasswordForEmail\(|@clerk\/|\bclerkClient\b|auth0|firebase\/auth|signInWithEmailAndPassword|cognito|@aws-amplify\/auth|stytch|workos/i;
+const HANDLES_POST = /export\s+(async\s+)?(function|const)\s+POST\b|\b(app|router)\.post\s*\(|\bexport\s+const\s+actions\s*[:=]|method\s*===?\s*["']POST["']|export\s+(const|async function)\s+action\b|export\s*\{[^}]*\bPOST\b/;
+
 export const stackRules: Rule[] = [
   rule({ id: "supabase.rls-disabled", title: "Database table without row level security", status: "partial", severity: "high", controls: [GDPR32, A01],
     fix: "Add `alter table <name> enable row level security;` and a policy that limits each row to its owner, for example `using (auth.uid() = user_id)`.",
@@ -132,7 +139,24 @@ export const stackRules: Rule[] = [
     sharedFiles: /(^|\/)\.env(\.[\w.-]+)?$/,
     insert: "# Local settings and keys (added by Lintsure, review before committing)\n.env\n.env.*\n!.env.example\n",
     fileTest: envNotIgnored }),
+  rule({ id: "auth.no-rate-limit", title: "Login or password reset with no rate limit in sight", status: "partial", severity: "medium", controls: [A07],
+    fix: "Limit how often one IP or account can try: a middleware limiter (for example @upstash/ratelimit, express-rate-limit or rate-limiter-flexible), or a firewall rule for this path. Lock or slow down after repeated failures.",
+    note: "Without a limit, anyone can try passwords, one-time codes or reset links as fast as they like (CWE-307). Partial: a firewall, an API gateway or your auth provider may already limit this outside the code.",
+    unseen: "Lintsure looked for a rate limiter in this file, middleware and package.json. It can't see limits set in a firewall, gateway or hosting dashboard.",
+    confidence: "medium",
+    extensions: CODE, pathMatch: AUTH_ROUTE, unlessPath: /\.(test|spec)\.[cm]?[jt]sx?$/,
+    sharedFiles: /(^|\/)(package\.json|middleware\.[cm]?[jt]s|vercel\.json)$/,
+    fileTest: authWithoutRateLimit }),
 ];
+
+/** Auth route file: Partial on the line that handles POST, when neither this file, middleware nor package.json shows a
+ *  rate limiter and the route doesn't hand sign-in to a provider that limits it. Pure. */
+export function authWithoutRateLimit(lines: string[], _shared?: string, files: Record<string, string> = {}): Array<{ line: number; status: "partial" }> {
+  const text = lines.join("\n");
+  if (LIMITER.test(text) || PROVIDER_AUTH.test(text) || Object.values(files).some((t) => LIMITER.test(t))) return [];
+  const i = lines.findIndex((l) => HANDLES_POST.test(l));
+  return i < 0 ? [] : [{ line: i + 1, status: "partial" }];
+}
 
 // A secret-looking setting: the name says key, secret, token or password and it has no browser-public prefix.
 const ENV_SECRET = /^\s*(?:export\s+)?(?!(?:VITE|NEXT_PUBLIC|REACT_APP|EXPO_PUBLIC|PUBLIC|NUXT_PUBLIC|GATSBY)_)(?![A-Z0-9_]*(?:PUBLISHABLE|ANON|PUBLIC))[A-Z0-9_]*(KEY|SECRET|TOKEN|PASSWORD|PRIVATE)[A-Z0-9_]*\s*=\s*["']?[^\s"'#]{8,}/m;
