@@ -24,6 +24,7 @@ export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
 export { checksFor } from "./plan.js";
 import { loadPacks, packsLoaded } from "./packs.js";
+import { buildGraph, reachOf } from "./reach.js";
 export const RULES_VERSION = "0.3.11";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
@@ -442,6 +443,21 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const seen = new Set<string>();
   const unique = findings.filter((f) => { const k = `${f.ruleId}|${f.file}|${f.line}`; return seen.has(k) ? false : (seen.add(k), true); })
     .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.ruleId.localeCompare(b.ruleId));
+  // Reachability for findings in JS/TS: read the project's own JS/TS files once (skipping very large ones) and follow
+  // imports back to entry points. It adds context; it doesn't change any status.
+  const JSTS = /\.(m|c)?[jt]sx?$/;
+  if (unique.some((f) => JSTS.test(f.file))) {
+    const code: Record<string, string> = {};
+    for (const [k, abs] of all.entries()) if (JSTS.test(paths[k]) && !/\.d\.ts$/.test(paths[k])) {
+      const t = await readFile(abs, "utf8").catch(() => ""); if (t.length < 500_000) code[paths[k]] = t;
+    }
+    const dirOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+    const tsconfigs: Record<string, string> = {};
+    for (const [k, abs] of all.entries()) if (/(^|\/)tsconfig\.json$/.test(paths[k])) tsconfigs[dirOf(paths[k])] = await readFile(abs, "utf8").catch(() => "");
+    const pkgDirs = paths.filter((p) => /(^|\/)package\.json$/.test(p)).map(dirOf);
+    const graph = buildGraph(code, tsconfigs, pkgDirs.length ? pkgDirs : [""]);
+    for (const f of unique) if (JSTS.test(f.file)) f.reach = reachOf(graph, f.file);
+  }
   // A rule that fired still counts as checked (not Met) even when its findings are held back or outside the diff.
   const hit = new Set(unique.map((f) => f.ruleId));
   for (const f of unique) { const s = config.rules[f.ruleId]; if (s && s !== "off") f.severity = s; }
@@ -534,7 +550,8 @@ export function toMarkdown(r: Report): string {
     `### ${f.id} · ${f.status === "gap" ? "Finding" : "Observation"} (${LABEL[f.status]}) · \`${f.file}:${f.line}\`${f.change === "new" ? " · New since baseline" : ""}`, `**${f.title}** · Risk level: ${f.severity}`, "",
     ...(f.accepted ? [acceptedLine(f.accepted), ""] : []),
     `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, ...(f.unseen ? [`- What Lintsure couldn't see: ${f.unseen}`] : []),
-    ...(rules.find((x) => x.id === f.ruleId)?.seenIn ?? []).map((s) => `- Seen in a real incident: ${s.title} (${s.url})`), "",
+    ...(rules.find((x) => x.id === f.ruleId)?.seenIn ?? []).map((s) => `- Seen in a real incident: ${s.title} (${s.url})`),
+    ...(f.reach ? [`- Reached from: ${f.reach.status === "entry" ? "this file is an entry point (route, handler or function)" : f.reach.status === "reachable" ? f.reach.via!.join(" → ") : f.reach.status === "unknown" ? "unknown (an import Lintsure couldn't resolve may lead here)" : "no route, handler or function Lintsure knows imports this file"}`] : []), "",
     `**${PROPOSAL_HEADING}**`, "",
     `- Where: \`${f.proposal.where}\``, `- What: ${f.proposal.what}`, `- Why: ${f.proposal.why}`, `- Benefit: ${f.proposal.benefit}`, "",
     ...(f.patch ? [`Exact change (still needs your approval), line ${f.patch.line}:`, "", "```diff",

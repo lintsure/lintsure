@@ -682,3 +682,26 @@ test("the numbers the README states match the code", async () => {
   assert.equal(Number(stated![1]), rules.length, `README says ${stated![1]} rules, the engine has ${rules.length}`);
   for (const f of ["eu-ai-act", "gdpr", "owasp-top10", "owasp-llm", "cwe-top25", "cra"]) assert.ok(knowledge.some((k) => k.id === f));
 });
+
+test("reachability: routes reach helpers through relative and tsconfig-alias imports; unknown when an import can't be resolved", async () => {
+  const { buildGraph, reachOf, resolveSpec, tsAliases } = await import("../src/reach.js");
+  const files = {
+    "app/api/users/route.ts": "import { getUser } from '@/lib/users';\nexport async function GET() { return getUser(); }\n",
+    "src/lib/users.ts": "import { query } from './db.js';\nexport const getUser = () => query('x');\n",
+    "src/lib/db.ts": "export const query = (s: string) => s;\n",
+    "src/lib/orphan.ts": "export const unused = 1;\n",
+    "src/lib/maybe.ts": "export const m = 1;\n",
+    "src/other.ts": "import { m } from './lib/mabye-typo';\nimport x from 'react';\nconst y = require(name);\n",
+  };
+  const g = buildGraph(files, '{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./src/*"] } } } // comment');
+  assert.equal(reachOf(g, "app/api/users/route.ts").status, "entry");
+  const db = reachOf(g, "src/lib/db.ts");
+  assert.equal(db.status, "reachable");
+  assert.deepEqual(db.via, ["app/api/users/route.ts", "src/lib/users.ts", "src/lib/db.ts"]);
+  assert.equal(reachOf(g, "src/lib/orphan.ts").status, "unreachable");
+  assert.equal(resolveSpec("src/a.ts", "react", new Set(), tsAliases(null)), "external");
+  assert.equal(resolveSpec("src/a.ts", "@/missing", new Set(), tsAliases(null)), null);
+  assert.equal(tsAliases("{ broken").paths.length, 0);
+  const g2 = buildGraph({ "src/a.ts": "import { m } from './nope/maybe';\n", "src/lib/maybe.ts": "export const m = 1;\n" }, null);
+  assert.equal(reachOf(g2, "src/lib/maybe.ts").status, "unknown");
+});

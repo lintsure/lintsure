@@ -101,6 +101,9 @@ export interface Finding {
   /** A change Lintsure can state exactly: replace line `line` (whose text was `old`) with `text`, or insert `text`
    *  before it when `old` is null. It still needs a person's approval. */
   patch?: Patch;
+  /** JS/TS files: whether an entry point (route, API handler, middleware, server action, function) reaches this file
+   *  through the project's imports, with the chain. "unknown" when an import Lintsure couldn't resolve might lead here. */
+  reach?: { status: "entry" | "reachable" | "unreachable" | "unknown"; via?: string[] };
   /** Set when .lintsure/baseline.json exists: whether the finding is new since then. */
   change?: "new" | "unchanged";
   /** Set when a person accepted this finding in .lintsure/accepted.yaml. */
