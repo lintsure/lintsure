@@ -46,6 +46,17 @@ gap      src/users.ts:5    Personal data written to logs
 - **No fake green ticks.** Only the Checker can mark a control Met, and Met only means the rules found no problem in the files they read.
 - **Never decides for you.** Every report and every MCP reply ends with the disclaimer and the next steps a person still needs to take. The MCP server tells coding agents not to call you compliant, certified or ready, not to make decisions, and to ask before changing anything. Tests check that Lintsure's own wording never claims a verdict.
 
+## What it doesn't do
+
+We'd rather say this up front than have you find out later:
+
+- **Not a pentest.** It reads source files. It doesn't run your app, send requests to a live site or test a deployed server.
+- **Not a full code analyzer.** Rules are pattern checks on lines and statements, plus a few checks across files. They don't follow data through your whole program, so some findings are marked Partial for a person to confirm.
+- **Not a dependency scanner.** It flags risky install patterns and unpinned versions, not known vulnerabilities in the packages you use.
+- **Not an audit or legal advice.** A Met control means the rules found no problem in the files they read, nothing more.
+
+**Using it with an AI agent:** Lintsure is a defensive review of code you own. If you ask an agent to run it, say that ("review my own repo against OWASP Top 10 and fix what you find"), which describes the work accurately.
+
 ## Try it
 
 > **Status: Beta.** All rules are in Beta: their mappings are our own reading of the public texts, not independently reviewed. 
