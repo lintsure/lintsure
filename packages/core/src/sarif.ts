@@ -21,6 +21,8 @@ export function toSarif(r: Report, version: string) {
             properties: { tags: rule.controls.map((c) => `${c.framework} ${c.id}`), "security-severity": SCORE[rule.severity], precision: rule.confidence === "medium" ? "medium" : "high" } };
         }),
       } },
+      // The policy this run used, so a code-scanning alert can be traced to the exact rules in force.
+      ...(r.policy ? { properties: { "lintsure/policyFingerprint": r.policy.fingerprint, "lintsure/policySha256": r.policy.sha256, "lintsure/rulesActive": r.policy.rulesActive, "lintsure/repoRules": r.policy.repoRules, "lintsure/workspaceRules": r.policy.workspaceRules } } : {}),
       results: r.findings.map((f) => ({
         ruleId: f.ruleId,
         level: f.severity === "high" ? "error" : f.severity === "medium" ? "warning" : "note",

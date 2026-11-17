@@ -2,7 +2,7 @@
 // npx lintsure scan [path] [options]      npx lintsure baseline [path]
 // Writes reports into the current folder. Never sends anything over the network.
 import { execFileSync } from "node:child_process";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
@@ -149,7 +149,15 @@ async function main(argv: string[]) {
     try { changed = { base, lines: parseDiff(execFileSync("git", ["diff", "-U0", "--no-color", "--no-ext-diff", "--relative", base, "--"], { cwd: path, encoding: "utf8", maxBuffer: 64 << 20 })) }; }
     catch { console.error(`--diff: git could not compare with "${base}". Fetch it first (for example git fetch origin main).`); return 2; }
   }
-  const report = await scan(path, wanted ?? config.frameworks ?? ALL_FRAMEWORKS, { why, source, all: rest.includes("--all") || undefined, changed });
+  // LINTSURE_WORKSPACE_RULES: path to a JSON file of account rules the caller already has (the plugin writes it).
+  // Read only to hash into the policy fingerprint; the CLI never fetches them. A file it can't read is an error, not a silent skip.
+  let workspaceRules: unknown;
+  const wsFile = process.env.LINTSURE_WORKSPACE_RULES;
+  if (wsFile) {
+    try { workspaceRules = JSON.parse(await readFile(wsFile, "utf8")); }
+    catch { console.error(`Couldn't read workspace rules from LINTSURE_WORKSPACE_RULES (${wsFile}).`); process.exit(2); }
+  }
+  const report = await scan(path, wanted ?? config.frameworks ?? ALL_FRAMEWORKS, { why, source, all: rest.includes("--all") || undefined, changed, workspaceRules });
   const date = new Date().toISOString().slice(0, 10);
 
   if (cmd === "baseline") {
@@ -176,7 +184,7 @@ async function main(argv: string[]) {
   const open = report.findings.filter(isOpen);
   const n = (s: string) => open.filter((f) => f.status === s).length;
   const accepted = report.findings.length - open.length;
-  if (report.record) console.log(`Record ${report.record.id} · ${report.record.createdAt.replace("T", " ").slice(0, 16)} UTC · ${report.record.counts.checkPoints} check points`);
+  if (report.record) console.log(`Record ${report.record.id} · ${report.record.createdAt.replace("T", " ").slice(0, 16)} UTC · ${report.record.counts.checkPoints} check points${report.policy ? ` · Policy #${report.policy.fingerprint}` : ""}`);
   // A check mark only when nothing is open: "✓ 3 gaps" read as a pass.
   console.log(`${open.length ? "!" : "✓"} ${open.length} open findings · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
   if (report.diffBase) console.log(`  Only lines changed since ${report.diffBase}`);

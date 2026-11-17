@@ -6,6 +6,18 @@ import type { Control, Rule } from "../types.js";
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 const MARKUP = [...CODE, ".html", ".vue", ".svelte", ".astro", ".jinja", ".j2"];
 const YAML = [".yml", ".yaml"];
+// Files whose commands an agent or editor runs by itself: Claude Code settings, MCP server lists, Cursor, VS Code, Gemini CLI.
+const AGENT_CONFIG = /(^|\/)(\.claude\/settings(\.local)?\.json|\.mcp\.json|\.cursor\/(mcp|hooks)\.json|\.vscode\/(tasks|mcp)\.json|\.gemini\/settings\.json)$/;
+// Download-and-run shapes: piped into a shell, run from $( ), process substitution, base64 into a shell, encoded PowerShell,
+// and download-then-execute chains.
+const RUNS_REMOTE = new RegExp([
+  String.raw`\b(curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^|]*\|\s*(sudo\s+)?(sh|bash|zsh|dash|python3?|node|iex|pwsh|powershell)\b`,
+  String.raw`\b(sh|bash|zsh)\s+(-c\s+)?[\\"']*\$\(\s*(curl|wget)\b`,
+  String.raw`\b(sh|bash|zsh)\s+<\(\s*(curl|wget)\b`,
+  String.raw`\bbase64\s+(-d|--decode)\b[^|]*\|\s*(sh|bash|zsh|python3?|node)\b`,
+  String.raw`\b(powershell|pwsh)\b.*\s-e(nc|ncodedcommand)?\s+[A-Za-z0-9+/=]{24,}`,
+  String.raw`\b(curl|wget)\b[^;&|]*(&&|;)\s*(chmod\s+\+x|\.\/|sh\s|bash\s)`,
+].join("|"), "i");
 const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 const A = (n: string, title: string): Control => ({ framework: "owasp-top10", id: `A${n}:2025`, title });
 const A01 = A("01", "Broken Access Control"), A02 = A("02", "Security Misconfiguration"), A03 = A("03", "Software Supply Chain Failures"),
@@ -108,6 +120,14 @@ export const owaspRules: Rule[] = [
     fix: "Avoid downloading and running code in preinstall or postinstall. Vendor the file or document a manual step.",
     note: "Code fetched at install time isn't pinned or reviewed and runs with the installer's permissions (CWE-829).", extensions: [".json"], fileName: /^package\.json$/,
     test: (l) => /"(pre|post)?install"\s*:\s*"[^"]*\b(curl|wget|Invoke-WebRequest)\b/.test(l) }),
+  // Agent settings that run commands on their own (Claude Code hooks, MCP servers, editor tasks). An attacker who can
+  // edit one of these files gets code run on every developer machine that opens the repo with that agent.
+  // Seen in the wild: GTIG AI Threat Tracker, Q4 2026 (a hook in .claude/settings.json that downloaded a backdoor).
+  rule({ id: "agent.config-runs-remote-code", title: "Agent config downloads and runs code", status: "gap", severity: "high", controls: [A03],
+    fix: "Don't download and run scripts from agent hooks, MCP server commands or editor tasks. Pin a reviewed local script or a versioned package instead, and review changes to these files like code.",
+    note: "Agents run these commands on their own, often at startup, with your user's permissions. A changed URL or script runs on every machine that opens the repo (CWE-829, CWE-494).",
+    extensions: [".json"], pathMatch: AGENT_CONFIG,
+    test: (l) => RUNS_REMOTE.test(l) }),
   rule({ id: "ci.action-unpinned", title: "Third-party GitHub Action not pinned to a commit", status: "partial", severity: "medium", controls: [A03],
     fix: "Pin third-party actions to a full commit SHA, with the version as a comment, for example uses: owner/action@<40-character sha> # v2.",
     note: "A tag like @v1 can be moved by the action's owner, or by whoever takes over their account (CWE-829).", extensions: YAML,

@@ -101,6 +101,9 @@ export interface Report {
   /** Bump when output format or rule behavior changes. */
   rulesVersion: string;
   frameworks: FrameworkId[];
+  /** The policy this run used: rules version, frameworks, active rules with their risk levels, rules switched off,
+   *  ignore paths, the show setting and the repo's .lintsure/rules.yml, hashed. Same code = same policy. Set by scan(). */
+  policy?: { fingerprint: string; sha256: string; rulesActive: number; /** Whether .lintsure/rules.yml was part of it. */ repoRules: boolean; /** Whether account (workspace) rules were passed in. */ workspaceRules: boolean };
   findings: Finding[];
   /** Rule ids that ran and found nothing: those controls are Met for the code checked. */
   met: { ruleId: string; title: string; controls: Control[] }[];

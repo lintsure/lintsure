@@ -1,5 +1,6 @@
 // Scout (file walk) + Checker (rules) + Auditor (dedupe, sort) + Officer (outside code).
 // No network calls anywhere in this package: a test enforces it.
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, relative, sep } from "node:path";
 import { outsideFor } from "./knowledge/index.js";
@@ -176,6 +177,8 @@ export function isNonShipping(file: string): boolean {
 }
 // Rules that also read test files. Not auth.hardcoded-password: test logins are fake by design (field test, 50 repos).
 const SECRET_RULES = new Set(["secret.in-source"]); // not config.default-secret-key: a test secret is a test value (review P19)
+// Rules that read agent tooling folders on purpose: an agent hook in .claude/ runs on real machines.
+const TOOLING_RULES = new Set(["agent.config-runs-remote-code"]);
 // Lines a person already reviewed. lintsure-ignore and the secret allowlist pragma count only in a comment and apply
 // to every rule. Other linters' markers (noqa, nosec, NOSONAR) don't hide secrets: `# noqa: E501` is about line length.
 const REVIEWED = /(#|\/\/|\/\*|--)\s*(lintsure-ignore|pragma:\s*allowlist secret)\b/;
@@ -270,6 +273,43 @@ export interface ScanOptions extends RecordOptions {
   all?: boolean;
   /** --diff: only report findings on these changed lines ("/"-separated paths, 1-based lines). */
   changed?: { base: string; lines: Record<string, number[]> };
+  /** Workspace rules from a Lintsure account, handed in by the caller (the plugin downloads them with an API key).
+   *  The scan never fetches anything; it only hashes what it is given into the policy fingerprint. */
+  workspaceRules?: unknown;
+}
+
+/** The repo's .lintsure/rules.yml (the Drift Guard's rules), normalized: comments, blank lines and trailing spaces dropped.
+ *  null when the file isn't there. */
+async function readRepoRules(root: string): Promise<string | null> {
+  try {
+    const text = await readFile(join(root, ".lintsure", "rules.yml"), "utf8");
+    return text.split(/\r?\n/).map((l) => l.replace(/\s+#.*$|^\s*#.*$/, "").trimEnd()).filter((l) => l.trim()).join("\n");
+  } catch { return null; }
+}
+
+/** JSON with object keys sorted at every level, so the same data always hashes the same. */
+const stable = (v: unknown): string => Array.isArray(v) ? `[${v.map(stable).join(",")}]`
+  : v && typeof v === "object" ? `{${Object.keys(v as object).sort().map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`).join(",")}}`
+  : JSON.stringify(v ?? null);
+
+/** The policy a scan ran under, as one short code. Same rules and settings give the same code on any machine;
+ *  any change (a rule switched off or re-rated, a framework, an ignore path, show: all, a new rules version) gives a new one.
+ *  `fingerprint` is the first 8 hex digits of `sha256`, shown as XXXX-XXXX. It names the policy; it doesn't sign anything. */
+export function policyFingerprint(p: { frameworks: string[]; rules: { id: string; severity: string }[]; rulesOff: string[]; ignore: string[]; show?: string; repoRules?: string | null; workspaceRules?: unknown }) {
+  const canon = JSON.stringify({
+    rulesVersion: RULES_VERSION,
+    frameworks: [...p.frameworks].sort(),
+    rules: [...p.rules].sort((a, b) => a.id.localeCompare(b.id)).map((r) => `${r.id}:${r.severity}`),
+    rulesOff: [...p.rulesOff].sort(),
+    ignore: [...p.ignore].sort(),
+    show: p.show ?? "default",
+    // The Drift Guard's .lintsure/rules.yml, comments and blank lines dropped, so only a real rule change moves the code.
+    repoRules: p.repoRules ?? null,
+    // Account (workspace) rules, when the caller passed them: key order doesn't matter, content does.
+    workspaceRules: p.workspaceRules == null ? null : stable(p.workspaceRules),
+  });
+  const sha256 = createHash("sha256").update(canon).digest("hex");
+  return { fingerprint: `${sha256.slice(0, 4)}-${sha256.slice(4, 8)}`.toUpperCase(), sha256, rulesActive: p.rules.length, repoRules: p.repoRules != null, workspaceRules: p.workspaceRules != null };
 }
 
 export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWORKS, opts: ScanOptions = {}): Promise<Report> {
@@ -345,7 +385,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     for (const s of multi) if (s.prose) for (let i = s.start; i <= s.end; i++) prose[i] = true;
     for (const r of relevant) {
       const secret = SECRET_RULES.has(r.id);
-      if (inTests && !secret) continue;
+      if (inTests && !secret && !TOOLING_RULES.has(r.id)) continue;
       // Count only what actually ran: a file skipped as a test is not a check point (review P1).
       ran++; checkPoints++; perRule[r.id] = (perRule[r.id] ?? 0) + 1;
       // Comments describe code, they don't run. A real secret pasted into a comment still counts.
@@ -359,11 +399,11 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         const hit = r.test!(text);
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
-        if (inTests && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."
+        if (inTests && secret && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."
         if (inTests && /PRIVATE KEY/.test(text)) return; // test keys and certificates are fixtures by design (review P24)
         if (REVIEWED.test(text) || (!secret && OTHER_LINTER.test(text))) return; // someone already looked at this line and marked it
         hitLines.add(i);
-        add(r, i + 1, hit === "partial" || inTests ? "partial" : r.status);
+        add(r, i + 1, hit === "partial" || (inTests && !TOOLING_RULES.has(r.id)) ? "partial" : r.status);
       });
       // A statement spread over several lines: test it as one, and report it only when no single line already did,
       // so line-by-line results never shrink (review step A).
@@ -375,7 +415,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, s.start - 8), s.end + 4).some((l) => r.unlessNear!.test(l)))) continue;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, s.start))) continue;
         if (lines.slice(s.start, s.end + 1).some((l) => REVIEWED.test(l) || OTHER_LINTER.test(l))) continue;
-        add(r, s.start + 1, hit === "partial" || inTests ? "partial" : r.status);
+        add(r, s.start + 1, hit === "partial" || (inTests && !TOOLING_RULES.has(r.id)) ? "partial" : r.status);
       }
       // File rules see comment lines as blank, so "<img> in a comment" or a commented-out call doesn't count (field test).
       if (r.fileTest) for (const n of r.fileTest(skip ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id), sharedFiles.get(r.id)))
@@ -403,6 +443,10 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const report = await applyReview({
     rulesVersion: RULES_VERSION,
     frameworks: [...frameworks].sort(),
+    policy: policyFingerprint({
+      frameworks, rulesOff, ignore, show: config.show, repoRules: await readRepoRules(root), workspaceRules: opts.workspaceRules,
+      rules: active.map((r) => ({ id: r.id, severity: (config.rules[r.id] && config.rules[r.id] !== "off" ? config.rules[r.id] : r.severity) as string })),
+    }),
     findings: deduped,
     // Only the Checker sets Met: a rule that read at least one file and found nothing. A rule with nothing to read
     // (mobile rules in a web app) is not Met: nothing was checked.
@@ -418,7 +462,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       ...(held ? [`${held} medium-confidence finding${held === 1 ? " was" : "s were"} held back. Run with --all to see ${held === 1 ? "it" : "them"}.`] : []),
       ...(rulesOff.length ? [`Switched off in lintsure.config.yaml: ${rulesOff.join(", ")}.`] : []),
       ...(ignore.length ? [`Ignored by config: ${ignore.join(", ")}.`] : []),
-      ...(nonShipping ? [`${nonShipping} test, fixture or tooling file${nonShipping === 1 ? " was" : "s were"} checked for secrets only.`] : []),
+      ...(nonShipping ? [`${nonShipping} test, fixture or tooling file${nonShipping === 1 ? " was" : "s were"} checked only for secrets and agent hooks.`] : []),
       "Each rule reads one file at a time. Data that flows between files, and how the app behaves when it runs, are not checked.",
       "Languages beyond JavaScript, TypeScript and Python get secret and config checks only.",
     ],
@@ -462,7 +506,7 @@ function recordLines(r: Report): string[] {
 export function toMarkdown(r: Report): string {
   const lines = [
     "# Lintsure report", "",
-    `Frameworks: ${r.frameworks.join(", ")} · Rules v${r.rulesVersion}`, "",
+    `Frameworks: ${r.frameworks.join(", ")} · Rules v${r.rulesVersion}${r.policy ? ` · Policy #${r.policy.fingerprint} (${r.policy.rulesActive} rules active${r.policy.repoRules ? " + .lintsure/rules.yml" : ""}${r.policy.workspaceRules ? " + workspace rules" : ""})` : ""}`, "",
     `> ${DISCLAIMER}`, "",
     ...recordLines(r),
     `## Findings (${r.findings.length})`, "",

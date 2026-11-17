@@ -21,7 +21,7 @@ export const owaspLlm: FrameworkKnowledge = {
     { ref: "LLM03:2026", title: "Excessive Agency", inCode: "no",
       plain: "Tools and permissions given to an agent should be the minimum it needs, with a person approving anything risky.",
       evidence: "A list of the tools each agent can call and which need approval." },
-    { ref: "LLM04:2026", title: "Supply Chain", inCode: "partly", rules: ["deps.unpinned-version", "deps.install-script"],
+    { ref: "LLM04:2026", title: "Supply Chain", inCode: "partly", rules: ["deps.unpinned-version", "deps.install-script", "agent.config-runs-remote-code"],
       plain: "Models, datasets, plugins and packages come from others. Pin and check them like any dependency.",
       evidence: "Where each model and dataset comes from, and its licence." },
     { ref: "LLM05:2026", title: "Data and Model Poisoning", inCode: "no",

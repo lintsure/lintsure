@@ -34,6 +34,7 @@ test("known findings stay put", async () => {
   const r = await scan(root);
   const got = r.findings.filter((f) => !/^(src\/(more|owasp|page|stack-client)\.|package\.json|\.github\/|supabase\/|next\.config|scripts\/|SECURITY\.md|sbom|bin\/|mobile\/|web\/|src\/llm\.)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
+    "agent.config-runs-remote-code@.claude/settings.json:4",
     "ai.call-not-logged@src/ai.ts:3",
     "llm.no-output-limit@src/ai.ts:3",
     "ai.automated-decision@src/ai.ts:4",
@@ -574,4 +575,50 @@ test("the triage skill file and the MCP triage prompt carry the same text", asyn
   const { TRIAGE_GUIDE } = await import("../src/index.js");
   const md = (await readFile(fileURLToPath(new URL("../../../../skills/lintsure-triage/SKILL.md", import.meta.url)), "utf8")).replace(/\r\n/g, "\n");
   assert.equal(md.replace(/^---\n[\s\S]*?\n---\n\n/, "").trimEnd(), TRIAGE_GUIDE);
+});
+
+test("policy fingerprint: same policy same code, any setting change a new code", async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { toMarkdown, toSarif } = await import("../src/index.js");
+  const a = await scan(root), b = await scan(root);
+  assert.match(a.policy!.fingerprint, /^[0-9A-F]{4}-[0-9A-F]{4}$/);
+  assert.equal(a.policy!.fingerprint, b.policy!.fingerprint);
+  assert.equal(a.policy!.sha256.slice(0, 8).toUpperCase(), a.policy!.fingerprint.replace("-", ""));
+  // Fewer frameworks, a rule switched off, or a re-rated rule each change the code.
+  assert.notEqual((await scan(root, ["gdpr"])).policy!.fingerprint, a.policy!.fingerprint);
+  const dir = await mkdtemp(join(tmpdir(), "ls-pol-"));
+  await writeFile(join(dir, "lintsure.config.yaml"), "rules:\n  pii.logged: off\n");
+  const off = await scan(dir);
+  await writeFile(join(dir, "lintsure.config.yaml"), "rules:\n  pii.logged: low\n");
+  const low = await scan(dir);
+  const none = await scan(clean);
+  assert.notEqual(off.policy!.fingerprint, none.policy!.fingerprint);
+  assert.notEqual(low.policy!.fingerprint, none.policy!.fingerprint);
+  assert.notEqual(off.policy!.fingerprint, low.policy!.fingerprint);
+  // The Drift Guard's .lintsure/rules.yml counts: adding it changes the code, a comment or blank line doesn't.
+  const { mkdir } = await import("node:fs/promises");
+  const rdir = await mkdtemp(join(tmpdir(), "ls-rules-"));
+  const plain = await scan(rdir);
+  assert.equal(plain.policy!.repoRules, false);
+  await mkdir(join(rdir, ".lintsure"));
+  await writeFile(join(rdir, ".lintsure", "rules.yml"), "rules:\n  - protect: prisma/schema.prisma\n");
+  const withRules = await scan(rdir);
+  assert.equal(withRules.policy!.repoRules, true);
+  assert.notEqual(withRules.policy!.fingerprint, plain.policy!.fingerprint);
+  await writeFile(join(rdir, ".lintsure", "rules.yml"), "# owned by platform\nrules:\n\n  - protect: prisma/schema.prisma   # schema\n");
+  assert.equal((await scan(rdir)).policy!.fingerprint, withRules.policy!.fingerprint);
+  await writeFile(join(rdir, ".lintsure", "rules.yml"), "rules:\n  - protect: prisma/migrations/**\n");
+  assert.notEqual((await scan(rdir)).policy!.fingerprint, withRules.policy!.fingerprint);
+  // Account rules handed in by the plugin count too; their key order doesn't, their content does.
+  const ws1 = await scan(rdir, undefined, { workspaceRules: { rules: [{ id: "W1", avoid: "eval(" }], mode: "strict" } });
+  const ws2 = await scan(rdir, undefined, { workspaceRules: { mode: "strict", rules: [{ avoid: "eval(", id: "W1" }] } });
+  const ws3 = await scan(rdir, undefined, { workspaceRules: { rules: [{ id: "W1", avoid: "exec(" }], mode: "strict" } });
+  assert.equal(ws1.policy!.workspaceRules, true);
+  assert.equal(ws1.policy!.fingerprint, ws2.policy!.fingerprint);
+  assert.notEqual(ws1.policy!.fingerprint, ws3.policy!.fingerprint);
+  assert.notEqual(ws1.policy!.fingerprint, (await scan(rdir)).policy!.fingerprint);
+  // The code travels with the report.
+  assert.ok(toMarkdown(a).includes(`Policy #${a.policy!.fingerprint}`));
+  assert.equal(toSarif(a, "0").runs[0].properties!["lintsure/policyFingerprint"], a.policy!.fingerprint);
 });
