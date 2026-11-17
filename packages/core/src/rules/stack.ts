@@ -123,18 +123,24 @@ export const stackRules: Rule[] = [
     // Only Next.js's browser source maps: Vite's sourcemap: true is normal in libraries and CLIs (field test: 5 false alarms).
     fileName: /^next\.config\./,
     test: (l) => /productionBrowserSourceMaps\s*:\s*true/.test(l) }),
-  rule({ id: "release.env-not-ignored", title: "Env files not kept out of git", status: "gap", severity: "high", controls: [GDPR32, A02],
-    fix: "Add .env and .env.* to .gitignore (keep !.env.example if you share one), then check `git ls-files` for env files already committed and rotate any keys they held.",
-    note: "The project keeps settings in .env files, but .gitignore has no line for them, so the next `git add .` can publish every key in them. Example and template files (.env.example) don't count.",
+  rule({ id: "release.env-not-ignored", title: "Env files not kept out of git", status: "partial", severity: "medium", controls: [GDPR32, A02],
+    fix: "Add .env and .env.* to .gitignore (keep !.env.example if you share one), then check `git ls-files` for env files already committed and rotate any secret keys they held.",
+    note: "The project keeps settings in .env files, but .gitignore has no line for them, so the next `git add .` can publish them. Marked Gap when a file holds a secret-looking value (a key, token or password without a public prefix such as VITE_ or NEXT_PUBLIC_). Partial when only public settings are in it. Example and template files (.env.example) don't count.",
+    unseen: "Lintsure reads files, not git, so it can't tell whether the env file is already committed. Check with git ls-files.",
     extensions: [""], fileName: /^\.gitignore$/, pathMatch: /^\.gitignore$/,
     sharedFiles: /(^|\/)\.env(\.[\w.-]+)?$/,
     fileTest: envNotIgnored }),
 ];
 
-/** Root .gitignore: line 1 when the repo has a real .env file (not an example) and no ignore line mentions .env. Pure. */
-export function envNotIgnored(lines: string[], _shared?: string, files: Record<string, string> = {}): number[] {
-  const real = Object.keys(files).some((f) => !/\.env\.(example|sample|template|dist|defaults?|schema)$/i.test(f) && !/(^|\/)(tests?|fixtures?|examples?|docs?)\//i.test(f));
-  if (!real) return [];
+// A secret-looking setting: the name says key, secret, token or password and it has no browser-public prefix.
+const ENV_SECRET = /^\s*(?:export\s+)?(?!(?:VITE|NEXT_PUBLIC|REACT_APP|EXPO_PUBLIC|PUBLIC|NUXT_PUBLIC|GATSBY)_)(?![A-Z0-9_]*(?:PUBLISHABLE|ANON|PUBLIC))[A-Z0-9_]*(KEY|SECRET|TOKEN|PASSWORD|PRIVATE)[A-Z0-9_]*\s*=\s*["']?[^\s"'#]{8,}/m;
+
+/** Root .gitignore: line 1 when the repo has a real .env file (not an example) and no ignore line mentions .env.
+ *  Gap when one of those files holds a secret-looking value, Partial otherwise. Pure. */
+export function envNotIgnored(lines: string[], _shared?: string, files: Record<string, string> = {}): { line: number; status: "gap" | "partial" }[] {
+  const real = Object.entries(files).filter(([f]) => !/\.env\.(example|sample|template|dist|defaults?|schema)$/i.test(f) && !/(^|\/)(tests?|fixtures?|examples?|docs?)\//i.test(f));
+  if (!real.length) return [];
   // Lenient on purpose: any non-negated pattern naming .env counts (.env, .env*, *.env, **/.env.local, /.env).
-  return lines.some((l) => { const t = l.trim(); return t && !t.startsWith("#") && !t.startsWith("!") && /\.env/.test(t); }) ? [] : [1];
+  if (lines.some((l) => { const t = l.trim(); return t && !t.startsWith("#") && !t.startsWith("!") && /\.env/.test(t); })) return [];
+  return [{ line: 1, status: real.some(([, text]) => ENV_SECRET.test(text)) ? "gap" : "partial" }];
 }

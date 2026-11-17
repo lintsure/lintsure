@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { checksFor, classify, knowledge, outsideFor, readConfig, rules, scan as coreScan, type ScanOptions } from "../src/index.js";
+import { envNotIgnored } from "../src/rules/stack.js";
 
 // Rule tests look at every finding, including the medium-confidence ones a normal run holds back.
 const scan = (dir: string, fw?: Parameters<typeof coreScan>[1], opts: ScanOptions = {}) => coreScan(dir, fw, { all: true, ...opts });
@@ -642,5 +643,15 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "67A8-7CD1");
+  assert.equal(r.policy?.fingerprint, "87DE-5620");
+});
+
+test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {
+  const gi = ["node_modules", "dist"];
+  assert.deepEqual(envNotIgnored(gi, "", { ".env": "VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiJ9\nVITE_SUPABASE_URL=https://x.supabase.co" }), [{ line: 1, status: "partial" }]);
+  assert.deepEqual(envNotIgnored(gi, "", { ".env.local": "SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiJ9" }), [{ line: 1, status: "gap" }]);
+  assert.deepEqual(envNotIgnored(gi, "", { ".env": "SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiJ9" }), [{ line: 1, status: "partial" }]);
+  assert.deepEqual(envNotIgnored([...gi, ".env*"], "", { ".env": "SECRET_KEY=abcdefghijk" }), []);
+  assert.deepEqual(envNotIgnored(gi, "", { ".env.example": "SECRET_KEY=changeme-please" }), []);
+  assert.deepEqual(envNotIgnored(["!.env.example"], "", { ".env": "A=1" }), [{ line: 1, status: "partial" }]);
 });
