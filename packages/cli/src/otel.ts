@@ -14,7 +14,7 @@ type Attr = { key: string; value: { stringValue: string } | { intValue: string }
 const attrs = (o: Record<string, string | number | undefined | null>): Attr[] => Object.entries(o).filter(([, v]) => v != null && v !== "")
   .map(([key, v]) => ({ key, value: typeof v === "number" ? { intValue: String(v) } : { stringValue: String(v) } }));
 
-/** One trace per session: an invoke_agent span covering it, and one child span per catch, decision or scan. Pure. */
+/** One trace per session (reads OTEL_SERVICE_NAME for the service name): an invoke_agent span covering it, and one child span per catch, decision or scan. Pure. */
 export function toOtlp(rows: ActivityRow[], version: string) {
   const bySession = new Map<string, ActivityRow[]>();
   for (const r of rows) { const k = r.session || "no-session"; (bySession.get(k) ?? bySession.set(k, []).get(k)!).push(r); }
@@ -26,7 +26,8 @@ export function toOtlp(rows: ActivityRow[], version: string) {
       attributes: attrs({ "gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "coding agent (guarded by Lintsure)", "gen_ai.conversation.id": session }) });
     list.forEach((r, i) => {
       const base = { traceId, spanId: hex(`span:${session}:${i}:${r.at}`, 16), parentSpanId: rootId, kind: 1, startTimeUnixNano: nanos(r.at), endTimeUnixNano: nanos(r.at) };
-      const code = { "code.filepath": r.file, "code.lineno": r.line };
+      // Current semconv names plus the older ones many tools still read.
+      const code = { "code.file.path": r.file, "code.line.number": r.line, "code.filepath": r.file, "code.lineno": r.line };
       if (r.type === "catch") spans.push({ ...base, name: `execute_tool lintsure.guard.${r.kind}`, attributes: attrs({ "gen_ai.operation.name": "execute_tool",
         "gen_ai.tool.name": `lintsure.guard.${r.kind}`, "gen_ai.conversation.id": session, "lintsure.rule.id": r.rule, "lintsure.decision": r.outcome, ...code }) });
       else if (r.type === "decision") spans.push({ ...base, name: "lintsure.decision", attributes: attrs({ "gen_ai.conversation.id": session, "lintsure.decision": r.scope, "lintsure.rule.id": r.rule, ...code }) });
@@ -34,7 +35,7 @@ export function toOtlp(rows: ActivityRow[], version: string) {
         "lintsure.findings.open": r.open, "lintsure.findings.gap": r.gap, "lintsure.findings.partial": r.partial }) });
     });
   }
-  return { resourceSpans: [{ resource: { attributes: attrs({ "service.name": "lintsure" }) }, scopeSpans: [{ scope: { name: "lintsure", version }, spans }] }] };
+  return { resourceSpans: [{ resource: { attributes: attrs({ "service.name": process.env.OTEL_SERVICE_NAME || "lintsure", "service.version": version }) }, scopeSpans: [{ scope: { name: "lintsure", version }, spans }] }] };
 }
 
 /** Reads activity.jsonl lines, skipping any it can't parse. Pure. */
