@@ -6,6 +6,7 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { status, pick, setup, undo } from "./agents.js";
+import { parseActivity, toOtlp } from "./otel.js";
 import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
 const HELP = `lintsure scan [path] [options]
@@ -16,6 +17,8 @@ lintsure setup [path]    Add the Lintsure MCP server to this project's agent con
                          (shows the change; --yes writes it; --undo takes it out;
                          --agents claude,cursor,vscode,gemini)
 lintsure status [path]   Check that this project is ready: Node, config, rules, agents
+lintsure export --otlp-json [path]  Write .lintsure/activity.jsonl as an OpenTelemetry
+                         traces file (lintsure.otlp.json) for your own observability tool
 
 scan options:
   --framework <ids>   Comma list: ${ALL_FRAMEWORKS.join(", ")}
@@ -132,6 +135,16 @@ export function parseArgs(argv: string[]): { rest: string[] } | { error: string 
 
 async function main(argv: string[]) {
   const [cmd, ...raw] = argv;
+  if (cmd === "export") {
+    if (!raw.includes("--otlp-json")) { console.error("Choose a format: lintsure export --otlp-json [path]"); return 2; }
+    const root = resolve(raw.find((a) => !a.startsWith("--")) ?? ".");
+    let text = ""; try { text = await readFile(join(root, ".lintsure", "activity.jsonl"), "utf8"); } catch { /* none yet */ }
+    const rows = parseActivity(text);
+    if (!rows.length) { console.error("No activity yet in .lintsure/activity.jsonl. The Lintsure plugin writes it while your agent works."); return 2; }
+    await writeFile("lintsure.otlp.json", JSON.stringify(toOtlp(rows, RULES_VERSION), null, 2));
+    console.log(`Wrote lintsure.otlp.json: ${rows.length} events. Nothing was sent; load the file into your collector or tool (OTLP/JSON).`);
+    return 0;
+  }
   if (cmd === "setup" || cmd === "status") {
     const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents") ?? ".");
     if (cmd === "status") return status(root);
