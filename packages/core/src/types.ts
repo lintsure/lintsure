@@ -20,6 +20,12 @@ export interface Rule {
   note: string;
   /** Files this rule reads, by extension. */
   extensions: string[];
+  /** Optional: what a Partial finding from this rule can't show, in plain words ("where the value comes from").
+   *  Partial findings without it get a general line. */
+  unseen?: string;
+  /** Optional: public incidents where this kind of problem was exploited, with a primary source.
+   *  `node scripts/check-sources.mjs` checks every link still answers. */
+  seenIn?: { title: string; url: string }[];
   /** Optional: only files whose name matches, e.g. /^package\.json$/ so lockfiles are skipped. */
   fileName?: RegExp;
   /** Optional: only files whose path (relative to the scanned folder) matches, e.g. /(^|\/)supabase\//. */
@@ -83,6 +89,8 @@ export interface Finding {
   proposal: Proposal;
   /** Stable id: rule, file and the flagged line's content (not its number). Contains no code. */
   fingerprint: string;
+  /** Partial findings only: what Lintsure couldn't see, so a person knows what to check. */
+  unseen?: string;
   /** Set when .lintsure/baseline.json exists: whether the finding is new since then. */
   change?: "new" | "unchanged";
   /** Set when a person accepted this finding in .lintsure/accepted.yaml. */

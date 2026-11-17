@@ -117,6 +117,9 @@ export async function readConfig(root: string): Promise<Config> {
 
 // Dependencies, build output and caches: generated code, not code you wrote.
 // Also other people's code copied in (vendor, third_party): not code you wrote (field test, 139 repos).
+// What a Partial finding can't show. Rules read lines and statements, not how data moves through the program.
+const UNSEEN = "Lintsure reads this code on its own. It can't see where the values come from or whether they're checked elsewhere, so a person needs to look.";
+const UNSEEN_TESTS = "This is in a test, fixture or example file. Lintsure can't tell whether it ships or is a throwaway value.";
 export const SKIP_DIRS = ["node_modules", ".git", "dist", "build", "out", ".output", ".next", ".nuxt", ".svelte-kit", ".astro", ".vercel", ".netlify", ".wrangler", ".turbo", ".cache", "venv", ".venv", "__pycache__", "coverage", "vendor", "third_party", "bower_components"];
 const SKIP = new Set(SKIP_DIRS);
 // Bundled builds of libraries checked into a repo, e.g. vue.global.js (field test, 139 repos).
@@ -331,7 +334,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     if (!file) continue;
     const controls = r.controls.filter((c) => frameworks.includes(c.framework));
     findings.push({ id: "", ruleId: r.id, file, line: 1, status: r.status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
-      proposal: proposalFor({ file, line: 1, title: r.title, fix: r.fix, note: r.note, controls }), fingerprint: fingerprint(r.id, file, "") });
+      proposal: proposalFor({ file, line: 1, title: r.title, fix: r.fix, note: r.note, controls }), fingerprint: fingerprint(r.id, file, ""),
+      ...(r.status === "partial" ? { unseen: r.unseen ?? UNSEEN } : {}) });
   }
   // Rules that look across files get the joined text of every file they read, read once up front.
   const shared = new Map<string, string>();
@@ -373,6 +377,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         id: "", ruleId: r.id, file, line, status, severity: r.severity, title: r.title, controls, fix: r.fix, note: r.note,
         proposal: proposalFor({ file, line, title: r.title, fix: r.fix, note: r.note, controls }),
         fingerprint: fingerprint(r.id, file, lines[line - 1] ?? ""),
+        ...(status === "partial" ? { unseen: inTests && !TOOLING_RULES.has(r.id) ? UNSEEN_TESTS : r.unseen ?? UNSEEN } : {}),
       });
     };
     // Tests, fixtures, examples and docs are full of fake tokens and planted examples: only secret rules look at them,
@@ -520,7 +525,8 @@ export function toMarkdown(r: Report): string {
   for (const f of [...r.findings].sort((a, b) => rank(a) - rank(b))) lines.push(
     `### ${f.id} · ${f.status === "gap" ? "Finding" : "Observation"} (${LABEL[f.status]}) · \`${f.file}:${f.line}\`${f.change === "new" ? " · New since baseline" : ""}`, `**${f.title}** · Risk level: ${f.severity}`, "",
     ...(f.accepted ? [acceptedLine(f.accepted), ""] : []),
-    `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, "",
+    `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, ...(f.unseen ? [`- What Lintsure couldn't see: ${f.unseen}`] : []),
+    ...(rules.find((x) => x.id === f.ruleId)?.seenIn ?? []).map((s) => `- Seen in a real incident: ${s.title} (${s.url})`), "",
     `**${PROPOSAL_HEADING}**`, "",
     `- Where: \`${f.proposal.where}\``, `- What: ${f.proposal.what}`, `- Why: ${f.proposal.why}`, `- Benefit: ${f.proposal.benefit}`, "",
   );

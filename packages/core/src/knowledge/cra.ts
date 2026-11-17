@@ -20,7 +20,7 @@ export const cra: FrameworkKnowledge = {
   ],
   obligations: [
     { ref: "Annex I Part I (2)(b)", title: "Secure by default configuration", inCode: "partly",
-      rules: ["config.debug-on", "config.allowed-hosts-any", "config.default-secret-key", "cors.any-origin", "build.sourcemaps-public", "csrf.disabled", "session.cookie-insecure"],
+      rules: ["config.debug-on", "config.allowed-hosts-any", "config.default-secret-key", "cors.any-origin", "build.sourcemaps-public", "release.env-not-ignored", "csrf.disabled", "session.cookie-insecure"],
       plain: "The product ships with safe settings switched on: debug off, real host names, strong secrets, secure cookies, nothing left open that the user has to close.",
       evidence: "Production configuration and the default settings a new install starts with." },
     { ref: "Annex I Part I (2)(d)", title: "Protection from unauthorised access", inCode: "partly",

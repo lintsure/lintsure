@@ -35,6 +35,7 @@ test("known findings stay put", async () => {
   const got = r.findings.filter((f) => !/^(src\/(more|owasp|page|stack-client)\.|package\.json|\.github\/|supabase\/|next\.config|scripts\/|SECURITY\.md|sbom|bin\/|mobile\/|web\/|src\/llm\.)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
     "agent.config-runs-remote-code@.claude/settings.json:4",
+    "release.env-not-ignored@.gitignore:1",
     "ai.call-not-logged@src/ai.ts:3",
     "llm.no-output-limit@src/ai.ts:3",
     "ai.automated-decision@src/ai.ts:4",
@@ -621,4 +622,11 @@ test("policy fingerprint: same policy same code, any setting change a new code",
   // The code travels with the report.
   assert.ok(toMarkdown(a).includes(`Policy #${a.policy!.fingerprint}`));
   assert.equal(toSarif(a, "0").runs[0].properties!["lintsure/policyFingerprint"], a.policy!.fingerprint);
+});
+
+test("Partial findings say what Lintsure couldn't see, Gaps don't", async () => {
+  const r = await scan(root);
+  const partial = r.findings.filter((f) => f.status === "partial"), gap = r.findings.filter((f) => f.status === "gap");
+  assert.ok(partial.length && partial.every((f) => f.unseen && f.unseen.length > 20));
+  assert.ok(gap.every((f) => f.unseen === undefined));
 });

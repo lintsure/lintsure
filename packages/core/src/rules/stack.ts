@@ -84,7 +84,8 @@ export const stackRules: Rule[] = [
     note: "In Supabase, a table without row level security can be read and changed by anyone with your public anon key, which ships in every browser. Lintsure looks across every SQL file in supabase/. Marked Partial: it may be switched on outside these files, for example in the dashboard.", extensions: [".sql"],
     pathMatch: SUPABASE_DIR,
     sharedContext: true, // RLS is often switched on in a later migration (field test, 50 repos)
-    fileTest: tablesWithoutRls }),
+    fileTest: tablesWithoutRls,
+    seenIn: [{ title: "CVE-2025-48757: missing row level security let anyone read or write the tables of apps generated with Lovable", url: "https://www.cve.org/CVERecord?id=CVE-2025-48757" }] }),
   rule({ id: "supabase.policy-allows-all", title: "Database policy that lets everyone in", status: "partial", severity: "high", controls: [GDPR32, A01],
     fix: "Limit the policy to the right people, for example `using (auth.uid() = user_id)`. Keep `using (true)` only for data that is meant to be public, such as published posts.",
     note: "`using (true)` or `with check (true)` turns row level security on but lets every request through, so the table is as open as having no security at all. Marked Partial: public read access can be intended.", extensions: [".sql"],
@@ -122,4 +123,18 @@ export const stackRules: Rule[] = [
     // Only Next.js's browser source maps: Vite's sourcemap: true is normal in libraries and CLIs (field test: 5 false alarms).
     fileName: /^next\.config\./,
     test: (l) => /productionBrowserSourceMaps\s*:\s*true/.test(l) }),
+  rule({ id: "release.env-not-ignored", title: "Env files not kept out of git", status: "gap", severity: "high", controls: [GDPR32, A02],
+    fix: "Add .env and .env.* to .gitignore (keep !.env.example if you share one), then check `git ls-files` for env files already committed and rotate any keys they held.",
+    note: "The project keeps settings in .env files, but .gitignore has no line for them, so the next `git add .` can publish every key in them. Example and template files (.env.example) don't count.",
+    extensions: [""], fileName: /^\.gitignore$/, pathMatch: /^\.gitignore$/,
+    sharedFiles: /(^|\/)\.env(\.[\w.-]+)?$/,
+    fileTest: envNotIgnored }),
 ];
+
+/** Root .gitignore: line 1 when the repo has a real .env file (not an example) and no ignore line mentions .env. Pure. */
+export function envNotIgnored(lines: string[], _shared?: string, files: Record<string, string> = {}): number[] {
+  const real = Object.keys(files).some((f) => !/\.env\.(example|sample|template|dist|defaults?|schema)$/i.test(f) && !/(^|\/)(tests?|fixtures?|examples?|docs?)\//i.test(f));
+  if (!real) return [];
+  // Lenient on purpose: any non-negated pattern naming .env counts (.env, .env*, *.env, **/.env.local, /.env).
+  return lines.some((l) => { const t = l.trim(); return t && !t.startsWith("#") && !t.startsWith("!") && /\.env/.test(t); }) ? [] : [1];
+}

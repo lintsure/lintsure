@@ -59,7 +59,7 @@ server.tool("explain_rule",
   { ruleId: z.string().describe("The rule id shown on a scan finding. Examples: \"pii.logged\" (personal data in logs), \"secret.in-source\", \"supabase.rls-disabled\". The full list is at lintsure.com/rules.") }, RO,
   async ({ ruleId }) => {
     const r = rules.find((x) => x.id === ruleId);
-    return reply(r ? `${r.title}\nControls: ${r.controls.map((c) => `${c.framework} ${c.id}`).join(", ")}\nSuggested fix: ${r.fix}\nNote: ${r.note}\n\n${APPROVAL_RULES}` : `No rule named ${ruleId}. Rule ids look like "pii.logged"; see lintsure.com/rules.`);
+    return reply(r ? `${r.title}\nControls: ${r.controls.map((c) => `${c.framework} ${c.id}`).join(", ")}\nSuggested fix: ${r.fix}\nNote: ${r.note}${(r.seenIn ?? []).map((s) => `\nSeen in a real incident: ${s.title} (${s.url})`).join("")}\n\n${APPROVAL_RULES}` : `No rule named ${ruleId}. Rule ids look like "pii.logged"; see lintsure.com/rules.`);
   });
 
 // One list of questions: it describes the inputs and is what the agent asks when it has no answers yet.
