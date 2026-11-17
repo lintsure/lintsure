@@ -673,3 +673,12 @@ test("patch fixes: exact changes only where the fix is unambiguous", async () =>
   assert.match(maps.patch!.text, /productionBrowserSourceMaps: false/);
   assert.ok(r.findings.filter((f) => f.patch && f.patch.old != null).every((f) => f.patch!.text !== f.patch!.old));
 });
+
+test("the numbers the README states match the code", async () => {
+  // A count in the docs that drifts from the rule registry is a false claim (BugHunter checks its doc counts in CI).
+  const readme = await readFile(fileURLToPath(new URL("../../../../README.md", import.meta.url)), "utf8");
+  const stated = readme.match(/`packages\/core` \| Finding schema, (\d+) rules/);
+  assert.ok(stated, "README should state the rule count");
+  assert.equal(Number(stated![1]), rules.length, `README says ${stated![1]} rules, the engine has ${rules.length}`);
+  for (const f of ["eu-ai-act", "gdpr", "owasp-top10", "owasp-llm", "cwe-top25", "cra"]) assert.ok(knowledge.some((k) => k.id === f));
+});

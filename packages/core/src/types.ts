@@ -25,7 +25,9 @@ export interface Rule {
   unseen?: string;
   /** Optional: public incidents where this kind of problem was exploited, with a primary source.
    *  `node scripts/check-sources.mjs` checks every link still answers. */
-  seenIn?: { title: string; url: string }[];
+  seenIn?: { title: string; url: string; expect: string[]; check?: string }[];
+  // expect: words the source must contain (checked by scripts/check-sources.mjs, which fails on a miss); check: a
+  // machine-readable copy to read instead of url, for pages built by JavaScript.
   /** Optional: the fixed version of a flagged line, when the fix is unambiguous; null when this line can't be fixed
    *  mechanically. Shown as a proposed change; Lintsure never writes it. Pure. */
   patch?(line: string): string | null;

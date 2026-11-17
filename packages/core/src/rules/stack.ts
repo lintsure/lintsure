@@ -85,7 +85,7 @@ export const stackRules: Rule[] = [
     pathMatch: SUPABASE_DIR,
     sharedContext: true, // RLS is often switched on in a later migration (field test, 50 repos)
     fileTest: tablesWithoutRls,
-    seenIn: [{ title: "CVE-2025-48757: missing row level security let anyone read or write the tables of apps generated with Lovable", url: "https://www.cve.org/CVERecord?id=CVE-2025-48757" }] }),
+    seenIn: [{ title: "CVE-2025-48757: missing row level security let anyone read or write the tables of apps generated with Lovable", url: "https://www.cve.org/CVERecord?id=CVE-2025-48757", check: "https://cveawg.mitre.org/api/cve/CVE-2025-48757", expect: ["Lovable", "Row-Level Security"] }] }),
   rule({ id: "supabase.policy-allows-all", title: "Database policy that lets everyone in", status: "partial", severity: "high", controls: [GDPR32, A01],
     fix: "Limit the policy to the right people, for example `using (auth.uid() = user_id)`. Keep `using (true)` only for data that is meant to be public, such as published posts.",
     note: "`using (true)` or `with check (true)` turns row level security on but lets every request through, so the table is as open as having no security at all. Marked Partial: public read access can be intended.", extensions: [".sql"],
