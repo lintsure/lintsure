@@ -22,6 +22,7 @@ export * from "./guidance.js";
 export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
+export { checksFor } from "./plan.js";
 import { loadPacks, packsLoaded } from "./packs.js";
 export const RULES_VERSION = "0.3.11";
 

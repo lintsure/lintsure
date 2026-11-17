@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIMER, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
+import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIMER, checksFor, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
 const server = new McpServer({ name: "lintsure", version: "0.3.11" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
@@ -113,6 +113,16 @@ server.tool("classify",
     return reply(s.length
       ? `These frameworks may apply, based on the answers given:\n${s.map((x) => `- ${x.name}: ${x.reason}`).join("\n")}\n\nThis is a suggestion, not a legal determination. Ask the user to confirm the list before running scan.`
       : "None of the available frameworks clearly apply from these answers. That is not a conclusion that no rules apply; ask the user, or a compliance professional, to confirm.");
+  });
+
+server.tool("plan_checks",
+  "Before writing a feature, list the Lintsure checks it is most likely to run into, with what each looks for and how to avoid it. Use when the user describes something to build ('add a file upload', 'a login page with Supabase', 'a chat with Claude'). Word matching, not a code review: it reads only the description. Returns text; read-only.",
+  { feature: z.string().min(3).max(2000).describe("The feature in plain words, for example \"users upload a profile picture that we store in Supabase\".") }, RO,
+  async ({ feature }) => {
+    const found = checksFor(feature);
+    if (!found.length) return reply("No Lintsure check matches this description. Run the scan tool after writing the code.");
+    return reply([`Checks this feature is likely to meet (${found.length}), best match first. Build it so these don't fire:`, "",
+      ...found.map((r) => `- ${r.id}: ${r.title}. Avoid it: ${r.fix}`), "", "Run the scan tool when the code is written. These are hints from the description, not findings."].join("\n"));
   });
 
 server.tool("explain_framework",

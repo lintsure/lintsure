@@ -16,6 +16,10 @@ p.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialize
 const tools = (await call("tools/list", {})).result.tools;
 for (const t of tools) if (t.annotations?.readOnlyHint !== true || t.annotations?.destructiveHint !== false) fail(`${t.name} is not marked read-only`);
 console.log("ok read-only hints on", tools.length, "tools");
+// Context budget: the tool list is read into every agent session (REA's lesson). Keep it small.
+const listBytes = JSON.stringify(tools).length;
+if (listBytes > 9000) fail(`tools/list is ${listBytes} bytes, over the 9000 budget`);
+console.log("ok tools/list size", listBytes, "bytes");
 const calls = [
   ["scan", { path: "fixtures/sample-app" }],
   ["classify", { euUsers: true, personalData: true }],
@@ -24,6 +28,7 @@ const calls = [
   ["explain_framework", { framework: "gdpr" }],
   ["explain_framework", { framework: "cra" }],
   ["explain_rule", { ruleId: "pii.logged" }],
+  ["plan_checks", { feature: "users upload a profile picture stored in Supabase" }],
 ];
 for (const [name, args] of calls) {
   const r = await call("tools/call", { name, arguments: args });
@@ -37,6 +42,17 @@ for (const [name, args] of calls) {
   if (name === "classify" && args.digitalProductEU && !texts.join(" ").includes("Cyber Resilience Act")) fail("classify should suggest the Cyber Resilience Act");
   console.log("ok", name);
 }
+// Bad input gets an error answer, never a crash, and the server keeps answering afterwards.
+const bad = [
+  ["scan", { path: 42 }], ["explain_rule", {}], ["explain_framework", { framework: "nope" }],
+  ["plan_checks", { feature: "x".repeat(5000) }], ["classify", { euUsers: "yes" }], ["no_such_tool", {}],
+];
+for (const [name, args] of bad) {
+  const r = await call("tools/call", { name, arguments: args });
+  if (!r.error && !r.result?.isError) fail(`${name} accepted bad input ${JSON.stringify(args).slice(0, 60)}`);
+}
+if (!(await call("tools/list", {})).result?.tools?.length) fail("server stopped answering after bad input");
+console.log("ok bad input rejected,", bad.length, "cases");
 const prompts = (await call("prompts/list", {})).result?.prompts ?? [];
 if (!prompts.some((x) => x.name === "triage")) fail("triage prompt missing");
 const tri = (await call("prompts/get", { name: "triage", arguments: { files: "src" } })).result?.messages?.[0]?.content?.text ?? "";

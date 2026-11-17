@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { classify, knowledge, outsideFor, readConfig, rules, scan as coreScan, type ScanOptions } from "../src/index.js";
+import { checksFor, classify, knowledge, outsideFor, readConfig, rules, scan as coreScan, type ScanOptions } from "../src/index.js";
 
 // Rule tests look at every finding, including the medium-confidence ones a normal run holds back.
 const scan = (dir: string, fw?: Parameters<typeof coreScan>[1], opts: ScanOptions = {}) => coreScan(dir, fw, { all: true, ...opts });
@@ -629,4 +629,11 @@ test("Partial findings say what Lintsure couldn't see, Gaps don't", async () => 
   const partial = r.findings.filter((f) => f.status === "partial"), gap = r.findings.filter((f) => f.status === "gap");
   assert.ok(partial.length && partial.every((f) => f.unseen && f.unseen.length > 20));
   assert.ok(gap.every((f) => f.unseen === undefined));
+});
+
+test("plan_checks: a described feature maps to the checks it is likely to meet", () => {
+  assert.ok(checksFor("users upload a profile picture stored in Supabase").some((r) => r.id === "upload.unrestricted"));
+  assert.ok(checksFor("a chat with Claude for customer tickets").some((r) => r.id.startsWith("llm.") || r.id.startsWith("ai.")));
+  assert.equal(checksFor("dark mode toggle").length, 0);
+  assert.deepEqual(checksFor("login page with password"), checksFor("login page with password"));
 });
