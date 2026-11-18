@@ -88,7 +88,7 @@ Run it on every pull request with **[lintsure/action](https://github.com/lintsur
 | Path | What |
 |---|---|
 | `packages/core` | Finding schema, 74 rules, framework knowledge, scan, config reader, report writer, policy fingerprint, pack loader, safety wording |
-| `packages/cli` | The `lintsure` command: `scan`, `baseline`, `init`, `info`, `setup`, `status` |
+| `packages/cli` | The `lintsure` command: `scan`, `baseline`, `init`, `info`, `setup`, `status`, `export` |
 | `packages/mcp` | MCP server: `scan`, `plan_checks`, `classify`, `explain_framework`, `explain_rule` |
 | `fixtures/` | Planted problems, near misses and a config example used by the tests |
 | `scripts/mcp-smoke.mjs` | Starts the MCP server: every reply carries the disclaimer, bad input is rejected, the tool list stays small |
@@ -122,6 +122,8 @@ See [CHANGELOG.md](CHANGELOG.md) or [lintsure.com/changelog](https://lintsure.co
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Every rule needs a planted example, a near miss, and a link from the framework knowledge; `npm test` checks all of it.
+
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Our accessibility commitment, and how to report a barrier, is in [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 ## License
 
