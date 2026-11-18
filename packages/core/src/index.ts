@@ -291,10 +291,21 @@ export interface ScanOptions extends RecordOptions {
 
 /** The repo's .lintsure/rules.yml (the Drift Guard's rules), normalized: comments, blank lines and trailing spaces dropped.
  *  null when the file isn't there. */
+/** A YAML line without its comment: a # at the start or after a space, outside quotes ("rm # a" keeps its #). Pure. */
+export function stripYamlComment(l: string): string {
+  let q = "";
+  for (let i = 0; i < l.length; i++) {
+    const c = l[i];
+    if (q) { if (c === q) q = ""; continue; }
+    if (c === '"' || c === "'") q = c;
+    else if (c === "#" && (i === 0 || /\s/.test(l[i - 1]))) return l.slice(0, i);
+  }
+  return l;
+}
 async function readRepoRules(root: string): Promise<string | null> {
   try {
     const text = await readFile(join(root, ".lintsure", "rules.yml"), "utf8");
-    return text.split(/\r?\n/).map((l) => l.replace(/\s+#.*$|^\s*#.*$/, "").trimEnd()).filter((l) => l.trim()).join("\n");
+    return text.split(/\r?\n/).map((l) => stripYamlComment(l).trimEnd()).filter((l) => l.trim()).join("\n");
   } catch { return null; }
 }
 

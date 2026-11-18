@@ -23,13 +23,20 @@ const exists = (p: string) => access(p).then(() => true, () => false);
 export async function plan(root: string, a: Agent): Promise<{ agent: Agent; path: string; text?: string; skip?: string; existed: boolean }> {
   const path = join(root, a.file);
   const existed = await exists(path);
-  let json: Record<string, unknown> = {};
+  let json: Record<string, unknown> = {}, raw = "";
   if (existed) {
-    try { json = JSON.parse(await readFile(path, "utf8")); } catch { return { agent: a, path, existed, skip: `${a.file} isn't plain JSON (comments?), so it's left alone. Add the entry by hand.` }; }
+    raw = await readFile(path, "utf8");
+    try { json = JSON.parse(raw.replace(/^﻿/, "")); } catch { return { agent: a, path, existed, skip: `${a.file} isn't plain JSON (comments?), so it's left alone. Add the entry yourself.` }; }
   }
   const servers = (json[a.key] ?? {}) as Record<string, unknown>;
   if (JSON.stringify(servers.lintsure) === JSON.stringify(serverEntry(a))) return { agent: a, path, existed, skip: "already set up" };
-  return { agent: a, path, existed, text: JSON.stringify({ ...json, [a.key]: { ...servers, lintsure: serverEntry(a) } }, null, 2) + "\n" };
+  return { agent: a, path, existed, text: writeJson(raw, { ...json, [a.key]: { ...servers, lintsure: serverEntry(a) } }) };
+}
+
+/** JSON in the same style as the file it replaces: its indent (tabs or N spaces) and a leading byte-order mark. Pure. */
+export function writeJson(original: string, value: unknown): string {
+  const indent = /^\t/m.test(original) ? "\t" : (original.match(/^( +)"/m)?.[1].length ?? 2);
+  return (original.startsWith("﻿") ? "﻿" : "") + JSON.stringify(value, null, indent) + "\n";
 }
 
 /** Agents to set up: the ones named, or the ones whose folder exists, with Claude Code as the default. */
@@ -97,15 +104,15 @@ export async function status(root: string): Promise<number> {
 export async function undo(root: string, agents: Agent[]): Promise<number> {
   for (const a of agents) {
     const path = join(root, a.file);
-    let json: Record<string, unknown>;
-    try { json = JSON.parse(await readFile(path, "utf8")); } catch { continue; }
+    let json: Record<string, unknown>, raw: string;
+    try { raw = await readFile(path, "utf8"); json = JSON.parse(raw.replace(/^﻿/, "")); } catch { continue; }
     const servers = (json[a.key] ?? {}) as Record<string, unknown>;
     if (!("lintsure" in servers)) continue;
     delete servers.lintsure;
     const empty = !Object.keys(servers).length && Object.keys(json).length === 1;
     const backup = await exists(path + ".lintsure-backup");
     if (empty && !backup) { await rm(path); console.log(`- ${a.name}: removed ${a.file} (Lintsure had created it)`); }
-    else { await writeFile(path, JSON.stringify(json, null, 2) + "\n"); console.log(`- ${a.name}: removed the Lintsure entry from ${a.file}${backup ? ` (your original is still in ${a.file}.lintsure-backup)` : ""}`); }
+    else { await writeFile(path, writeJson(raw, json)); console.log(`- ${a.name}: removed the Lintsure entry from ${a.file}${backup ? ` (your original is still in ${a.file}.lintsure-backup)` : ""}`); }
   }
   return 0;
 }
@@ -125,10 +132,19 @@ export async function mcpRoundTrip(timeoutMs = 15000): Promise<{ problems: strin
   const p = spawn(process.execPath, [entry], { stdio: ["pipe", "pipe", "ignore"] });
   let buf = ""; const waiting = new Map<number, (m: any) => void>();
   p.stdout.on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\n")) >= 0) { try { const m = JSON.parse(buf.slice(0, i)); waiting.get(m.id)?.(m); } catch { /* not ours */ } buf = buf.slice(i + 1); } });
+  // A server that fails to start or exits early is reported as a problem, never a crash of the CLI (EPIPE).
+  let gone: string | null = null; const fail = new Set<(e: Error) => void>();
+  const stop = (why: string) => { gone ??= why; for (const f of fail) f(new Error(gone)); };
+  p.on("error", (e) => stop(`MCP server didn't start (${e.message})`));
+  p.on("exit", (code) => stop(`MCP server exited${code == null ? "" : ` with code ${code}`} before answering`));
+  p.stdin.on("error", () => stop("MCP server closed its input"));
   let id = 0;
   const call = (method: string, params: unknown) => new Promise<any>((res, rej) => {
+    if (gone) return rej(new Error(gone));
     const n = ++id, t = setTimeout(() => rej(new Error(`${method} took longer than ${timeoutMs / 1000}s`)), timeoutMs);
-    waiting.set(n, (m) => { clearTimeout(t); res(m); });
+    const onFail = (e: Error) => { clearTimeout(t); rej(e); };
+    fail.add(onFail);
+    waiting.set(n, (m) => { clearTimeout(t); fail.delete(onFail); res(m); });
     p.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: n, method, params }) + "\n");
   });
   const problems: string[] = []; let tools = 0, version = "";

@@ -734,3 +734,14 @@ test("tsconfig paths: exact keys, the * catch-all, and a package tsconfig withou
   assert.equal(reachOf(g, "lib/x.ts").status, "reachable");
   assert.ok(!g.unresolved.get("packages/ui/src/a.ts"), "the root alias applies inside the package");
 });
+
+test("code review fixes: linear import regex, YAML comments in quotes, api/ entries only at the root", async () => {
+  const { specifiers, buildGraph } = await import("../src/reach.js");
+  const { stripYamlComment } = await import("../src/index.js");
+  const t0 = Date.now(); specifiers("import ".repeat(20000)); assert.ok(Date.now() - t0 < 200, "import regex must stay linear");
+  assert.deepEqual(specifiers("import {\n  a,\n  b\n} from './x';\nexport * from \"./y\";\nimport './z.css';\nconst m = await import('./m');"), ["./x", "./y", "./z.css", "./m"]);
+  assert.equal(stripYamlComment('  pattern: "rm # a"  # why'), '  pattern: "rm # a"  ');
+  assert.equal(stripYamlComment("# all comment"), "");
+  const g = buildGraph({ "api/hello.ts": "export default 1;\n", "src/lib/api/client.ts": "export const c = 1;\n" });
+  assert.ok(g.entries.has("api/hello.ts") && !g.entries.has("src/lib/api/client.ts"));
+});

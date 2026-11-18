@@ -71,7 +71,8 @@ export function resolveSpec(from: string, spec: string, files: Set<string>, alia
 // Files a request or event starts in: Next.js routes, pages and API routes, middleware, server actions, serverless and
 // Supabase/Netlify functions, Workers, Express/Hono/Fastify-style handlers, framework config files, and the top-level
 // index/main/server/App file a runtime or bundler starts from.
-const ENTRY_PATH = /(^|\/)(app\/(.+\/)?(route|page|layout)\.[jt]sx?|pages\/(.+\/)?[^/]+\.[jt]sx?|middleware\.[jt]s|api\/.+\.[jt]s|supabase\/functions\/[^/]+\/index\.[jt]s|netlify\/functions\/.+\.[jt]s|functions\/.+\.[jt]s|[^/]+\.config\.[cm]?[jt]s|routes\/(.+\/)?\+(page|layout|server)(\.server)?\.[jt]s|hooks\.server\.[jt]s|app\/routes\/.+\.[jt]sx?|app\/(root|entry\.server|entry\.client)\.[jt]sx?|bin\/.+\.[cm]?[jt]sx?)$|^[^/]+\.[cm]?[jt]sx?$/;
+const ENTRY_PATH = /(^|\/)(app\/(.+\/)?(route|page|layout)\.[jt]sx?|pages\/(.+\/)?[^/]+\.[jt]sx?|middleware\.[jt]s|supabase\/functions\/[^/]+\/index\.[jt]s|netlify\/functions\/.+\.[jt]s|[^/]+\.config\.[cm]?[jt]s|routes\/(.+\/)?\+(page|layout|server)(\.server)?\.[jt]s|hooks\.server\.[jt]s|app\/routes\/.+\.[jt]sx?|app\/(root|entry\.server|entry\.client)\.[jt]sx?|bin\/.+\.[cm]?[jt]sx?)$|^[^/]+\.[cm]?[jt]sx?$|^(src\/)?(api|functions)\/.+\.[cm]?[jt]s$/;
+// api/ and functions/ count only at the project root (Vercel and Firebase style), not src/lib/api/client.ts (code review).
 // Relative to a package folder (a folder with package.json): the file a runtime or bundler starts from.
 const PKG_ENTRY = /^(src\/)?(index|main|server|app|App|cli|worker)\.[cm]?[jt]sx?$/;
 const ENTRY_TEXT = /^\s*["']use server["']|\b(app|router|server|api)\.(get|post|put|patch|delete|all|route|use)\s*\(\s*["'`/]|\bexport\s+default\s*\{[^}]*\bfetch\b|\baddEventListener\(\s*["']fetch["']|\bDeno\.serve\(|\bcreateServer\(|\bexport\s+(async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\b/m;

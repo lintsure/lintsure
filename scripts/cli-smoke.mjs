@@ -43,5 +43,21 @@ const spans = JSON.parse(readFileSync(join(T, "lintsure.otlp.json"), "utf8")).re
 assert.equal(spans.length, 2);
 assert.ok(spans[1].attributes.some((a) => a.key === "gen_ai.tool.name" && a.value.stringValue === "lintsure.guard.made_up"));
 assert.ok(spans.every((x) => x.traceId.length === 32 && x.spanId.length === 16));
+// setup keeps the file's style: tab indent and a byte-order mark survive, and --undo keeps them too.
+const BOM = String.fromCharCode(0xfeff), NL = "\n", TAB = "\t";
+mkdirSync(join(T, ".gemini"), { recursive: true });
+writeFileSync(join(T, ".gemini/settings.json"), BOM + "{" + NL + TAB + '"theme": "dark"' + NL + "}" + NL);
+run("setup", T, "--agents", "gemini", "--yes");
+const styled = readFileSync(join(T, ".gemini/settings.json"), "utf8");
+assert.ok(styled.startsWith(BOM) && styled.includes(NL + TAB + '"mcpServers"'), "tab indent and BOM kept");
+run("setup", T, "--agents", "gemini", "--undo");
+assert.ok(readFileSync(join(T, ".gemini/settings.json"), "utf8").startsWith(BOM + "{" + NL + TAB + '"theme"'));
+// --diff sees a changed file whose name has a space in it (git quotes or tab-ends such paths).
+const G = join(T, "diffrepo"); mkdirSync(G);
+const git = (...a) => execFileSync("git", a, { cwd: G, stdio: "ignore" });
+git("init", "-q"); writeFileSync(join(G, "a b.ts"), "export const x = 1;" + NL); git("add", "-A"); git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+writeFileSync(join(G, "a b.ts"), "export const x = 1;" + NL + 'const api = fetch("http://api.example.com/data");' + NL);
+const d = execFileSync(process.execPath, [CLI, "scan", ".", "--diff", "HEAD"], { cwd: G, encoding: "utf8" });
+assert.ok(d.includes("a b.ts:2"), "finding on the changed line of a path with a space");
 rmSync(T, { recursive: true, force: true });
 console.log("CLI setup/status smoke test passed");
