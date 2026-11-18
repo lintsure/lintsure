@@ -40,6 +40,8 @@ test("known findings stay put", async () => {
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:5",
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:6",
     "release.env-not-ignored@.gitignore:1",
+    "llm.client-controls-system@app/api/chat/route.ts:4",
+    "llm.unbounded-agent-loop@app/api/chat/route.ts:5",
     "auth.no-rate-limit@app/api/login/route.ts:3",
     "ai.call-not-logged@src/ai.ts:3",
     "llm.no-output-limit@src/ai.ts:3",
@@ -647,7 +649,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "9178-62BF");
+  assert.equal(r.policy?.fingerprint, "F4A7-02C4");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {
@@ -705,4 +707,16 @@ test("reachability: routes reach helpers through relative and tsconfig-alias imp
   assert.equal(tsAliases("{ broken").paths.length, 0);
   const g2 = buildGraph({ "src/a.ts": "import { m } from './nope/maybe';\n", "src/lib/maybe.ts": "export const m = 1;\n" }, null);
   assert.equal(reachOf(g2, "src/lib/maybe.ts").status, "unknown");
+});
+
+test("reachability: package.json main/bin and HTML <script src> count as entry points", async () => {
+  const { buildGraph, declaredEntries, reachOf } = await import("../src/reach.js");
+  const files = { "src/main/main.js": "require('./window');\n", "src/main/window.js": "module.exports = 1;\n", "js/app.js": "import './charts.js';\n", "js/charts.js": "export const c = 1;\n", "bin/cli.mjs": "import '../lib/run.mjs';\n", "lib/run.mjs": "export {};\n" };
+  const set = new Set(Object.keys(files));
+  const extra = declaredEntries({ "package.json": '{ "main": "src/main/main.js", "bin": { "x": "./bin/cli.mjs" } }' }, { "index.html": '<script type="module" src="./js/app.js?v=2"></script><script src="https://cdn.x/y.js"></script>' }, set);
+  assert.deepEqual(extra.sort(), ["bin/cli.mjs", "js/app.js", "src/main/main.js"]);
+  const g = buildGraph(files, null, [""], extra);
+  assert.equal(reachOf(g, "src/main/window.js").status, "reachable");
+  assert.equal(reachOf(g, "js/charts.js").status, "reachable");
+  assert.equal(reachOf(g, "lib/run.mjs").status, "reachable");
 });

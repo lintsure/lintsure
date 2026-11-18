@@ -12,7 +12,7 @@ export const owaspLlm: FrameworkKnowledge = {
     return null;
   },
   obligations: [
-    { ref: "LLM01:2026", title: "Prompt Injection", inCode: "partly", rules: ["llm.user-input-in-system-prompt", "agent.instructions-unsafe"],
+    { ref: "LLM01:2026", title: "Prompt Injection", inCode: "partly", rules: ["llm.user-input-in-system-prompt", "agent.instructions-unsafe", "llm.client-controls-system"],
       plain: "User text, web pages or files can carry instructions that change what the model does. Keep instructions and user content apart, and limit what the model can do.",
       evidence: "How prompts are built, and tests with hostile input." },
     { ref: "LLM02:2026", title: "Sensitive Information Disclosure", inCode: "partly", rules: ["secret.in-source", "secret.public-env", "pii.logged", "log.secret"],
@@ -27,7 +27,7 @@ export const owaspLlm: FrameworkKnowledge = {
     { ref: "LLM05:2026", title: "Data and Model Poisoning", inCode: "no",
       plain: "Training, fine-tuning or retrieval data can be tampered with to change the model's behaviour.",
       evidence: "Data sources, who can change them, and checks on new data." },
-    { ref: "LLM06:2026", title: "Unbounded Consumption", inCode: "partly", rules: ["llm.no-output-limit", "ai.call-not-logged"],
+    { ref: "LLM06:2026", title: "Unbounded Consumption", inCode: "partly", rules: ["llm.no-output-limit", "ai.call-not-logged", "llm.unbounded-agent-loop"],
       plain: "Limit output size, request rate and cost per user, so one person can't run up a bill or take the service down.",
       evidence: "Rate limits, spending alerts and usage monitoring." },
     { ref: "LLM07:2026", title: "Misinformation", inCode: "no",

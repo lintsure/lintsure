@@ -20,8 +20,8 @@
   "pii.to-analytics": {
     "precision": 100,
     "recall": 100,
-    "cases": 7,
-    "casesHash": "37f39210a4ce"
+    "cases": 11,
+    "casesHash": "33589cca0a6c"
   },
   "pii.in-url": {
     "precision": 100,
@@ -134,8 +134,8 @@
   "xml.external-entities": {
     "precision": 100,
     "recall": 100,
-    "cases": 6,
-    "casesHash": "6d58d51c3a0b"
+    "cases": 5,
+    "casesHash": "d46f0f91628a"
   },
   "deps.unpinned-version": {
     "precision": 100,
@@ -278,8 +278,8 @@
   "secret.public-env": {
     "precision": 100,
     "recall": 100,
-    "cases": 13,
-    "casesHash": "f98fe2cf79ac"
+    "cases": 17,
+    "casesHash": "c138f6bd86e8"
   },
   "build.sourcemaps-public": {
     "precision": 100,
@@ -346,5 +346,17 @@
     "recall": 100,
     "cases": 8,
     "casesHash": "1db5b54f06d0"
+  },
+  "llm.unbounded-agent-loop": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6,
+    "casesHash": "2bf81d1710e2"
+  },
+  "llm.client-controls-system": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 3,
+    "casesHash": "4249ed8d7807"
   }
 }

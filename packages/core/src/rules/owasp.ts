@@ -138,7 +138,6 @@ export const owaspRules: Rule[] = [
     test: (l) => /"(pre|post)?install"\s*:\s*"[^"]*\b(curl|wget|Invoke-WebRequest)\b/.test(l) }),
   // Agent settings that run commands on their own (Claude Code hooks, MCP servers, editor tasks). An attacker who can
   // edit one of these files gets code run on every developer machine that opens the repo with that agent.
-  // Seen in the wild: GTIG AI Threat Tracker, Q4 2026 (a hook in .claude/settings.json that downloaded a backdoor).
   rule({ id: "agent.config-runs-remote-code", title: "Agent config downloads and runs code", status: "gap", severity: "high", controls: [A03],
     fix: "Don't download and run scripts from agent hooks, MCP server commands or editor tasks. Pin a reviewed local script or a versioned package instead, and review changes to these files like code.",
     note: "Agents run these commands on their own, often at startup, with your user's permissions. A changed URL or script runs on every machine that opens the repo (CWE-829, CWE-494).",

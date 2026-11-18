@@ -71,8 +71,25 @@ const ENTRY_PATH = /(^|\/)(app\/(.+\/)?(route|page|layout)\.[jt]sx?|pages\/(.+\/
 const PKG_ENTRY = /^(src\/)?(index|main|server|app|App|cli|worker)\.[cm]?[jt]sx?$/;
 const ENTRY_TEXT = /^\s*["']use server["']|\b(app|router|server|api)\.(get|post|put|patch|delete|all|route|use)\s*\(\s*["'`/]|\bexport\s+default\s*\{[^}]*\bfetch\b|\baddEventListener\(\s*["']fetch["']|\bDeno\.serve\(|\bcreateServer\(|\bexport\s+(async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\b/m;
 
+/** Files a project starts from that no code imports: package.json main/module/bin/exports, and scripts an HTML page
+ *  loads with <script src>. Paths come back relative to the project root. Pure. */
+export function declaredEntries(pkgs: Record<string, string>, html: Record<string, string>, files: Set<string>): string[] {
+  const out: string[] = [];
+  const add = (from: string, p: unknown) => { if (typeof p !== "string" || /^(https?:)?\/\//.test(p)) return; const hit = resolveSpec(from, p.startsWith(".") || p.startsWith("/") ? p : `./${p}`, files, tsAliases(null)); if (typeof hit === "string" && hit !== "external") out.push(hit); };
+  for (const [path, text] of Object.entries(pkgs)) {
+    let j: Record<string, unknown>; try { j = JSON.parse(text); } catch { continue; }
+    const at = path.includes("/") ? `${path.slice(0, path.lastIndexOf("/"))}/package.json` : "package.json";
+    for (const k of ["main", "module", "browser", "types"]) add(at, j[k]);
+    for (const v of typeof j.bin === "string" ? [j.bin] : Object.values((j.bin ?? {}) as object)) add(at, v);
+    const walk = (v: unknown): void => { if (typeof v === "string") add(at, v); else if (v && typeof v === "object") Object.values(v).forEach(walk); };
+    walk(j.exports);
+  }
+  for (const [path, text] of Object.entries(html)) for (const m of text.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)) add(path, m[1].split(/[?#]/)[0]);
+  return out;
+}
+
 /** Builds the import graph and the entry points from the project's JS/TS files. Pure. */
-export function buildGraph(files: Record<string, string>, tsconfigs: string | null | Record<string, string> = null, pkgDirs: string[] = [""]): Graph {
+export function buildGraph(files: Record<string, string>, tsconfigs: string | null | Record<string, string> = null, pkgDirs: string[] = [""], extraEntries: string[] = []): Graph {
   const set = new Set(Object.keys(files));
   // Each file uses the tsconfig of its nearest folder that has one (monorepos keep one per package).
   const configs = typeof tsconfigs === "string" || tsconfigs === null ? { "": tsconfigs ?? "" } : tsconfigs;
@@ -80,7 +97,7 @@ export function buildGraph(files: Record<string, string>, tsconfigs: string | nu
   const aliasFor = (f: string) => aliases.find((a) => !a.root || f.startsWith(a.root + "/")) ?? tsAliases(null);
   const pkgs = [...pkgDirs].sort((a, b) => b.length - a.length);
   const pkgRel = (f: string) => { const d = pkgs.find((p) => !p || f.startsWith(p + "/")); return d ? f.slice(d.length + 1) : f; };
-  const importers = new Map<string, Set<string>>(), entries = new Set<string>(), unresolved = new Map<string, string[]>();
+  const importers = new Map<string, Set<string>>(), entries = new Set<string>(extraEntries.filter((e) => set.has(e))), unresolved = new Map<string, string[]>();
   for (const [f, text] of Object.entries(files)) {
     if (!CODE.test(f)) continue;
     if (ENTRY_PATH.test(f) || PKG_ENTRY.test(pkgRel(f)) || ENTRY_TEXT.test(text)) entries.add(f);

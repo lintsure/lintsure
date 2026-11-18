@@ -35,10 +35,12 @@ export const standardsForExisting: Record<string, Control[]> = {
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 // Words for what a model sends back, so its output can be followed to a dangerous place on the same line.
-const MODEL_OUTPUT = /\b(completion|response|result|output|reply|answer|generation|llmResponse|aiResponse)\b[\w.?[\]]*\.(choices|content|text|output_text|message)\b|\.output_text\b|\bresult\.text\b/;
+// Also the AI SDK's shapes: `const { text } = await generateText(...)` and a chat message part (`part.text`).
+const MODEL_OUTPUT = /\b(completion|response|result|output|reply|answer|generation|llmResponse|aiResponse)\b[\w.?[\]]*\.(choices|content|text|output_text|message)\b|\.output_text\b|\bresult\.text\b|\bpart\.text\b|\bmessage\.content\b/;
 const SINKS = /\b(eval|exec|execSync|spawn|new Function)\s*\(|\.innerHTML\s*=|dangerouslySetInnerHTML|\.(query|execute|raw)\s*\(|\bsubprocess\.|\bos\.system\(/;
 // User input inside a system prompt: the model can't tell the app's instructions from the user's text.
-const USER_TEXT = /\$\{[^}]*\b(req\.(body|query|params)|request\.(json|form|args)|input|userInput|message|prompt|query|body)\b[^}]*\}|\{(user_input|user_message|query|message)\}/;
+// An error's own text (`${error.message}`) is the app's, not the user's (vercel/ai study).
+const USER_TEXT = /\$\{(?![^}]*\b(err|error|e|ex|exception)\.message\b)[^}]*\b(req\.(body|query|params)|request\.(json|form|args)|input|userInput|message|prompt|query|body)\b[^}]*\}|\{(user_input|user_message|query|message)\}/;
 
 const rule = (r: Omit<Rule, "mappedBy" | "reviewedAt">): Rule => ({ ...r, ...DRAFT });
 export const standardsRules: Rule[] = [
@@ -53,7 +55,22 @@ export const standardsRules: Rule[] = [
     note: "A model's reply can be steered by anyone who can influence its input. Passing it straight to eval, a shell, a database query or innerHTML lets them run code or change data.",
     extensions: CODE,
     // Only in a file that calls an AI model: `nav.innerHTML = await response.text()` after a plain fetch is not model output (field test).
-    fileTest: (lines) => (lines.some(isAiCall) ? lines.flatMap((l, i) => (MODEL_OUTPUT.test(l) && SINKS.test(l) ? [i + 1] : [])) : []) }),
+    // A useChat/useCompletion client file renders model output too, though the call itself is on the server.
+    fileTest: (lines) => (lines.some((l) => isAiCall(l) || /\buse(Chat|Completion|Object)\s*\(/.test(l)) ? lines.flatMap((l, i) => (MODEL_OUTPUT.test(l) && SINKS.test(l) ? [i + 1] : [])) : []) }),
+  // AI SDK agents loop through tool calls until a stop condition: one that never stops, or a huge step count, lets a
+  // single request run up cost without end (vercel/ai: isLoopFinished never stops on its own).
+  rule({ id: "llm.unbounded-agent-loop", title: "AI agent loop with no real step limit", status: "gap", severity: "medium", controls: [LLM06],
+    fix: "Stop the loop after a small number of steps, for example stopWhen: stepCountIs(10), and set maxOutputTokens.",
+    note: "Each step is another paid model call and maybe another tool run. With no limit, one request, or one prompt-injected document, can keep the agent going until something times out.",
+    extensions: CODE,
+    // A loop that never stops is a Gap; a very high step count is someone's choice, so Partial (field test: maxSteps 100, 200).
+    test: (l) => /\bstopWhen\s*:\s*isLoopFinished\s*\(\s*\)/.test(l) ? true : /\b(stepCountIs|isStepCount)\s*\(\s*\d{3,}\s*\)|\bmaxSteps\s*:\s*\d{3,}\b/.test(l) ? "partial" : false }),
+  // The client sending its own system prompt: anyone calling the route decides the AI's instructions.
+  rule({ id: "llm.client-controls-system", title: "The browser chooses the AI's system instructions", status: "gap", severity: "high", controls: [LLM01],
+    fix: "Build the system prompt on the server. Take only the user's messages from the request, and ignore any system text it sends.",
+    note: "Whoever calls the route can rewrite the rules the AI follows, including what it may say or which tools it may use (prompt injection, OWASP LLM01).",
+    extensions: CODE,
+    fileTest: (lines) => (lines.some((l) => isAiCall(l)) ? lines.flatMap((l, i) => (/\{[^}]*\bsystem\b[^}]*\}\s*=\s*(await\s+)?(req|request)\.(json\(\)|body)/.test(l) ? [i + 1] : [])) : []) }),
   rule({ id: "llm.no-output-limit", title: "AI call with no limit on how much it may generate", status: "partial", severity: "low", controls: [LLM06],
     fix: "Set a maximum output size on each call (max_tokens, maxTokens or max_output_tokens), and limit how often each user can call it.",
     note: "Without a limit, one request can run up a large bill or tie up the service (unbounded consumption). Marked Partial: the limit may be set in a shared client or wrapper.",

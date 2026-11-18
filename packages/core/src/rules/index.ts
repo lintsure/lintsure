@@ -135,7 +135,9 @@ export const rules: Rule[] = [
     fix: "Send an internal user ID instead of the email or name. If personal data must go there, list the tool as a processor.",
     note: "Analytics vendors keep what you send them. Personal data there needs a lawful basis and a processing agreement.",
     extensions: CODE,
-    test: (l) => /\b(posthog|analytics|mixpanel|amplitude|segment|heap|gtag|ga|intercom|hotjar|sentry)\.(identify|track|capture|people\.set|setUser|setUserProperties|register)\s*\(/i.test(l) && PII.test(l),
+    // Also a bare track("event", { ... }), the way @vercel/analytics and similar SDKs are imported and called.
+    test: (l) => (/\b(posthog|analytics|mixpanel|amplitude|segment|heap|gtag|ga|intercom|hotjar|sentry)\.(identify|track|capture|people\.set|setUser|setUserProperties|register)\s*\(/i.test(l)
+      || /(^|[^.\w])track\s*\(\s*["'`][^"'`]+["'`]\s*,\s*\{/.test(l)) && PII.test(l),
     ...DRAFT,
   },
   {
@@ -276,7 +278,12 @@ const AI_CALL = new RegExp([
   /\b(openai|anthropic|client)\.(chat\.completions|responses|messages|completions)\.create\s*\(/.source,
   /\b\w+\.chat\.completions\.create\s*\(/.source,
   /\.generateContent(Stream)?\s*\(/.source,
-  /\b(generateText|streamText|generateObject|streamObject)\s*\(/.source,
+  // Vercel AI SDK, including the experimental_ forms and its agent class (studied in vercel/ai).
+  /(?<![A-Za-z])(experimental_)?(generateText|streamText|generateObject|streamObject)\s*\(/.source,
+  // Its image, speech, video and transcription calls only in the SDK's own shape: apps name their own wrappers
+  // generateImage() or transcribe() too (field test 2026-11-18: 65 false gains before this).
+  /(?<![A-Za-z.])experimental_(generateImage|generateSpeech|generateVideo|transcribe)\s*\(|(?<![A-Za-z.])(generateImage|generateSpeech|generateVideo|transcribe)\s*\(\s*\{\s*model\s*:/.source,
+  /\bnew\s+(ToolLoopAgent|Experimental_Agent)\s*\(/.source,
   /\b(model|clf|classifier|pipeline)\.(predict|predict_proba|invoke|generate)\s*\(/.source,
   /\b(chain|llm|chatModel|agent|runnable)\w*\.(invoke|stream|batch)\s*\(/.source,
   // A provider URL counts only inside a request call, not where it's stored in a constant.
@@ -297,7 +304,8 @@ export const mediaModelCalls = (lines: string[]) =>
 // Whole words only: "banner" is not "ban" (field test, 139 repos).
 // Letters may not touch the word, but underscores may: loan_denied counts, banner doesn't.
 const DECISION = /(?<![a-z])(approve[ds]?|approval|reject(ed|ion)?|deny|denied|decline[ds]?|eligib(le|ility)|hire[ds]?|hiring|shortlist(ed)?|credit[_ ]?(score|limit|decision)|loan|underwrit[a-z]*|admit(ted)?|admission|ban(ned)?|suspend(ed)?)(?![a-z])/i;
-const LOGGED = /\b(logger|log|logging|audit|auditLog|console)\.\w+\s*\(|\binsert\w*\s*\(|\.save\s*\(/;
+// The AI SDK's own record hooks count too: onFinish saving the chat, or telemetry switched on (vercel/ai docs).
+const LOGGED = /\b(logger|log|logging|audit|auditLog|console)\.\w+\s*\(|\binsert\w*\s*\(|\.save\s*\(|\b(save|persist|record|store)[A-Z]\w*\s*\(|\bonFinish\s*:|\b(experimental_)?telemetry\s*:\s*\{/;
 
 rules.push(
   {
@@ -352,7 +360,7 @@ rules.push(
     fix: "Mark generated media as AI-made in a machine-readable way (for example C2PA metadata) and label deepfakes for viewers.",
     note: "Marked Partial: you may already add marking after this call. Confirm it does.",
     extensions: CODE,
-    test: (l) => /\bimages\.(generate|edit)\s*\(|\baudio\.speech\.create\s*\(|\b(textToSpeech|text_to_speech|generateImage|generate_image|generateVideo|generate_video)\s*\(|\b(StableDiffusion\w*|DiffusionPipeline)\b/.test(l),
+    test: (l) => /\bimages\.(generate|edit)\s*\(|\baudio\.speech\.create\s*\(|(?<![A-Za-z])(textToSpeech|text_to_speech|generateImage|generate_image|generateVideo|generate_video|generateSpeech)\s*\(|\b(StableDiffusion\w*|DiffusionPipeline)\b/.test(l),
     // Also: a generic AI call (e.g. generateContent) in a file that names an image, voice or video model.
     fileTest: mediaModelCalls,
     ...DRAFT,

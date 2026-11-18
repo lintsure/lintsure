@@ -10,6 +10,6 @@ claude mcp add lintsure -- npx -y @lintsure/mcp
 
 Then ask your agent: *check this repo for compliance*.
 
-Tools: `scan`, `classify`, `explain_framework`, `explain_rule`. Setup for Cursor, Codex and Devin Desktop (formerly Windsurf): https://lintsure.com/docs/mcp
+Tools: `scan`, `plan_checks`, `classify`, `explain_framework`, `explain_rule`. Setup for Cursor, Codex and Devin Desktop (formerly Windsurf): https://lintsure.com/docs/mcp
 
 Source: https://github.com/lintsure/lintsure · Apache-2.0

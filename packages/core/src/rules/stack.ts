@@ -61,7 +61,7 @@ export function functionsWithoutAuth(lines: string[], _shared?: string, files: R
 // No bare PUBLIC_: it matches ordinary constants like PUBLIC_WITH_PRIVATE_AGENT.
 const PUBLIC_ENV = /\b(NEXT_PUBLIC|VITE|EXPO_PUBLIC|REACT_APP|NUXT_PUBLIC)_[A-Z0-9_]*/g;
 // Services whose API keys are always server-side secrets (widget and analytics keys are often public, so not these).
-const SECRET_SERVICE = /OPENAI|ANTHROPIC|CLAUDE|GEMINI|GOOGLE_AI|GROQ|MISTRAL|DEEPSEEK|COHERE|REPLICATE|ELEVENLABS|RESEND|SENDGRID|MAILGUN|POSTMARK|TWILIO|AWS|DATABASE|PINECONE|GITHUB_TOKEN/;
+const SECRET_SERVICE = /OPENAI|ANTHROPIC|CLAUDE|GEMINI|GOOGLE_AI|GROQ|MISTRAL|DEEPSEEK|COHERE|REPLICATE|ELEVENLABS|RESEND|SENDGRID|MAILGUN|POSTMARK|TWILIO|AWS|DATABASE|PINECONE|GITHUB_TOKEN|AI_GATEWAY|V0_|XAI|OPENROUTER|FIREWORKS|TOGETHER|PERPLEXITY/;
 // Supabase projects keep their SQL in supabase/. Prisma or Drizzle migrations elsewhere talk to a database the
 // browser can't reach, so row level security isn't the point there (found in the field test: 263 false alarms).
 const SUPABASE_DIR = /(^|\/)supabase\//;
@@ -69,7 +69,9 @@ const SUPABASE_DIR = /(^|\/)supabase\//;
 const PUBLIC_BY_DESIGN = /ANON|PUBLISHABLE|_PK_|PUBLIC_KEY|FIREBASE|MAPS|MAPBOX|POSTHOG|SENTRY_DSN|ALGOLIA_SEARCH|SITE_KEY|MEASUREMENT_ID|URL$|_URL_/;
 // Words that make a name secret whatever service it belongs to. They win over the public list above:
 // NEXT_PUBLIC_FIREBASE_ADMIN_PRIVATE_KEY and VITE_POSTHOG_PERSONAL_API_KEY are secrets (review P14).
-const SECRET_WORD = /SECRET|PRIVATE|SERVICE_ROLE|SB_SECRET|PASSWORD|PERSONAL_(API_KEY|ACCESS_TOKEN|TOKEN)|(DATABASE|POSTGRES|DB|MONGO(DB)?|REDIS)_URL|CONNECTION_STRING/;
+// Also Vercel's: a Blob read-write token, a Vercel API token, and an Edge Config connection string (its URL carries the
+// read token), studied in vercel/storage.
+const SECRET_WORD = /SECRET|PRIVATE|SERVICE_ROLE|SB_SECRET|PASSWORD|PERSONAL_(API_KEY|ACCESS_TOKEN|TOKEN)|(DATABASE|POSTGRES|DB|MONGO(DB)?|REDIS)_URL|CONNECTION_STRING|READ_WRITE|VERCEL_(API_)?TOKEN|(EDGE|GLOBAL)_CONFIG$/;
 /** A browser-exposed env name that holds a secret. Pure. */
 export function publicSecretName(n: string): boolean {
   if (/FIREBASE\w*DATABASE_URL/.test(n)) return false; // Firebase's Realtime Database URL is public config
@@ -137,7 +139,7 @@ export const stackRules: Rule[] = [
     unseen: "Lintsure reads files, not git, so it can't tell whether the env file is already committed. Check with git ls-files.",
     extensions: [""], fileName: /^\.gitignore$/, pathMatch: /^\.gitignore$/,
     sharedFiles: /(^|\/)\.env(\.[\w.-]+)?$/,
-    insert: "# Local settings and keys (added by Lintsure, review before committing)\n.env\n.env.*\n!.env.example\n",
+    insert: "# Local settings and keys (suggested by Lintsure)\n.env\n.env.*\n!.env.example\n",
     fileTest: envNotIgnored }),
   rule({ id: "auth.no-rate-limit", title: "Login or password reset with no rate limit in sight", status: "partial", severity: "medium", controls: [A07],
     fix: "Limit how often one IP or account can try: a middleware limiter (for example @upstash/ratelimit, express-rate-limit or rate-limiter-flexible), or a firewall rule for this path. Lock or slow down after repeated failures.",

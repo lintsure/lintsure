@@ -74,12 +74,16 @@
       "posthog.identify(user.id, { email: user.email });",
       "analytics.track('Signup', { email });",
       "mixpanel.people.set({ $email: user.email, phone: user.phone });",
-      "Sentry.setUser({ email: user.email });"
+      "Sentry.setUser({ email: user.email });",
+      "track(\"signup\", { email: user.email, plan });"
     ],
     "pass": [
       "posthog.identify(user.id);",
       "analytics.track('Signup', { plan: 'pro' });",
-      "mixpanel.track('Page viewed');"
+      "mixpanel.track('Page viewed');",
+      "track(\"signup\", { plan: \"pro\" });",
+      "router.track(\"email\");",
+      "this.track(\"x\", { email: user.email });"
     ]
   },
   "pii.in-url": {
@@ -321,8 +325,7 @@
   "xml.external-entities": {
     "flag": [
       "parser = etree.XMLParser(resolve_entities=True)",
-      "libxmljs.parseXml(xml, { noent: true })",
-      "parser = etree.XMLParser(resolve_entities=True)"
+      "libxmljs.parseXml(xml, { noent: true })"
     ],
     "pass": [
       "root = defusedxml.ElementTree.fromstring(body)",
@@ -636,7 +639,10 @@
       "const k = process.env.NEXT_PUBLIC_STRIPE_SECRET_KEY;",
       "VITE_SUPABASE_SERVICE_ROLE_KEY=eyJ...",
       "const o = process.env.NEXT_PUBLIC_OPENAI_API_KEY;",
-      "const apiKey = import.meta.env.VITE_OPENAI_API_KEY;"
+      "const apiKey = import.meta.env.VITE_OPENAI_API_KEY;",
+      "const t = process.env.NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN;",
+      "const ec = process.env.NEXT_PUBLIC_EDGE_CONFIG;",
+      "VITE_VERCEL_TOKEN=abc123"
     ],
     "pass": [
       "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY",
@@ -647,7 +653,8 @@
       "NEXT_PUBLIC_ENABLE_ACCESS_TOKEN: coercedBoolean.default(false),",
       "NEXT_PUBLIC_AMPLITUDE_API_KEY: z.string().optional(),",
       "const t = process.env.NEXT_PUBLIC_CHATWOOT_TOKEN;",
-      "token: env.REACT_APP_PADDLE_CLIENT_TOKEN,"
+      "token: env.REACT_APP_PADDLE_CLIENT_TOKEN,",
+      "const id = process.env.NEXT_PUBLIC_EDGE_CONFIG_ID;"
     ]
   },
   "build.sourcemaps-public": {
@@ -827,6 +834,33 @@
       "export async function GET() { return Response.json({ page: \"login\" }); }",
       "import rateLimit from \"express-rate-limit\";\nrouter.post(\"/login\", rateLimit({ max: 5 }), handler);",
       "const styles = StyleSheet.create({\n  actions: { flexDirection: \"row\" },\n});"
+    ]
+  },
+  "llm.unbounded-agent-loop": {
+    "flag": [
+      "  stopWhen: isLoopFinished(),",
+      {
+        "line": "const r = await agent.generate({ prompt, stopWhen: stepCountIs(500) });",
+        "status": "partial"
+      },
+      {
+        "line": "  maxSteps: 1000,",
+        "status": "partial"
+      }
+    ],
+    "pass": [
+      "  stopWhen: stepCountIs(10),",
+      "  stopWhen: [stepCountIs(20), hasToolCall(\"done\")],",
+      "  maxSteps: 5,"
+    ]
+  },
+  "llm.client-controls-system": {
+    "flag": [
+      "import { streamText } from \"ai\";\nconst { messages, system } = await req.json();\nreturn streamText({ model, system, messages });"
+    ],
+    "pass": [
+      "import { streamText } from \"ai\";\nconst { messages } = await req.json();\nreturn streamText({ model, system: SYSTEM, messages });",
+      "const { system } = await req.json();"
     ]
   }
 }

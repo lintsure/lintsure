@@ -73,7 +73,7 @@ npx lintsure setup --yes    # write it
 npx lintsure status         # check Node, config, rules and agents
 ```
 
-Or by hand in Claude Code: `claude mcp add lintsure -- npx -y @lintsure/mcp`.
+Or add it yourself in Claude Code: `claude mcp add lintsure -- npx -y @lintsure/mcp`.
 
 From source: `git clone`, `npm install`, `npm test`, then `node packages/cli/dist/src/index.js scan /path/to/your-app`.
 
@@ -87,13 +87,13 @@ Run it on every pull request with **[lintsure/action](https://github.com/lintsur
 
 | Path | What |
 |---|---|
-| `packages/core` | Finding schema, 72 rules, framework knowledge, scan, config reader, report writer, policy fingerprint, pack loader, safety wording |
+| `packages/core` | Finding schema, 74 rules, framework knowledge, scan, config reader, report writer, policy fingerprint, pack loader, safety wording |
 | `packages/cli` | The `lintsure` command: `scan`, `baseline`, `init`, `info`, `setup`, `status` |
 | `packages/mcp` | MCP server: `scan`, `plan_checks`, `classify`, `explain_framework`, `explain_rule` |
 | `fixtures/` | Planted problems, near misses and a config example used by the tests |
 | `scripts/mcp-smoke.mjs` | Starts the MCP server: every reply carries the disclaimer, bad input is rejected, the tool list stays small |
 | `scripts/cli-smoke.mjs` | `setup` and `status` in a temporary project |
-| `scripts/check-sources.mjs` | Checks the real-incident links on rules still answer (run by hand before a release) |
+| `scripts/check-sources.mjs` | Checks the real-incident links on rules still answer (run before a release) |
 
 ## Get it from the official places only
 
