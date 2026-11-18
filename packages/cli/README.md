@@ -8,9 +8,11 @@ Readiness checks for the code your AI writes: EU AI Act, GDPR, OWASP Top 10, OWA
 npx lintsure scan
 npx lintsure scan ./my-app --framework gdpr,owasp-top10 --json --fail-on gap
 npx lintsure scan --report --project "My app"   # multi-page assessment to review and sign
+npx lintsure setup --yes                          # add Lintsure to the coding agents this project uses
+npx lintsure status                               # check Node, config, rules and agents
 ```
 
-Every finding shows the file and line, the rules it may affect across all four frameworks, a suggested fix and a plain note on why it matters.
+Every finding shows the file and line, the framework controls it may affect, a suggested fix and a plain note on why it matters.
 
 - Docs: https://lintsure.com/docs/cli
 - Source: https://github.com/lintsure/lintsure

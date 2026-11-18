@@ -2,7 +2,7 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
-## 0.3.11 · Unreleased · Policy fingerprint
+## 0.3.11 · 2026-11-18 · Policy fingerprint
 
 ### New
 - **Policy fingerprint:** every scan report (JSON, Markdown, SARIF and the CLI summary line) names the policy it ran under as a short code like `#3F2A-9C1D`. The same rules and settings give the same code on any machine; switching a rule off, re-rating it, or changing frameworks, ignore paths, `.lintsure/rules.yml` or installed rule packs gives a new one. It names the policy; it doesn't sign anything.

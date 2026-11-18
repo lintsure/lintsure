@@ -27,7 +27,7 @@ Lintsure reads your repository and checks it against the EU AI Act, GDPR, OWASP 
 
 - the **file and line**
 - a **status**: Gap, Partial, Met or Outside code
-- **every control it touches**, across all four frameworks at once
+- **every control it touches**, across every framework you check
 - a **suggested fix** and a plain **auditor note**
 
 It also lists what code can't prove (access reviews, training records, contracts) and the evidence an auditor will ask for, and can write a multi-page **assessment report** with a human review and sign-off page (`--report`).
