@@ -1,0 +1,4 @@
+name: lintsure-codeql
+# fixtures/ holds planted problems and near misses for Lintsure's own tests, so scanning it only adds noise.
+paths-ignore:
+  - fixtures
