@@ -4,9 +4,9 @@
 
 <h1 align="center">Lintsure</h1>
 
-<p align="center"><strong>Catch your coding agent's mistakes before they ship.</strong><br>
-Lintsure keeps your coding agent working to the rules you set and the security and compliance standards you connect, like OWASP, GDPR and the EU AI Act. It runs on your machine and is open source.<br>
-Open source · Runs on your machine · Same input, same result</p>
+<p align="center"><strong>Catch your AI coding agent's mistakes before they ship.</strong><br>
+Open-source guardrails for Claude Code, Cursor, Codex, VS Code and Gemini CLI. Lintsure keeps your agent working to the rules you set, and checks the code it writes for security and privacy problems against the standards you connect: OWASP, GDPR, the EU AI Act and more.<br>
+Runs on your machine · Same input, same result · CLI, MCP server and GitHub Action</p>
 
 <p align="center">
   <a href="https://github.com/lintsure/lintsure/actions/workflows/ci.yml"><img src="https://github.com/lintsure/lintsure/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -24,14 +24,22 @@ Open source · Runs on your machine · Same input, same result</p>
 
 ## What it does
 
-Lintsure reads your repository and checks it against the EU AI Act, GDPR, OWASP Top 10, OWASP LLM Top 10, CWE Top 25 and the EU Cyber Resilience Act. Every finding shows:
+Lintsure sits between your AI coding agent and your codebase. It does three things:
+
+1. **Checks the code your agent writes.** 74 rules look for problems that AI-written code often has: secrets committed to source, databases without row level security, personal data written to logs, AI output used without a human check, agent configs that run remote code, and more. It reads JavaScript, TypeScript and Python, plus config and secret checks for every file.
+2. **Maps each finding to the standards you connect.** Six frameworks are built in: OWASP Top 10, OWASP LLM Top 10, CWE Top 25, GDPR, the EU AI Act and the EU Cyber Resilience Act. You pick which ones apply in `lintsure.config.yaml`.
+3. **Keeps your agent on your rules.** The MCP server lets the agent ask which checks apply before it writes code (`plan_checks`) and scan its own work before it says it's done. The [Claude Code plugin](https://github.com/lintsure/claude-plugin) adds Drift Guard, which holds the agent to the rules you write in `.lintsure/rules.yml`.
+
+Every finding shows:
 
 - the **file and line**
 - a **status**: Gap, Partial, Met or Outside code
 - **every control it touches**, across every framework you check
 - a **suggested fix** and a plain **auditor note**
 
-It also lists what code can't prove (access reviews, training records, contracts) and the evidence an auditor will ask for, and can write a multi-page **assessment report** with a human review and sign-off page (`--report`).
+It also lists what code can't prove (access reviews, training records, contracts), and it can write a multi-page **assessment report** with a human review and sign-off page (`--report`).
+
+**Common questions it answers:** Is there a security scanner for code written by Claude Code or Cursor? How do I stop my AI agent from committing secrets? Is there an MCP server that checks code against OWASP or GDPR? How do I make my coding agent follow project rules?
 
 ```text
 ✓ 3 findings · 2 gap · 1 partial · 13 rules met · 22 outside code
