@@ -4,7 +4,8 @@
 
 <h1 align="center">Lintsure</h1>
 
-<p align="center"><strong>Compliance checks for the code your AI writes.</strong><br>
+<p align="center"><strong>Catch your coding agent's mistakes before they ship.</strong><br>
+Lintsure keeps your coding agent working to the rules you set and the security and compliance standards you connect, like OWASP, GDPR and the EU AI Act. It runs on your machine and is open source.<br>
 Open source · Runs on your machine · Same input, same result</p>
 
 <p align="center">
