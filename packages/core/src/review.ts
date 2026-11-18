@@ -26,8 +26,9 @@ export function toBaseline(r: Report, created: string): Baseline {
 export function parseAccepted(text: string): AcceptedEntry[] {
   const out: Record<string, string>[] = [];
   for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/\s+#.*$/, "").replace(/^#.*$/, "");
-    const m = line.match(/^(\s*)(-\s+)?([a-z_]+)\s*:\s*(.*)$/);
+    const hash = raw.search(/(^|\s)#/); // linear: a long run of spaces can't make it backtrack
+    const line = hash < 0 ? raw : raw.slice(0, hash);
+    const m = line.match(/^([ \t]*)(-[ \t]+)?([a-z_]+)[ \t]*:(.*)$/);
     if (!m) continue;
     if (m[2]) out.push({});
     if (!out.length) continue;
