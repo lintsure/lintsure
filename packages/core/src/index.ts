@@ -1,7 +1,7 @@
 // Scout (file walk) + Checker (rules) + Auditor (dedupe, sort) + Officer (outside code).
 // No network calls anywhere in this package: a test enforces it.
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join, relative, sep } from "node:path";
 import { outsideFor } from "./knowledge/index.js";
 import { rules } from "./rules/index.js";
@@ -349,6 +349,21 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       proposal: proposalFor({ file, line: 1, title: r.title, fix: r.fix, note: r.note, controls }), fingerprint: fingerprint(r.id, file, ""),
       ...(r.status === "partial" ? { unseen: r.unseen ?? UNSEEN } : {}) });
   }
+  // Every file is read once per scan, with one size and binary guard for every reader (code review: files were read up
+  // to four times, one at a time). Reads run 32 at a time; null means too big, binary or unreadable.
+  const cache = new Map<string, Promise<string | null>>();
+  const textOf = (abs: string) => {
+    let t = cache.get(abs);
+    if (!t) { t = stat(abs).then(async (st) => { if (st.size > MAX_BYTES) return null; const b = await readFile(abs); return b.includes(0) ? null : b.toString("utf8"); }).catch(() => null); cache.set(abs, t); }
+    return t;
+  };
+  // Prefetch only files some reader needs: a rule that applies to it, a shared-file rule, or reachability.
+  const needed = all.filter((abs, k) => {
+    const ext = extOf(abs), name = basename(abs), file = paths[k];
+    return /\.(m|c)?[jt]sx?$|\.html?$|(^|\/)(package|tsconfig)\.json$/.test(file) || active.some((r) => r.sharedFiles?.test(file)
+      || (r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)) && (!r.pathMatch || r.pathMatch.test(file)) && !r.unlessPath?.test(file)));
+  });
+  for (let i = 0; i < needed.length; i += 32) await Promise.all(needed.slice(i, i + 32).map(textOf));
   // Rules that look across files get the joined text of every file they read, read once up front.
   const shared = new Map<string, string>();
   for (const r of active.filter((x) => x.sharedContext)) {
@@ -356,7 +371,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     for (const [k, abs] of all.entries()) {
       const ext = extOf(abs), file = paths[k];
       if (!r.extensions.includes(ext) || (r.fileName && !r.fileName.test(basename(abs))) || (r.pathMatch && !r.pathMatch.test(file)) || r.unlessPath?.test(file)) continue;
-      const text = await readFile(abs, "utf8").catch(() => "");
+      const text = (await textOf(abs)) ?? "";
       // Commented-out lines don't count: "-- alter table x enable row level security" switches nothing on.
       const comment = commentLines(text.split(/\r?\n/), ext);
       texts.push(text.split(/\r?\n/).filter((_, i) => !comment[i]).join("\n"));
@@ -367,7 +382,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const sharedFiles = new Map<string, Record<string, string>>();
   for (const r of active.filter((x) => x.sharedFiles)) {
     const files: Record<string, string> = {};
-    for (const [k, abs] of all.entries()) if (r.sharedFiles!.test(paths[k])) files[paths[k]] = await readFile(abs, "utf8").catch(() => "");
+    for (const [k, abs] of all.entries()) if (r.sharedFiles!.test(paths[k])) files[paths[k]] = (await textOf(abs)) ?? "";
     sharedFiles.set(r.id, files);
   }
   for (const abs of all) {
@@ -376,9 +391,9 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     const file = relative(root, abs).split(sep).join("/");
     const relevant = active.filter((r) => r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)) && (!r.pathMatch || r.pathMatch.test(file)) && !r.unlessPath?.test(file));
     if (!relevant.length) continue;
-    const buf = await readFile(abs);
-    if (buf.length > MAX_BYTES || buf.includes(0)) continue; // skip big or binary files
-    const raw = buf.toString("utf8").split(/\r?\n/);
+    const whole = await textOf(abs);
+    if (whole === null) continue; // big, binary or unreadable
+    const raw = whole.split(/\r?\n/);
     if (isMinified(raw)) continue; // minified or generated
     // A single very long line (a data URL, a long prompt) is ignored on its own; the rest of the file is still read.
     const lines = raw.map((l) => (l.length > MAX_LINE ? "" : l));
@@ -453,17 +468,17 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   if (unique.some((f) => JSTS.test(f.file))) {
     const code: Record<string, string> = {};
     for (const [k, abs] of all.entries()) if (JSTS.test(paths[k]) && !/\.d\.ts$/.test(paths[k])) {
-      const t = await readFile(abs, "utf8").catch(() => ""); if (t.length < 500_000) code[paths[k]] = t;
+      const t = (await textOf(abs)) ?? ""; if (t.length < 500_000) code[paths[k]] = t;
     }
     const dirOf = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
     const tsconfigs: Record<string, string> = {};
-    for (const [k, abs] of all.entries()) if (/(^|\/)tsconfig\.json$/.test(paths[k])) tsconfigs[dirOf(paths[k])] = await readFile(abs, "utf8").catch(() => "");
+    for (const [k, abs] of all.entries()) if (/(^|\/)tsconfig\.json$/.test(paths[k])) tsconfigs[dirOf(paths[k])] = (await textOf(abs)) ?? "";
     const pkgDirs = paths.filter((p) => /(^|\/)package\.json$/.test(p)).map(dirOf);
     // Entry points no code imports: package.json main/bin/exports and <script src> in HTML pages.
     const pkgs: Record<string, string> = {}, html: Record<string, string> = {};
     for (const [k, abs] of all.entries()) {
-      if (/(^|\/)package\.json$/.test(paths[k])) pkgs[paths[k]] = await readFile(abs, "utf8").catch(() => "");
-      else if (/\.html?$/.test(paths[k])) { const t = await readFile(abs, "utf8").catch(() => ""); if (t.length < 500_000) html[paths[k]] = t; }
+      if (/(^|\/)package\.json$/.test(paths[k])) pkgs[paths[k]] = (await textOf(abs)) ?? "";
+      else if (/\.html?$/.test(paths[k])) { const t = (await textOf(abs)) ?? ""; if (t.length < 500_000) html[paths[k]] = t; }
     }
     const graph = buildGraph(code, tsconfigs, pkgDirs.length ? pkgDirs : [""], declaredEntries(pkgs, html, new Set(Object.keys(code))));
     for (const f of unique) if (JSTS.test(f.file)) f.reach = reachOf(graph, f.file);
