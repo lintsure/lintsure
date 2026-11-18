@@ -5,7 +5,9 @@
 // "unresolved" edge and makes the answer "unknown", never a guess. JavaScript and TypeScript only. Pure.
 
 export type Reach = { status: "entry" | "reachable" | "unreachable" | "unknown"; via?: string[] };
-export interface Graph { importers: Map<string, Set<string>>; entries: Set<string>; unresolved: Map<string, string[]> }
+export interface Graph { importers: Map<string, Set<string>>; imports: Map<string, Set<string>>; entries: Set<string>; unresolved: Map<string, string[]>;
+  /** Filled on first use: for each reached file, the file that imports it on a shortest path from an entry. */
+  parent?: Map<string, string>; unresolvedNames?: Set<string> }
 
 const CODE = /\.(m|c)?[jt]sx?$/;
 const EXTS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"];
@@ -35,12 +37,13 @@ export function stripJsonComments(text: string): string {
 }
 
 /** Path aliases from a tsconfig.json text (comments allowed): baseUrl and paths, as [prefix, targets] pairs. Pure. */
-export function tsAliases(text: string | null, root = ""): { root: string; baseUrl: string | null; paths: [string, string[]][] } {
+export function tsAliases(text: string | null, root = ""): { root: string; baseUrl: string | null; paths: [string, string[], boolean][] } {
   if (!text) return { root, baseUrl: null, paths: [] };
   try {
     const json = JSON.parse(stripJsonComments(text).replace(/,(\s*[}\]])/g, "$1"));
     const o = json.compilerOptions ?? {}, base = typeof o.baseUrl === "string" ? o.baseUrl.replace(/^\.\/?/, "").replace(/\/$/, "") : null;
-    const paths = Object.entries((o.paths ?? {}) as Record<string, string[]>).map(([k, v]) => [k.replace(/\*$/, ""), v.map((t) => t.replace(/\*$/, "").replace(/^\.\//, ""))] as [string, string[]]);
+    // [prefix, targets, wildcard]: a key without "*" matches only itself ("@app" is not "@apple/x").
+    const paths = Object.entries((o.paths ?? {}) as Record<string, string[]>).map(([k, v]) => [k.replace(/\*$/, ""), v.map((t) => t.replace(/\*$/, "").replace(/^\.\//, "")), k.endsWith("*")] as [string, string[], boolean]);
     return { root, baseUrl: base, paths };
   } catch { return { root, baseUrl: null, paths: [] }; }
 }
@@ -56,7 +59,7 @@ export function resolveSpec(from: string, spec: string, files: Set<string>, alia
   };
   if (spec.startsWith(".")) return tryAll(norm(`${dir(from)}/${spec}`));
   if (spec.startsWith("/")) return tryAll(norm(spec));
-  for (const [prefix, targets] of alias.paths) if (prefix ? spec.startsWith(prefix) : spec === prefix) {
+  for (const [prefix, targets, wild] of alias.paths) if (wild ? spec.startsWith(prefix) : spec === prefix) {
     for (const t of targets) { const hit = tryAll(norm(`${alias.root}/${alias.baseUrl ?? ""}/${t}${spec.slice(prefix.length)}`)); if (hit) return hit; }
     return null;
   }
@@ -96,10 +99,11 @@ export function buildGraph(files: Record<string, string>, tsconfigs: string | nu
   // Each file uses the tsconfig of its nearest folder that has one (monorepos keep one per package).
   const configs = typeof tsconfigs === "string" || tsconfigs === null ? { "": tsconfigs ?? "" } : tsconfigs;
   const aliases = Object.entries(configs).map(([d, t]) => tsAliases(t || null, d)).sort((a, b) => b.root.length - a.root.length);
-  const aliasFor = (f: string) => aliases.find((a) => !a.root || f.startsWith(a.root + "/")) ?? tsAliases(null);
+  // The nearest tsconfig that has aliases: a package tsconfig without paths falls back to the one above it.
+  const aliasFor = (f: string) => aliases.find((a) => (!a.root || f.startsWith(a.root + "/")) && (a.paths.length || a.baseUrl != null)) ?? tsAliases(null);
   const pkgs = [...pkgDirs].sort((a, b) => b.length - a.length);
   const pkgRel = (f: string) => { const d = pkgs.find((p) => !p || f.startsWith(p + "/")); return d ? f.slice(d.length + 1) : f; };
-  const importers = new Map<string, Set<string>>(), entries = new Set<string>(extraEntries.filter((e) => set.has(e))), unresolved = new Map<string, string[]>();
+  const importers = new Map<string, Set<string>>(), imports = new Map<string, Set<string>>(), entries = new Set<string>(extraEntries.filter((e) => set.has(e))), unresolved = new Map<string, string[]>();
   for (const [f, text] of Object.entries(files)) {
     if (!CODE.test(f)) continue;
     if (ENTRY_PATH.test(f) || PKG_ENTRY.test(pkgRel(f)) || ENTRY_TEXT.test(text)) entries.add(f);
@@ -108,26 +112,24 @@ export function buildGraph(files: Record<string, string>, tsconfigs: string | nu
       if (to === "external") continue;
       if (to === null) { (unresolved.get(f) ?? unresolved.set(f, []).get(f)!).push(s); continue; }
       (importers.get(to) ?? importers.set(to, new Set()).get(to)!).add(f);
+      (imports.get(f) ?? imports.set(f, new Set()).get(f)!).add(to);
     }
   }
-  return { importers, entries, unresolved };
+  return { importers, imports, entries, unresolved };
 }
 
 /** Whether an entry point reaches this file, with the shortest chain entry -> ... -> file. "unknown" when nothing
  *  reaches it but an unresolved import somewhere could be pointing at it (same file name). Pure. */
 export function reachOf(g: Graph, file: string): Reach {
   if (g.entries.has(file)) return { status: "entry" };
-  const prev = new Map<string, string>([[file, ""]]), queue = [file];
-  while (queue.length) {
-    const cur = queue.shift()!;
-    for (const imp of g.importers.get(cur) ?? []) {
-      if (prev.has(imp)) continue;
-      prev.set(imp, cur);
-      if (g.entries.has(imp)) { const via = [imp]; let x = cur; while (x) { via.push(x); x = prev.get(x)!; } return { status: "reachable", via }; }
-      queue.push(imp);
-    }
+  // One search outward from every entry point, done once per graph (it was one search per finding).
+  if (!g.parent) {
+    g.parent = new Map(); const queue = [...g.entries];
+    for (const e of queue) g.parent.set(e, "");
+    for (let i = 0; i < queue.length; i++) for (const to of g.imports.get(queue[i]) ?? []) if (!g.parent.has(to)) { g.parent.set(to, queue[i]); queue.push(to); }
+    g.unresolvedNames = new Set([...g.unresolved.values()].flatMap((specs) => specs.map((sp) => sp.replace(/\.[^./]+$/, "").split("/").pop()!)));
   }
+  if (g.parent.has(file)) { const via: string[] = []; let x: string | undefined = file; while (x) { via.unshift(x); x = g.parent.get(x) || undefined; } return { status: "reachable", via }; }
   const base = file.replace(/^.*\//, "").replace(/\.[^.]+$/, "").replace(/^index$/, file.split("/").slice(-2, -1)[0] ?? "index");
-  const maybe = [...g.unresolved.values()].some((specs) => specs.some((s) => s.replace(/\.[^./]+$/, "").split("/").pop() === base));
-  return { status: maybe ? "unknown" : "unreachable" };
+  return { status: g.unresolvedNames!.has(base) ? "unknown" : "unreachable" };
 }

@@ -720,3 +720,17 @@ test("reachability: package.json main/bin and HTML <script src> count as entry p
   assert.equal(reachOf(g, "js/charts.js").status, "reachable");
   assert.equal(reachOf(g, "lib/run.mjs").status, "reachable");
 });
+
+test("tsconfig paths: exact keys, the * catch-all, and a package tsconfig without paths falls back", async () => {
+  const { buildGraph, resolveSpec, tsAliases, reachOf } = await import("../src/reach.js");
+  const files = new Set(["src/app.ts", "src/lib/x.ts", "node_modules/@apple/x/index.js"]);
+  const exact = tsAliases('{ "compilerOptions": { "paths": { "@app": ["./src/app.ts"] } } }');
+  assert.equal(resolveSpec("a.ts", "@app", files, exact), "src/app.ts");
+  assert.equal(resolveSpec("a.ts", "@apple/x", files, exact), "external");
+  const star = tsAliases('{ "compilerOptions": { "paths": { "*": ["./src/*"] } } }');
+  assert.equal(resolveSpec("a.ts", "lib/x", files, star), "src/lib/x.ts");
+  const g = buildGraph({ "app/page.tsx": "import { x } from '@/lib/x';\n", "packages/ui/src/a.ts": "import '@/lib/x';\n", "lib/x.ts": "export const x = 1;\n" },
+    { "": '{ "compilerOptions": { "paths": { "@/*": ["./*"] } } }', "packages/ui": '{ "compilerOptions": { "strict": true } }' });
+  assert.equal(reachOf(g, "lib/x.ts").status, "reachable");
+  assert.ok(!g.unresolved.get("packages/ui/src/a.ts"), "the root alias applies inside the package");
+});
