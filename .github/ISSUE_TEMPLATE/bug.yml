@@ -1,0 +1,19 @@
+name: Bug
+description: Something in Lintsure doesn't work as the docs say.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes: { label: Version, description: "The Lintsure version you ran, for example 0.3.11" }
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: "The command you ran and what you saw. Leave out secrets and private code." }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: What you expected }
+    validations: { required: true }
+  - type: input
+    id: env
+    attributes: { label: Environment, description: "OS, Node version, and editor or agent if it matters" }

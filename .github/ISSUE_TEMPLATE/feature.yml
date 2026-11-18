@@ -1,0 +1,14 @@
+name: Idea
+description: A new check, framework pack or feature.
+labels: [idea]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: The problem, description: "What goes wrong today, and who it happens to" }
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes: { label: What you'd like }
+  - type: textarea
+    id: source
+    attributes: { label: Sources, description: "A real incident, standard or write-up, if you have one" }
