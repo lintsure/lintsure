@@ -11,7 +11,8 @@ import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIME
 const server = new McpServer({ name: "lintsure", version: "0.3.11" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-const fw = z.array(z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]])).optional()
+// Checked in the handler, not a startup enum, so frameworks from a repo's rule packs are accepted too.
+const fw = z.array(z.string()).optional()
   .describe("Frameworks to check, for example [\"gdpr\", \"owasp-top10\"]. Leave out to use lintsure.config.yaml in the repo, or all six if there is none.");
 // Every answer ends with the same disclaimer, so no tool output can be read as a verdict.
 const reply = (...texts: string[]) => ({ content: [...texts, `---\n${DISCLAIMER}`].map((text) => ({ type: "text" as const, text })) });
@@ -30,9 +31,13 @@ server.tool("scan",
   }, RO,
   async ({ path, frameworks, files, rules: only, status, limit, all, format }) => {
     const root = resolve(path);
-    const cfg = (await readConfig(root)).frameworks;
+    const config = await readConfig(root), cfg = config.frameworks;
+    // Same as the CLI: a typo in the config must not quietly widen or narrow the scan.
+    if (config.problems.length) return { isError: true, content: [{ type: "text" as const, text: `Fix lintsure.config.yaml first, so the scan checks what was meant:\n${config.problems.map((p) => `- ${p}`).join("\n")}` }] };
+    const unknown = (frameworks ?? []).filter((f) => !ALL_FRAMEWORKS.includes(f as FrameworkId));
+    if (unknown.length) return { isError: true, content: [{ type: "text" as const, text: `Unknown framework: ${unknown.join(", ")}. Known: ${ALL_FRAMEWORKS.join(", ")}.` }] };
     const why = frameworks ? "Chosen by the user through their coding agent." : cfg ? "Listed in lintsure.config.yaml." : undefined;
-    const report = await scan(root, frameworks ?? cfg ?? ALL_FRAMEWORKS, { why, source: "mcp", all });
+    const report = await scan(root, (frameworks as FrameworkId[] | undefined) ?? cfg ?? ALL_FRAMEWORKS, { why, source: "mcp", all });
     const steps = nextSteps(report).map((s, i) => `${i + 1}. ${s}`).join("\n");
     if (format === "full") return reply(toMarkdown(report), JSON.stringify(report),
       `${APPROVAL_RULES}\n\nEach finding above already has its proposal (where, what, why, benefit). Ask the user which one to work on first.\n\nNext steps for the user:\n${steps}`);
@@ -127,9 +132,10 @@ server.tool("plan_checks",
 
 server.tool("explain_framework",
   "Explain a compliance framework in plain words: what it is, who it applies to, key dates (marked as already applying or upcoming), what it asks for, which parts Lintsure can check in code and which need work outside code. Use when the user asks 'what is the EU AI Act?', 'does the Cyber Resilience Act apply to us?', 'when does it apply?' or 'what does SOC 2 need from our code?', often before a scan. Returns text; read-only.",
-  { framework: z.enum(ALL_FRAMEWORKS as [FrameworkId, ...FrameworkId[]]).describe("Which framework to explain: \"eu-ai-act\", \"gdpr\", \"owasp-top10\", \"cra\" (EU Cyber Resilience Act), \"owasp-llm\" or \"cwe-top25\". Rule packs installed with Lintsure add more.") }, RO,
+  { framework: z.string().describe("Which framework to explain: \"eu-ai-act\", \"gdpr\", \"owasp-top10\", \"cra\" (EU Cyber Resilience Act), \"owasp-llm\" or \"cwe-top25\". Rule packs installed with Lintsure add more.") }, RO,
   async ({ framework }) => {
-    const k = getKnowledge(framework)!;
+    const k = getKnowledge(framework as FrameworkId);
+    if (!k) return { isError: true, content: [{ type: "text" as const, text: `Unknown framework: ${framework}. Known: ${ALL_FRAMEWORKS.join(", ")}.` }] };
     const today = new Date().toISOString().slice(0, 10);
     return reply([
       `# ${k.name}`, k.summary, "", `Applies to: ${k.whoItAppliesTo}`,

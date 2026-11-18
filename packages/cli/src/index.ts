@@ -55,7 +55,8 @@ const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "
 export function parseDiff(text: string): Record<string, number[]> {
   const out: Record<string, number[]> = {}; let file: string | null = null;
   for (const l of text.split(/\r?\n/)) {
-    if (l.startsWith("+++ ")) { file = l === "+++ /dev/null" ? null : l.slice(4).replace(/^b\//, ""); continue; }
+    // Git ends a path with a space in it with a tab, and quotes paths it escapes; run with core.quotePath=false too.
+    if (l.startsWith("+++ ")) { file = l === "+++ /dev/null" ? null : l.slice(4).replace(/\t$/, "").replace(/^"(.*)"$/, "$1").replace(/^b\//, ""); continue; }
     const h = file && l.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
     if (h) { const start = +h[1], n = h[2] === undefined ? 1 : +h[2]; for (let i = 0; i < n; i++) (out[file!] ??= []).push(start + i); }
   }
@@ -161,10 +162,11 @@ async function main(argv: string[]) {
   const flag = (n: string) => { const i = rest.indexOf(n); return i >= 0 ? rest[i + 1] : undefined; };
   const path = resolve(rest.find((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1])) ?? ".");
   const wanted = flag("--framework")?.split(",").map((s) => s.trim()) as FrameworkId[] | undefined;
-  const bad = wanted?.filter((f) => !ALL_FRAMEWORKS.includes(f));
-  if (bad?.length) { console.error(`Unknown framework: ${bad.join(", ")}`); return 2; }
 
   const config = await readConfig(path);
+  // Checked after the config loads its rule packs, so a pack's framework id is accepted.
+  const bad = wanted?.filter((f) => !ALL_FRAMEWORKS.includes(f));
+  if (bad?.length) { console.error(`Unknown framework: ${bad.join(", ")}`); return 2; }
   if (config.problems.length) { console.error("Problems in lintsure.config.yaml (fix them so the scan checks what you meant):"); config.problems.forEach((p) => console.error(`  ${p}`)); return 2; }
   if (!wanted && config.skipped.length) console.log(`Skipping, not checked yet: ${config.skipped.join(", ")}`);
   const why = wanted ? "Chosen with --framework on the command line." : config.frameworks ? "Listed in lintsure.config.yaml." : undefined;
@@ -172,7 +174,7 @@ async function main(argv: string[]) {
   const base = flag("--diff");
   let changed: { base: string; lines: Record<string, number[]> } | undefined;
   if (base) {
-    try { changed = { base, lines: parseDiff(execFileSync("git", ["diff", "-U0", "--no-color", "--no-ext-diff", "--relative", base, "--"], { cwd: path, encoding: "utf8", maxBuffer: 64 << 20 })) }; }
+    try { changed = { base, lines: parseDiff(execFileSync("git", ["-c", "core.quotePath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--relative", base, "--"], { cwd: path, encoding: "utf8", maxBuffer: 64 << 20 })) }; }
     catch { console.error(`--diff: git could not compare with "${base}". Fetch it first (for example git fetch origin main).`); return 2; }
   }
   // LINTSURE_WORKSPACE_RULES: path to a JSON file of account rules the caller already has (the plugin writes it).

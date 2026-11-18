@@ -23,6 +23,10 @@ const PACK_NAME = /^@lintsure\/pack-[a-z0-9-]+$/;
 const loaded = new Set<string>();
 /** Packs registered in this process, as "id@version", for the policy fingerprint. */
 export const packsLoaded: string[] = [];
+/** Which pack added each framework, so a scan only uses the packs its own repo lists (the MCP server scans many repos). */
+export const packFrameworks = new Map<string, string>();
+/** Packs loaded because some repo's lintsure.config.yaml listed them. Packs registered in code apply to every scan. */
+export const configPacks = new Set<string>();
 
 /** Adds a pack's frameworks, rules and mappings. Loading the same pack twice does nothing. */
 export function registerPack(p: Pack): void {
@@ -33,6 +37,7 @@ export function registerPack(p: Pack): void {
   rules.push(...p.rules);
   for (const k of p.knowledge) {
     knowledge.push(k);
+    packFrameworks.set(k.id, p.id);
     if (!ALL_FRAMEWORKS.includes(k.id)) ALL_FRAMEWORKS.push(k.id);
   }
 }
@@ -45,7 +50,9 @@ export async function loadPacks(names: string[]): Promise<string[]> {
     if (!PACK_NAME.test(name)) { failed.push(name); continue; }
     try {
       const mod = await import(pathToFileURL(require.resolve(name)).href);
-      registerPack((mod.default ?? mod.pack) as Pack);
+      const pack = (mod.default ?? mod.pack) as Pack;
+      registerPack(pack);
+      configPacks.add(pack.id);
     } catch { failed.push(name); }
   }
   return failed;

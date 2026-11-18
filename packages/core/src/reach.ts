@@ -9,7 +9,9 @@ export interface Graph { importers: Map<string, Set<string>>; entries: Set<strin
 
 const CODE = /\.(m|c)?[jt]sx?$/;
 const EXTS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"];
-const SPEC = /\bimport\s+(?:type\s+)?(?:[\w$*{}\s,]+\s+from\s+)?["']([^"']+)["']|\bexport\s+(?:type\s+)?[\w$*{}\s,]*\s+from\s+["']([^"']+)["']|\brequire\(\s*["']([^"']+)["']\s*\)|\bimport\(\s*["']([^"']+)["']\s*\)/g;
+// Linear on purpose: the older import-then-names-then-from pattern backtracked quadratically on long runs of the word import
+// (code review). Matching the from-clause alone covers import and export-from, including ones split over several lines.
+const SPEC = /\bfrom\s*["']([^"'\n]+)["']|\bimport\s+["']([^"'\n]+)["']|\brequire\(\s*["']([^"'\n]+)["']\s*\)|\bimport\(\s*["']([^"'\n]+)["']\s*\)/g;
 
 /** Literal specifiers a file imports. Pure. */
 export function specifiers(text: string): string[] {

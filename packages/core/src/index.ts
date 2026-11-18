@@ -23,7 +23,7 @@ export { toAssessmentHtml } from "./assessment.js";
 export * from "./knowledge/index.js";
 export { loadPacks, registerPack, type Pack } from "./packs.js";
 export { checksFor } from "./plan.js";
-import { loadPacks, packsLoaded } from "./packs.js";
+import { configPacks, loadPacks, packFrameworks, packsLoaded } from "./packs.js";
 import { buildGraph, declaredEntries, reachOf } from "./reach.js";
 export const RULES_VERSION = "0.3.11";
 
@@ -66,7 +66,7 @@ export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "eu-ai-act", "owasp-top10"
  *  A `packs:` list loads installed @lintsure/pack-* rule packs first, so their frameworks count as known.
  *  An `ignore:` list of paths (relative to the root, for example tests/ or fixtures/) is skipped by scan(). */
 export interface Config {
-  frameworks: FrameworkId[] | null; skipped: string[]; ignore: string[]; packsMissing?: string[];
+  frameworks: FrameworkId[] | null; skipped: string[]; ignore: string[]; packsMissing?: string[]; packs?: string[];
   /** Per-rule settings: "off" stops a rule; "low" | "medium" | "high" changes its risk level. */
   rules: Record<string, "off" | Severity>;
   /** "all" also shows medium-confidence findings. */
@@ -109,7 +109,7 @@ export async function readConfig(root: string): Promise<Config> {
   const packsMissing = lists.packs.length ? await loadPacks(lists.packs) : undefined;
   const ruleIds = new Set(rules.map((r) => r.id));
   for (const id of Object.keys(ruleSet)) if (!ruleIds.has(id)) problems.push(`rules: no rule called "${id}"`);
-  const base = { ignore, packsMissing, rules: ruleSet, show, problems };
+  const base = { ignore, packsMissing, packs: lists.packs, rules: ruleSet, show, problems };
   if (emptyFw) return { frameworks: [], skipped: [], ...base };
   const ids = lists.frameworks;
   if (!ids.length) return { frameworks: null, skipped: [], ...base };
@@ -306,7 +306,7 @@ const stable = (v: unknown): string => Array.isArray(v) ? `[${v.map(stable).join
 /** The policy a scan ran under, as one short code. Same rules and settings give the same code on any machine;
  *  any change (a rule switched off or re-rated, a framework, an ignore path, show: all, a new rules version) gives a new one.
  *  `fingerprint` is the first 8 hex digits of `sha256`, shown as XXXX-XXXX. It names the policy; it doesn't sign anything. */
-export function policyFingerprint(p: { frameworks: string[]; rules: { id: string; severity: string }[]; rulesOff: string[]; ignore: string[]; show?: string; repoRules?: string | null; workspaceRules?: unknown }) {
+export function policyFingerprint(p: { frameworks: string[]; rules: { id: string; severity: string }[]; rulesOff: string[]; ignore: string[]; show?: string; repoRules?: string | null; workspaceRules?: unknown; packs?: string[] }) {
   const canon = JSON.stringify({
     rulesVersion: RULES_VERSION,
     frameworks: [...p.frameworks].sort(),
@@ -315,7 +315,7 @@ export function policyFingerprint(p: { frameworks: string[]; rules: { id: string
     ignore: [...p.ignore].sort(),
     show: p.show ?? "default",
     // Installed rule packs and their versions. Left out when none, so codes from before packs existed stay the same.
-    ...(packsLoaded.length ? { packs: [...packsLoaded].sort() } : {}),
+    ...(p.packs?.length ? { packs: [...p.packs].sort() } : {}),
     // The Drift Guard's .lintsure/rules.yml, comments and blank lines dropped, so only a real rule change moves the code.
     repoRules: p.repoRules ?? null,
     // Account (workspace) rules, when the caller passed them: key order doesn't matter, content does.
@@ -328,6 +328,10 @@ export function policyFingerprint(p: { frameworks: string[]; rules: { id: string
 export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWORKS, opts: ScanOptions = {}): Promise<Report> {
   const config = await readConfig(root);
   const { ignore } = config;
+  // Packs are registered for the whole process; this scan uses only the ones its own config lists.
+  const ownPacks = new Set(config.packs ?? []);
+  const usable = (packId: string) => !configPacks.has(packId) || ownPacks.has(packId);
+  frameworks = frameworks.filter((f) => !packFrameworks.has(f) || usable(packFrameworks.get(f)!));
   const rulesOff = Object.keys(config.rules).filter((id) => config.rules[id] === "off");
   const active = rules.filter((r) => r.controls.some((c) => frameworks.includes(c.framework)) && !rulesOff.includes(r.id));
   const findings: Finding[] = [];
@@ -481,7 +485,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     rulesVersion: RULES_VERSION,
     frameworks: [...frameworks].sort(),
     policy: policyFingerprint({
-      frameworks, rulesOff, ignore, show: config.show, repoRules: await readRepoRules(root), workspaceRules: opts.workspaceRules,
+      frameworks, rulesOff, ignore, show: opts.all ? "all" : config.show, repoRules: await readRepoRules(root), workspaceRules: opts.workspaceRules,
+      packs: packsLoaded.filter((p) => usable(p.slice(0, p.lastIndexOf("@")))),
       rules: active.map((r) => ({ id: r.id, severity: (config.rules[r.id] && config.rules[r.id] !== "off" ? config.rules[r.id] : r.severity) as string })),
     }),
     findings: deduped,
