@@ -8,7 +8,7 @@ Please don't open a public GitHub issue for a security problem. We'll reply to c
 
 ## Supported versions
 
-Lintsure is at version 0.1. Fixes go into the latest version on the `main` branch.
+Fixes go into the latest release (currently 0.3.x) and the `main` branch. Older versions are not patched.
 
 ## What Lintsure does with your code
 
