@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://lintsure.com/apple-touch-icon.png" width="72" height="72" alt="Lintsure logo">
+  <img src="assets/logo.svg" width="72" height="72" alt="Lintsure logo">
 </p>
 
 <h1 align="center">Lintsure</h1>
