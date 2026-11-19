@@ -1,0 +1,69 @@
+{
+  "precision": 60,
+  "recall": 50,
+  "recallShownByDefault": 25,
+  "gapsOpen": 10,
+  "cases": 32,
+  "passed": [
+    "cors reflects origin with credentials",
+    "deep merge of the request body",
+    "fetch of a request url",
+    "flask ssrf",
+    "graphql introspection on",
+    "jwt signed with a short literal secret",
+    "jwt verify with a pinned algorithm",
+    "jwt verify without an algorithm list",
+    "live key in config",
+    "new tab link with noopener",
+    "new tab link without noopener",
+    "parameterised sql",
+    "path kept inside its folder",
+    "privileged kubernetes pod",
+    "public s3 bucket",
+    "record looked up with no owner check",
+    "redirect only to a fixed path",
+    "request value only in an encoded query string",
+    "secret read from the environment",
+    "shell built from input",
+    "sql built from the request",
+    "token compared with ==",
+    "websocket server with no origin check"
+  ],
+  "byKind": {
+    "fp": {
+      "precision": 0,
+      "recall": 100,
+      "falseAlarms": 4,
+      "missed": 0,
+      "gaps": 0
+    },
+    "base": {
+      "precision": 100,
+      "recall": 85.7,
+      "falseAlarms": 0,
+      "missed": 1,
+      "gaps": 0
+    },
+    "hop": {
+      "precision": 100,
+      "recall": 0,
+      "falseAlarms": 0,
+      "missed": 5,
+      "gaps": 0
+    },
+    "gap": {
+      "precision": 100,
+      "recall": 100,
+      "falseAlarms": 0,
+      "missed": 0,
+      "gaps": 10
+    },
+    "safe": {
+      "precision": 100,
+      "recall": 100,
+      "falseAlarms": 0,
+      "missed": 0,
+      "gaps": 0
+    }
+  }
+}
