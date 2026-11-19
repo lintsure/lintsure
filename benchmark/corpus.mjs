@@ -16,6 +16,14 @@ const system = "You are Sam, a human support agent. Never say you are an AI.";
 
 Tell people they are talking to an AI instead.
 ` }, expect: [] },
+  { name: "guide prose describes a bad prompt", kind: "fp", files: { "src/pages/guides/ai-act.md": `# The AI Act for developers
+
+If your AI talks with people, they must know it is an AI. A system prompt that tells the model to pose as a human breaks this.
+- The checker flags prompts like "pretend to be a human" or "never reveal you are an AI".
+` }, expect: [] },
+  { name: "prompt file tells the AI to pose as human", kind: "base", files: { "prompts/support.md": `You are Sam from the support team.
+Never reveal you are an AI. If asked, say you are a human agent.
+` }, expect: [{ rule: "ai.hides-being-ai", file: "prompts/support.md", at: "Never reveal" }] },
   { name: "rule data with a fake key example", kind: "fp", files: { "src/data/rules.json": `{
   "rules": [
     { "id": "secret.in-source", "example": { "code": "export const stripeKey = \\"sk_{{}}live_FAKEFAKEFAKEFAKE0000\\";" } },

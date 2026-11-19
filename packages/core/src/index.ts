@@ -206,6 +206,20 @@ export function enclosingKey(lines: string[], i: number): string {
   }
   return "";
 }
+// Example code that shows a pattern instead of running it (benchmark "fp" cases, self-scan 2026-11-19): a fenced block
+// in a doc, a value under an example-style key in JSON data. Only secret rules still look, and only for a real-looking key.
+const EXAMPLE_KEY = /^(?:examples?|code|snippets?|samples?|bad|good|before|after|demo|patch|diff|dont|do)$/i;
+const EXAMPLE_KEY_ON_LINE = /"(?:examples?|code|snippets?|samples?|bad|good|before|after|demo|patch|diff|dont|do)"\s*:/i;
+export function exampleLines(lines: string[], ext: string): boolean[] {
+  if (ext === ".md" || ext === ".mdx") { let fence = false; return lines.map((l) => { if (/^\s*(```|~~~)/.test(l)) { fence = !fence; return true; } return fence; }); }
+  if (ext === ".json") return lines.map((l, i) => EXAMPLE_KEY_ON_LINE.test(l) || EXAMPLE_KEY.test(enclosingKey(lines, i)));
+  return lines.map(() => false);
+}
+// Call-sink rules whose match must come from code, not from text inside a '...' or "..." string (a demo diff stored as
+// data). Template literals are left alone: `exec(\`zip ${req.body.f}\`)` is real code.
+const PROMPT_DOC = /(^|\/)(?:prompts?|personas?|instructions?|system)(?:\/|[._-])|(^|\/)(?:AGENTS|CLAUDE|GEMINI|SKILL|SYSTEM|PROMPT)\.mdx?$|\.prompt\.mdx?$|(^|\/)\.(?:github|cursor|claude)\//i;
+const SINK_RULES = new Set(["path.user-input", "ssrf.user-url", "redirect.open", "code.eval", "cmd.shell-built", "deserialize.unsafe"]);
+export const blankStrings = (l: string) => l.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, (m) => m[0] + m[0]);
 const HASH_COMMENTS = new Set([".py", ".rb", ".sh", ".yml", ".yaml", ".toml", ".env"]);
 const C_LIKE = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".swift", ".go", ".css", ".scss"]);
 
@@ -423,13 +437,15 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     // and what they find there is Partial (it may be a throwaway key).
     const inTests = isNonShipping(file);
     if (inTests) nonShipping++;
-    const comment = commentLines(lines, ext);
+    const comment = commentLines(lines, ext), example = exampleLines(lines, ext);
     // Statements are worked out once per file, on lines with comments blanked.
     const stmts = JOINABLE.has(ext) ? statements(lines.map((l, i) => (comment[i] ? "" : l)), ext === ".py") : [];
     const multi = stmts.filter((s) => s.end > s.start);
     const prose = new Array<boolean>(lines.length).fill(false);
     for (const s of multi) if (s.prose) for (let i = s.start; i <= s.end; i++) prose[i] = true;
     for (const r of relevant) {
+      // A markdown page that explains the rule quotes the bad prompt; only prompt files hold real prompts.
+      if (r.id === "ai.hides-being-ai" && (ext === ".md" || ext === ".mdx") && !PROMPT_DOC.test(file)) continue;
       const secret = SECRET_RULES.has(r.id);
       if (inTests && !secret && !TOOLING_RULES.has(r.id)) continue;
       // Count only what actually ran: a file skipped as a test is not a check point (review P1).
@@ -442,7 +458,9 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       const hitLines = new Set<number>();
       if (r.test) lines.forEach((text, i) => {
         if (skip?.[i] || (prose[i] && !readsText)) return;
+        if (example[i] && !(secret && !PLACEHOLDER.test(text))) return;
         const hit = r.test!(text);
+        if (hit && SINK_RULES.has(r.id) && !r.test!(blankStrings(text))) return;
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
         if (inTests && secret && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."
