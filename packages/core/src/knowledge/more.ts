@@ -18,7 +18,7 @@ export const owaspLlm: FrameworkKnowledge = {
     { ref: "LLM02:2026", title: "Sensitive Information Disclosure", inCode: "partly", rules: ["secret.in-source", "secret.public-env", "pii.logged", "log.secret"],
       plain: "Keys, personal data and internal details must not reach the model, its logs or its answers unless they're meant to.",
       evidence: "What data is sent to the model provider, and the provider's data retention terms." },
-    { ref: "LLM03:2026", title: "Excessive Agency", inCode: "partly", rules: ["agent.permissions-allow-all"],
+    { ref: "LLM03:2026", title: "Excessive Agency", inCode: "partly", rules: ["agent.permissions-allow-all", "mcp.tool-runs-shell", "mcp.tool-uses-secret"],
       plain: "Tools and permissions given to an agent should be the minimum it needs, with a person approving anything risky.",
       evidence: "A list of the tools each agent can call and which need approval." },
     { ref: "LLM04:2026", title: "Supply Chain", inCode: "partly", rules: ["deps.unpinned-version", "deps.install-script", "agent.config-runs-remote-code"],

@@ -26,7 +26,30 @@ export function wsNoOrigin(lines: string[]): number[] {
 const SECRETISH = String.raw`[\w.$\[\]"'-]*(?:signature|token|secret|hmac|digest|api_?key|apikey|password_hash)[\w.\[\]"'-]*`;
 const UNSAFE_COMPARE = new RegExp(String.raw`(?<![\w.])${SECRETISH}\s*(?:===?|!==?)\s*${SECRETISH}`, "i");
 
+// A file that registers tools an AI agent can call over MCP (TypeScript or Python SDKs).
+const MCP_TOOL = /\.(registerTool|tool)\(\s*["'`]|@(mcp|server|app)\.tool\b|setRequestHandler\(\s*CallToolRequestSchema/;
+const SHELL = /\b(execSync|exec|execFile|execFileSync|spawn|spawnSync)\s*\(|\bos\.(system|popen)\s*\(|\bsubprocess\.\w+\s*\([^)]*shell\s*=\s*True/;
+const ENV_SECRET = /\b(process\.env|os\.environ(\.get)?|os\.getenv)\s*[.[(]\s*["']?\w*(TOKEN|SECRET|API_?KEY|PASSWORD|CREDENTIALS?)\w*/i;
+/** Lines matching re in a file that registers MCP tools; nothing in other files. Pure. */
+export function inMcpServer(lines: string[], re: RegExp): number[] {
+  if (!lines.some((l) => MCP_TOOL.test(l))) return [];
+  return lines.flatMap((l, i) => (re.test(l) && !/^\s*(\/\/|#)/.test(l) ? [i + 1] : []));
+}
+const LLM03 = { framework: "owasp-llm", id: "LLM03:2026", title: "Excessive Agency" } as Control;
+
 export const moreRules: Rule[] = [
+  rule({ id: "mcp.tool-runs-shell", title: "MCP tool that runs shell commands", status: "partial", severity: "high", controls: [LLM03, A06],
+    fix: "Run a fixed program with execFile and an argument list, never a command string. Check every argument against an allow-list, and ask the user before anything that changes files or systems.",
+    note: "The agent decides what to pass to this tool, and anything it reads (a web page, an issue, a file) can steer it. If tool input reaches the command, a prompt injection becomes a shell on this machine (CWE-78).", extensions: CODE,
+    unseen: "Lintsure can't tell whether the tool's input reaches the command, or whether the command is fixed.",
+    fileTest: (lines) => inMcpServer(lines, SHELL) }),
+  rule({ id: "mcp.tool-uses-secret", title: "MCP server reads a credential every tool shares", status: "partial", severity: "low", controls: [LLM03, A01],
+    fix: "Give the server a token with only the access its tools need, read-only where it can be. Split tools that write into a separate server or token.",
+    note: "Every tool in this server acts with this credential's full access, so the riskiest tool sets the blast radius for all of them. A separate key name doesn't narrow anything if the key itself can do more.", extensions: CODE,
+    confidence: "medium",
+    unseen: "Lintsure can't see what this credential is allowed to do.",
+    fileTest: (lines) => inMcpServer(lines, ENV_SECRET) }),
+
   rule({ id: "authz.no-owner-check", title: "Record loaded by an id from the request, with no owner check", status: "partial", severity: "high", controls: [A01],
     fix: "Look the record up by its id and the signed-in user (or tenant) together, for example where: { id, userId: req.user.id }, or check the owner before returning it.",
     note: "Anyone who changes the id in the URL can read or change someone else's record (insecure direct object reference, CWE-639).", extensions: CODE,

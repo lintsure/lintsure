@@ -52,6 +52,8 @@ test("known findings stay put", async () => {
     "transport.plain-http@src/billing.ts:4",
     "secret.in-source@src/config.ts:2",
     "secret.in-source@src/config.ts:3",
+    "mcp.tool-uses-secret@src/mcp/server.ts:3",
+    "mcp.tool-runs-shell@src/mcp/server.ts:4",
     "config.debug-on@src/settings.py:2",
     "pii.logged@src/users.ts:5",
   ]);
@@ -649,7 +651,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "C862-F295");
+  assert.equal(r.policy?.fingerprint, "072E-A3F4");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {
@@ -763,4 +765,15 @@ test("files a rule wanted but couldn't read are counted, not silently passed", a
   const r = await coreScan(dir);
   assert.equal(r.filesSkipped, 1);
   assert.ok(r.notCovered?.some((l) => l.includes("not checked, not clean")));
+});
+
+test("MCP rules: shell and shared credentials only in files that register tools", async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-"));
+  await writeFile(join(dir, "server.ts"), `import { execSync } from "node:child_process";\nconst token = process.env.GITHUB_TOKEN;\nserver.registerTool("run", {}, async ({ cmd }) => ({ content: [{ type: "text", text: execSync(cmd).toString() }] }));\n`);
+  await writeFile(join(dir, "build.ts"), `import { execSync } from "node:child_process";\nexecSync("tsc");\nconst t = process.env.NPM_TOKEN;\n`);
+  const r = await coreScan(dir, undefined, { all: true });
+  const hits = r.findings.filter((f) => f.ruleId.startsWith("mcp.")).map((f) => `${f.ruleId} ${f.file}:${f.line}`);
+  assert.deepEqual(hits.sort(), ["mcp.tool-runs-shell server.ts:3", "mcp.tool-uses-secret server.ts:2"]);
 });
