@@ -43,6 +43,7 @@ test("known findings stay put", async () => {
     "llm.client-controls-system@app/api/chat/route.ts:4",
     "llm.unbounded-agent-loop@app/api/chat/route.ts:5",
     "auth.no-rate-limit@app/api/login/route.ts:3",
+    "config.default-service-password@deploy/compose.yml:5",
     "ai.call-not-logged@src/ai.ts:3",
     "llm.no-output-limit@src/ai.ts:3",
     "ai.automated-decision@src/ai.ts:4",
@@ -53,6 +54,7 @@ test("known findings stay put", async () => {
     "secret.in-source@src/config.ts:3",
     "mcp.tool-uses-secret@src/mcp/server.ts:3",
     "mcp.tool-runs-shell@src/mcp/server.ts:4",
+    "ml.unsafe-model-load@src/model.py:3",
     "config.debug-on@src/settings.py:2",
     "pii.logged@src/users.ts:5",
   ]);
@@ -650,7 +652,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "24BF-09DA");
+  assert.equal(r.policy?.fingerprint, "8C5A-7E2E");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {

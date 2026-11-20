@@ -36,6 +36,7 @@ export function inMcpServer(lines: string[], re: RegExp): number[] {
   return lines.flatMap((l, i) => (re.test(l) && !/^\s*(\/\/|#)/.test(l) ? [i + 1] : []));
 }
 const LLM03 = { framework: "owasp-llm", id: "LLM03:2026", title: "Excessive Agency" } as Control;
+const LLM04 = { framework: "owasp-llm", id: "LLM04:2026", title: "Supply Chain" } as Control;
 
 export const moreRules: Rule[] = [
   rule({ id: "mcp.tool-runs-shell", title: "MCP tool that runs shell commands", status: "partial", severity: "high", controls: [LLM03, A06],
@@ -107,4 +108,43 @@ export const moreRules: Rule[] = [
     fix: "Turn introspection off in production, for example introspection: process.env.NODE_ENV !== \"production\".",
     note: "Introspection hands anyone a full map of your API, including fields you never meant to advertise (CWE-200).", extensions: CODE,
     test: (l) => /\bintrospection\s*:\s*true\b/.test(l) }),
+  // ML models are code: a pickled checkpoint or a model repo's own Python runs when it is loaded (2026-11-20).
+  rule({ id: "ml.unsafe-model-load", title: "Model loaded in a way that can run code", status: "gap", severity: "high", controls: [A08, LLM04],
+    fix: "Load weights only: torch.load(path, weights_only=True), or use safetensors. Don't pass trust_remote_code=True; if a model needs it, pin the exact revision you reviewed.",
+    note: "A model checkpoint saved with pickle can carry code that runs the moment it is loaded, and trust_remote_code=True runs Python from the model's repository on your server (CWE-502). Since PyTorch 2.6, torch.load loads weights only by default, so a plain call is Partial: it depends on your PyTorch version.",
+    extensions: [".py", ".ipynb"],
+    unseen: "Lintsure can't see which PyTorch version runs this, or whether the model file comes only from you.",
+    test: (l) => {
+      if (/^\s*#/.test(l)) return false;
+      if (/\btorch\.load\s*\(/.test(l)) return /weights_only\s*=\s*False/.test(l) ? true : /weights_only\s*=/.test(l) ? false : /\)/.test(l) ? "partial" : false;
+      // A pinned revision means someone chose that exact code; still Partial, never quiet.
+      if (/\btrust_remote_code\s*=\s*True\b/.test(l)) return "partial";
+      return false;
+    } }),
+  // Images ship with well-known first-run passwords; a compose file or manifest that keeps them leaves the service open.
+  rule({ id: "config.default-service-password", title: "Database or service left on its default password", status: "partial", severity: "high", controls: [A07, A02],
+    fix: "Set a long random password from a secret store or an untracked .env file, for example POSTGRES_PASSWORD=${POSTGRES_PASSWORD} with no default.",
+    note: "These defaults are published in every image's documentation, so anyone who can reach the port can log in (CWE-1393). Marked Partial: fine on a laptop with the port bound to 127.0.0.1, not on a server.",
+    extensions: [".yml", ".yaml", ".env", "", ".tf", ".tfvars", ".json", ".toml", ".sh"],
+    // Example, local and test setups use the defaults on purpose.
+    unlessPath: /(^|\/)(docker-compose|compose)\.(override|dev|development|local|test|ci)\.ya?ml$|(^|\/)[^/]*\.(dev|local|test)\.ya?ml$|(^|\/)\.env\.(example|sample|template|local|development|dev|test)$/i,
+    test: (l) => {
+      if (/^\s*#/.test(l)) return false;
+      const v = String.raw`\s*[:=]\s*["']?`, end = String.raw`["']?\s*(?:#.*)?$`;
+      const pairs: [string, string][] = [
+        ["POSTGRES_PASSWORD|PGPASSWORD|DB_PASSWORD|DATABASE_PASSWORD", "postgres|password|admin|root|changeme|secret"],
+        ["MYSQL_ROOT_PASSWORD|MYSQL_PASSWORD|MARIADB_ROOT_PASSWORD|MARIADB_PASSWORD", "root|password|admin|mysql|changeme|secret"],
+        ["MYSQL_ALLOW_EMPTY_PASSWORD|MARIADB_ALLOW_EMPTY_ROOT_PASSWORD", "yes|true|1"],
+        ["MINIO_ROOT_PASSWORD|MINIO_SECRET_KEY|MINIO_ROOT_USER|MINIO_ACCESS_KEY", "minioadmin"],
+        ["RABBITMQ_DEFAULT_PASS", "guest"],
+        ["GF_SECURITY_ADMIN_PASSWORD", "admin"],
+        ["ELASTIC_PASSWORD", "changeme|elastic"],
+        ["MONGO_INITDB_ROOT_PASSWORD|MONGODB_ROOT_PASSWORD", "password|admin|example|mongo|root|changeme"],
+        ["REDIS_PASSWORD", "redis|password|changeme"],
+        ["PGADMIN_DEFAULT_PASSWORD|KEYCLOAK_ADMIN_PASSWORD|KC_BOOTSTRAP_ADMIN_PASSWORD|KEYCLOAK_PASSWORD", "admin|password|changeme"],
+      ];
+      // KEY=default, KEY: default, - KEY=default, ENV KEY=default, and a ${KEY:-default} fallback.
+      return pairs.some(([k, d]) => new RegExp(String.raw`(?:^|[\s"'-])(?:ENV\s+)?(?:${k})${v}(?:${d})${end}`, "i").test(l)
+        || new RegExp(String.raw`\$\{(?:${k}):?-(?:${d})\}`, "i").test(l));
+    } }),
 ];

@@ -436,5 +436,17 @@
     "recall": 100,
     "cases": 4,
     "casesHash": "ec07a5886e53"
+  },
+  "ml.unsafe-model-load": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7,
+    "casesHash": "6279a946fc9f"
+  },
+  "config.default-service-password": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 9,
+    "casesHash": "44a2158079aa"
   }
 }
