@@ -4,9 +4,8 @@
 
 <h1 align="center">Lintsure</h1>
 
-<p align="center"><strong>Catch your AI coding agent's mistakes before they ship.</strong><br>
-Open-source guardrails for Claude Code, Cursor, Codex, VS Code and Gemini CLI. Lintsure keeps your agent working to the rules you set, and checks the code it writes for security and privacy problems against the standards you connect: OWASP, GDPR, the EU AI Act and more.<br>
-Runs on your machine · Same input, same result · CLI, MCP server and GitHub Action</p>
+<p align="center"><strong>Keep your AI coding agents on track and in context.</strong><br>
+Lintsure checks the code Claude Code, Cursor, Codex and other agents write, and holds them to your project's rules. It finds secrets in source, databases left open, made-up imports and unsafe agent settings, and maps each finding to OWASP, GDPR and the EU AI Act. It runs on your machine and never sends your code anywhere.</p>
 
 <p align="center">
   <a href="https://github.com/lintsure/lintsure/actions/workflows/ci.yml"><img src="https://github.com/lintsure/lintsure/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -18,6 +17,52 @@ Runs on your machine · Same input, same result · CLI, MCP server and GitHub Ac
   <img src="https://img.shields.io/node/v/lintsure?color=141413" alt="Node version">
   <img src="https://img.shields.io/badge/rules-Beta-B45309" alt="Rules: Beta">
 </p>
+
+## Try it
+
+Check the project in the current folder. Nothing to install, and nothing leaves your machine:
+
+```bash
+npx lintsure scan
+```
+
+```text
+! 3 open findings · 2 gap · 1 partial · 61 rules met · 30 outside code
+  Read 214 files
+partial  src/billing.ts:4  Data sent over plain HTTP
+gap      src/config.ts:2   Secret or private key committed to source
+gap      src/users.ts:5    Personal data written to logs
+```
+
+Connect it to the coding agents this project uses, so they check their own work before they say they're done. It shows the change first and backs up any file it edits:
+
+```bash
+npx lintsure setup --yes
+```
+
+In Claude Code, the plugin adds guards that work while the agent edits: Drift Guard (your project's rules, made-up imports), Danger Guard (risky shell commands), Secret Guard and Loop Guard.
+
+```text
+/plugin marketplace add lintsure/claude-plugin
+/plugin install lintsure@lintsure
+```
+
+### With Docker
+
+Scan a project with Node's official image, using the published package:
+
+```bash
+docker run --rm -v "$PWD:/work" -w /work node:22-slim npx -y lintsure scan
+```
+
+The report (`lintsure-report.md`) is written into the mounted folder. Add `--fail-on gap` to fail a CI job on clear problems.
+
+To run the MCP server in a container, for directories and tools that start servers that way, build the image in this repo. It serves over stdio and reads the code mounted at `/workspace`:
+
+```bash
+docker build -t lintsure-mcp https://github.com/lintsure/lintsure.git
+docker run -i --rm -v "$PWD:/workspace:ro" lintsure-mcp
+```
 
 > **Important: Lintsure is a readiness tool, not an audit, a certification or legal advice.**
 > Its rules reflect our reading of the publicly available text of each framework, and they check **code only**. Work outside code, such as policies, training, contracts and evidence, still has to be done. Have a qualified person review the results before any audit, certification or decision. See [DISCLAIMER.md](DISCLAIMER.md).
@@ -41,13 +86,6 @@ It also lists what code can't prove (access reviews, training records, contracts
 
 **Common questions it answers:** Is there a security scanner for code written by Claude Code or Cursor? How do I stop my AI agent from committing secrets? Is there an MCP server that checks code against OWASP or GDPR? How do I make my coding agent follow project rules?
 
-```text
-✓ 3 findings · 2 gap · 1 partial · 13 rules met · 22 outside code
-partial  src/billing.ts:4  Data sent over plain HTTP
-gap      src/config.ts:2   Secret or private key committed to source
-gap      src/users.ts:5    Personal data written to logs
-```
-
 ## Built to inform, not to decide
 
 - **Never uploads your code.** The engine has no network code. A test fails the build if any appears.
@@ -66,13 +104,9 @@ We'd rather say this up front than have you find out later:
 
 **Using it with an AI agent:** Lintsure is a defensive review of code you own. If you ask an agent to run it, say that ("review my own repo against OWASP Top 10 and fix what you find"), which describes the work accurately.
 
-## Try it
+## More ways to run it
 
 > **Status: Beta.** All rules are in Beta: their mappings are our own reading of the public texts, not independently reviewed. 
-
-```bash
-npx lintsure scan
-```
 
 Add it to the coding agents this project uses (Claude Code, Cursor, VS Code, Gemini CLI). It shows the change first and backs up any file it edits:
 
