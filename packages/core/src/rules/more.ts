@@ -142,7 +142,8 @@ export function defaultPasswordKey(l: string): string | null {
         ["POSTGRES_PASSWORD|PGPASSWORD|DB_PASSWORD|DATABASE_PASSWORD", "postgres|password|admin|root|changeme|secret"],
         ["MYSQL_ROOT_PASSWORD|MYSQL_PASSWORD|MARIADB_ROOT_PASSWORD|MARIADB_PASSWORD", "root|password|admin|mysql|changeme|secret"],
         ["MYSQL_ALLOW_EMPTY_PASSWORD|MARIADB_ALLOW_EMPTY_ROOT_PASSWORD", "yes|true|1"],
-        ["MINIO_ROOT_PASSWORD|MINIO_SECRET_KEY|MINIO_ROOT_USER|MINIO_ACCESS_KEY", "minioadmin"],
+        // The password alone: the matching default username would only repeat the same account.
+        ["MINIO_ROOT_PASSWORD|MINIO_SECRET_KEY", "minioadmin"],
         ["RABBITMQ_DEFAULT_PASS", "guest"],
         ["GF_SECURITY_ADMIN_PASSWORD", "admin"],
         ["ELASTIC_PASSWORD", "changeme|elastic"],
