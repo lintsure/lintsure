@@ -59,6 +59,12 @@ export const moreRules: Rule[] = [
     fix: "Remove privileged, hostNetwork, hostPID and hostIPC, set allowPrivilegeEscalation: false, and run as a non-root user.",
     note: "A privileged container, or one sharing the host's network or processes, can take over the machine it runs on if it is broken into (CWE-250).", extensions: [".yml", ".yaml"],
     test: (l) => /^\s*-?\s*(privileged|allowPrivilegeEscalation|hostNetwork|hostPID|hostIPC)\s*:\s*true\b/.test(l) || /^\s*-?\s*runAsUser\s*:\s*0\s*$/.test(l) }),
+  rule({ id: "docker.socket-mounted", title: "Docker socket mounted into a container", status: "partial", severity: "high", controls: [A02],
+    fix: "Don't mount /var/run/docker.sock. If the container really needs Docker, point it at a separate, locked-down Docker daemon over TLS, or use a rootless or socket-proxy setup that allows only the calls it needs.",
+    note: "Whatever runs in the container gets the host's Docker, and with it the whole machine: it can start a privileged container that mounts the host's disk (CWE-250). Mounting it read-only (:ro) doesn't help, because the API still works.", extensions: [".yml", ".yaml", ".json", ".sh", ""],
+    unseen: "Lintsure can't tell whether this container is meant to manage Docker (a CI runner or a reverse proxy) or whether the host is a throwaway machine.",
+    // A mount, not a client setting: DOCKER_HOST=unix:///var/run/docker.sock only says where to connect.
+    test: (l) => /(?<!unix:\/)\/var\/run\/docker\.sock\b|\/\/\.\/pipe\/docker_engine/.test(l) && !/^\s*#|DOCKER_HOST\s*[:=]/.test(l) }),
   rule({ id: "cloud.public-bucket", title: "Storage bucket open to the public", status: "gap", severity: "high", controls: [A01],
     fix: "Keep the bucket private and block public access. Share single files with short-lived signed URLs instead.",
     note: "Anyone on the internet can list or download what's in a public bucket, and with write access, replace it (CWE-284).", extensions: [".tf", ".json", ".yml", ".yaml", ...CODE],

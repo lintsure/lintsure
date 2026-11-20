@@ -25,7 +25,7 @@ export const owaspTop10: FrameworkKnowledge = {
       plain: "Whether each endpoint checks that the record belongs to the person asking (often called IDOR). A line-by-line code check can't tell; it needs design review and testing with two accounts.",
       evidence: "Access control tests per role, or a penetration test report." },
     { ref: "A02:2025", title: "Security Misconfiguration", inCode: "partly",
-      rules: ["config.debug-on", "agent.permissions-allow-all", "config.allowed-hosts-any", "config.default-secret-key", "xml.external-entities", "cors.any-origin", "session.cookie-insecure", "error.stack-to-client", "build.sourcemaps-public", "release.env-not-ignored", "k8s.privileged", "graphql.introspection"],
+      rules: ["config.debug-on", "agent.permissions-allow-all", "config.allowed-hosts-any", "config.default-secret-key", "xml.external-entities", "cors.any-origin", "session.cookie-insecure", "error.stack-to-client", "build.sourcemaps-public", "release.env-not-ignored", "k8s.privileged", "docker.socket-mounted", "graphql.introspection"],
       plain: "Safe settings by default: debug off, real host names, strong secret keys, cookies marked secure, XML parsers that don't load outside files, and errors that don't reveal internals.",
       evidence: "Production configuration and a hardening checklist." },
     { ref: "A02:2025 (deployed settings)", title: "Server, cloud and header configuration in production", inCode: "no",

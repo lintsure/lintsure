@@ -979,5 +979,21 @@
     "pass": [
       "const server = new ApolloServer({ typeDefs, resolvers, introspection: process.env.NODE_ENV !== \"production\" });"
     ]
+  },
+  "docker.socket-mounted": {
+    "flag": [
+      "      - /var/run/docker.sock:/var/run/docker.sock",
+      "          path: /var/run/docker.sock",
+      "docker run -v /var/run/docker.sock:/var/run/docker.sock ci-runner",
+      "  \"mounts\": [\"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind\"]",
+      "      - /var/run/docker.sock:/var/run/docker.sock:ro",
+      "      - //./pipe/docker_engine://./pipe/docker_engine"
+    ],
+    "pass": [
+      "      DOCKER_HOST: unix:///var/run/docker.sock",
+      "export DOCKER_HOST=unix:///var/run/docker.sock",
+      "# - /var/run/docker.sock:/var/run/docker.sock",
+      "      - ./data:/var/lib/app"
+    ]
   }
 }

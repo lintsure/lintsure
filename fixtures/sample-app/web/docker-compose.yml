@@ -1,0 +1,5 @@
+services:
+  ci:
+    image: ci-runner:1.4
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

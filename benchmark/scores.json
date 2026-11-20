@@ -418,5 +418,11 @@
     "recall": 100,
     "cases": 2,
     "casesHash": "f91c72449acf"
+  },
+  "docker.socket-mounted": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 10,
+    "casesHash": "bce3d270dc93"
   }
 }
