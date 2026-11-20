@@ -99,7 +99,7 @@ export const owaspRules: Rule[] = [
   rule({ id: "fs.world-writable", title: "File made readable and writable by everyone", status: "gap", severity: "medium", controls: [A01],
     fix: "Use the narrowest permissions that work, for example 0o600 for secrets and 0o644 or 0o755 for public files.",
     note: "Any user or process on the machine can change the file (incorrect permissions, CWE-732).", extensions: CODE,
-    test: (l) => /\bchmod(Sync)?\s*\([^)]*\b0o?777\b/.test(l) }),
+    test: (l) => /\bchmod(Sync)?\s*\([^)]*\b0o?777\b/.test(l) && !/&\s*0o?777\b/.test(l) }),
 
   // A02 Security Misconfiguration
   rule({ id: "config.allowed-hosts-any", title: "Django accepts any host name", status: "gap", severity: "medium", controls: [A02],

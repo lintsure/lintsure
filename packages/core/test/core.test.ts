@@ -809,3 +809,12 @@ test("field-test fixes: extractall with filter after nested parens, webbrowser.o
   assert.equal(s.test!('const MODE = { user: "user", none: "none", secret: "secret" };'), false);
   assert.equal(s.test!("app.use(session({ secret: 'secret', resave: false }))"), true);
 });
+
+test("field-test fixes: chmod mask, MCP exec helper with no process module", async () => {
+  const w = rules.find((x) => x.id === "fs.world-writable")!;
+  assert.equal(w.test!("os.chmod(path, st.st_mode & 0o777)"), false);
+  assert.equal(w.test!("fs.chmodSync(dir, 0o777)"), true);
+  const m = rules.find((x) => x.id === "mcp.tool-runs-shell")!;
+  assert.deepEqual(m.fileTest!(['server.registerTool("remember", {}, async (a) => exec(a));']), []);
+  assert.deepEqual(m.fileTest!(['import { exec } from "node:child_process";', 'server.registerTool("run", {}, async (a) => exec(a.cmd));']), [2]);
+});
