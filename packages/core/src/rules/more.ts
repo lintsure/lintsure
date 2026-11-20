@@ -116,7 +116,8 @@ export const moreRules: Rule[] = [
     unseen: "Lintsure can't see which PyTorch version runs this, or whether the model file comes only from you.",
     test: (l) => {
       if (/^\s*#/.test(l)) return false;
-      if (/\btorch\.load\s*\(/.test(l)) return /weights_only\s*=\s*False/.test(l) ? true : /weights_only\s*=/.test(l) ? false : /\)/.test(l) ? "partial" : false;
+      // torch.load inside a string (a list of forbidden calls) isn't a call.
+      if (/^[^"'`]*\btorch\.load\s*\(/.test(l)) return /weights_only\s*=\s*False/.test(l) ? true : /weights_only\s*=/.test(l) ? false : /\)/.test(l) ? "partial" : false;
       // A pinned revision means someone chose that exact code; still Partial, never quiet.
       if (/\btrust_remote_code\s*=\s*True\b/.test(l)) return "partial";
       return false;
@@ -126,10 +127,16 @@ export const moreRules: Rule[] = [
     fix: "Set a long random password from a secret store or an untracked .env file, for example POSTGRES_PASSWORD=${POSTGRES_PASSWORD} with no default.",
     note: "These defaults are published in every image's documentation, so anyone who can reach the port can log in (CWE-1393). Marked Partial: fine on a laptop with the port bound to 127.0.0.1, not on a server.",
     extensions: [".yml", ".yaml", ".env", "", ".tf", ".tfvars", ".json", ".toml", ".sh"],
-    // Example, local and test setups use the defaults on purpose.
-    unlessPath: /(^|\/)(docker-compose|compose)\.(override|dev|development|local|test|ci)\.ya?ml$|(^|\/)[^/]*\.(dev|local|test)\.ya?ml$|(^|\/)\.env\.(example|sample|template|local|development|dev|test)$/i,
-    test: (l) => {
-      if (/^\s*#/.test(l)) return false;
+    // CI service containers are thrown away after the run; example, dev, local, test and preview files use the defaults
+    // on purpose, whatever their naming (field test 2026-11-20: most hits were these).
+    unlessPath: /(^|\/)\.github\/|(^|\/)(integration|e2e|tests?|examples?|samples?|templates?)\/|(^|[\/._-])(example|sample|template|dev|development|local|test|testing|ci|e2e|preview|uffizzi|dusk)([._-][^\/]*)?$|(^|[\/._-])(dev|local|test|ci)[._-]/i,
+    // One finding per variable per file: a fallback reused in a connection string is the same weak password.
+    fileTest: (lines) => { const seen = new Set<string>(); return lines.flatMap((l, i) => { const k = defaultPasswordKey(l); if (!k || seen.has(k)) return []; seen.add(k); return [i + 1]; }); } }),
+];
+
+/** The service password variable on this line when it's set to a well-known default, else null. Pure. */
+export function defaultPasswordKey(l: string): string | null {
+      if (/^\s*#/.test(l)) return null;
       const v = String.raw`\s*[:=]\s*["']?`, end = String.raw`["']?\s*(?:#.*)?$`;
       const pairs: [string, string][] = [
         ["POSTGRES_PASSWORD|PGPASSWORD|DB_PASSWORD|DATABASE_PASSWORD", "postgres|password|admin|root|changeme|secret"],
@@ -144,7 +151,9 @@ export const moreRules: Rule[] = [
         ["PGADMIN_DEFAULT_PASSWORD|KEYCLOAK_ADMIN_PASSWORD|KC_BOOTSTRAP_ADMIN_PASSWORD|KEYCLOAK_PASSWORD", "admin|password|changeme"],
       ];
       // KEY=default, KEY: default, - KEY=default, ENV KEY=default, and a ${KEY:-default} fallback.
-      return pairs.some(([k, d]) => new RegExp(String.raw`(?:^|[\s"'-])(?:ENV\s+)?(?:${k})${v}(?:${d})${end}`, "i").test(l)
-        || new RegExp(String.raw`\$\{(?:${k}):?-(?:${d})\}`, "i").test(l));
-    } }),
-];
+      for (const [k, d] of pairs) {
+        const m = new RegExp(String.raw`(?:^|[\s"'-])(?:ENV\s+)?(${k})${v}(?:${d})${end}`, "i").exec(l) ?? new RegExp(String.raw`\$\{(${k}):?-(?:${d})\}`, "i").exec(l);
+        if (m) return m[1].toUpperCase();
+      }
+      return null;
+}

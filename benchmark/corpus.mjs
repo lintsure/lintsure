@@ -318,4 +318,45 @@ export async function summarise(text: string) {
   return r.choices[0].message.content;
 }
 ` }, expect: [] },
+  { name: "deploy compose keeps the default database password", kind: "base", files: { "docker-compose.yml": `services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-postgres}
+  app:
+    environment:
+      DATABASE_URL: postgresql://postgres:\${POSTGRES_PASSWORD:-postgres}@db/app
+  storage:
+    image: minio/minio
+    environment:
+      MINIO_ROOT_PASSWORD: minioadmin
+` }, expect: [{ rule: "config.default-service-password", file: "docker-compose.yml", at: "POSTGRES_PASSWORD: ${" }, { rule: "config.default-service-password", file: "docker-compose.yml", at: "MINIO_ROOT_PASSWORD" }] },
+  { name: "default passwords in CI and local dev files", kind: "safe", files: {
+    ".github/workflows/ci.yml": `jobs:
+  test:
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+`,
+    "docker-compose-local.yaml": `services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+`,
+    "docker-compose.yml": `services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+` }, expect: [] },
+  { name: "dockerfile bakes in the mysql root password", kind: "base", files: { "Dockerfile": `FROM mysql:8
+ENV MYSQL_ROOT_PASSWORD=root
+` }, expect: [{ rule: "config.default-service-password", file: "Dockerfile", at: "MYSQL_ROOT_PASSWORD" }] },
+  { name: "torch.load named in a list of forbidden calls", kind: "fp", files: { "app/security.py": `FORBIDDEN = [
+    ("torch", "load", "torch.load() is forbidden: unsafe deserialization"),
+]
+` }, expect: [] },
 ];
