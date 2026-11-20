@@ -31,7 +31,8 @@ scan options:
   --report            Also write lintsure-assessment.html, a multi-page report
                       to review, print or save as PDF
   --project <name>    Project name on the assessment cover (default: folder name)
-  --fail-on <status>  Exit 1 if any open finding is "gap" or "partial" (for CI)
+  --fail-on <status>  Exit 1 if any open finding is "gap" or "partial" (for CI). Held-back
+                      medium-confidence findings count only with --all
   --new-only          With --fail-on: count only findings that are new since
                       .lintsure/baseline.json
   --github            Print GitHub Actions annotations, so findings show on the lines
@@ -217,7 +218,7 @@ async function main(argv: string[]) {
   if (report.record) console.log(`Record ${report.record.id} · ${report.record.createdAt.replace("T", " ").slice(0, 16)} UTC · ${report.record.counts.checkPoints} check points${report.policy ? ` · Policy #${report.policy.fingerprint}` : ""}`);
   // A check mark only when nothing is open: "✓ 3 gaps" read as a pass.
   console.log(`${open.length ? "!" : "✓"} ${open.length} open findings · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
-  console.log(`  Read ${report.filesChecked} files${report.filesSkipped ? `, skipped ${report.filesSkipped} (over 1 MB, binary or unreadable)` : ""}`);
+  console.log(`  Read ${report.filesChecked} file${report.filesChecked === 1 ? "" : "s"}${report.filesSkipped ? `, skipped ${report.filesSkipped} (over 1 MB, binary or unreadable)` : ""}`);
   if (report.diffBase) console.log(`  Only lines changed since ${report.diffBase}`);
   if (report.held) console.log(`  ${report.held} more at medium confidence: run with --all to see ${report.held === 1 ? "it" : "them"}`);
   if (report.baseline) console.log(`  Since the baseline of ${report.baseline.created}: ${report.baseline.newCount} new, ${report.baseline.fixed.length} fixed, ${report.baseline.unchangedCount} unchanged`);

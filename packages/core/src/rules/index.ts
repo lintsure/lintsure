@@ -29,7 +29,7 @@ function logArgs(l: string): string | null {
 }
 // Values that usually come from a request or the user. SQL built from them is a Gap; from other values, Partial.
 const USER_INPUT = /\b(req|request|params|query|body|input|args|form|ctx|event|payload|searchParams|user_input)\b/;
-const SQL_PARTS = /\$\{([^}]*)\}|\bf["'][^"']*\{([^}]*)\}|["']\s*\+\s*([\w.[\]]+)|\.format\(([^)]*)\)|%s["']\s*%\s*([^\n]+)/g;
+const SQL_PARTS = /\$\{([^}]*)\}|\bf"[^"]*?\{([^}]*)\}|\bf'[^']*?\{([^}]*)\}|["']\s*\+\s*([\w.[\]]+)|\.format\(([^)]*)\)|%s'?["']\s*%\s*([^\n]+)/g;
 
 // Key formats with a fixed, documented prefix, so a match is almost never anything else. Written from each
 // provider's published token format. Generic "key = random string" guessing is left out on purpose: too noisy.

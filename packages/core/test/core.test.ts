@@ -818,3 +818,10 @@ test("field-test fixes: chmod mask, MCP exec helper with no process module", asy
   assert.deepEqual(m.fileTest!(['server.registerTool("remember", {}, async (a) => exec(a));']), []);
   assert.deepEqual(m.fileTest!(['import { exec } from "node:child_process";', 'server.registerTool("run", {}, async (a) => exec(a.cmd));']), [2]);
 });
+
+test("Python SQL with the value quoted inside the query is caught", async () => {
+  const r = rules.find((x) => x.id === "sql.string-built")!;
+  assert.equal(r.test!(`cursor.execute(f"SELECT * FROM orders WHERE name = '{request.args['id']}'")`), true);
+  assert.equal(r.test!(`cursor.execute("SELECT * FROM t WHERE n = '%s'" % request.args["n"])`), true);
+  assert.equal(r.test!(`cursor.execute("SELECT * FROM t WHERE n = %s", (request.args["n"],))`), false);
+});
