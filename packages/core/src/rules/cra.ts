@@ -76,7 +76,7 @@ export const craRules: Rule[] = [
   { id: "repo.binary-committed", title: "Compiled program committed to the repository", status: "partial", severity: "low", controls: [COMPONENTS],
     fix: "Remove the file and build it from source in CI, or download it at build time from a release with a checksum.",
     note: "Nobody can review what a compiled file does, and it isn't covered by dependency checks. Marked Partial: some projects keep a reviewed binary on purpose.",
-    extensions: [], repoTest: (files) => files.find((f) => BINARY.test(f) && !/gradle-wrapper\.jar$/.test(f)) ?? null, ...DRAFT },
+    extensions: [], repoTest: (files) => files.find((f) => BINARY.test(f) && !/gradle-wrapper\.jar$/.test(f) && !/(^|\/)(tests?|__tests__|spec|fixtures?|__fixtures__|testdata|test-data|e2e|examples?|samples?)\//i.test(f)) ?? null, ...DRAFT },
   { id: "repo.no-dependency-updates", title: "No automated dependency updates", status: "partial", severity: "low", controls: [FIXES],
     fix: "Turn on Dependabot (add .github/dependabot.yml) or Renovate (renovate.json), so security fixes in your dependencies reach you as pull requests.",
     note: "The Cyber Resilience Act expects vulnerabilities to be fixed without delay, including in the components you use. Marked Partial: updates may be handled another way, such as a hosted setting.",

@@ -119,6 +119,7 @@ export const stackRules: Rule[] = [
     unlessPath: /\.d\.ts$/, // type declarations (env.d.ts) name variables, they don't ship values (field test)
     test: (l) => {
       if (/^\s*(readonly\s+)?[A-Z0-9_]+\??\s*:\s*string\b/.test(l)) return false; // a typed field, not a value
+      if (/^\s*databaseURL\s*:/.test(l)) return false; // a Firebase web config key: public by design (field-test review)
       return (l.match(PUBLIC_ENV) ?? []).some(publicSecretName);
     } }),
   rule({ id: "supabase.service-key-in-client", title: "Supabase service-role key used in browser code", status: "gap", severity: "high", controls: [GDPR32, A01],

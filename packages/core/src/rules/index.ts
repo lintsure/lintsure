@@ -49,6 +49,14 @@ const KEY_FORMATS = new RegExp([
 ].join("|"));
 // Example values from provider docs (AKIAIOSFODNN7EXAMPLE and the like) and obvious fill-ins.
 const DOC_EXAMPLE = /EXAMPLE|X{6,}|x{6,}|0{12,}|1234567890abcdef/;
+/** Shannon entropy in bits per character. Real keys are random (about 4 and up); aaaa... or xxxx... is near 0. Pure. */
+export function entropy(s: string): number {
+  const n: Record<string, number> = {};
+  for (const c of s) n[c] = (n[c] ?? 0) + 1;
+  return -Object.values(n).reduce((h, k) => h + (k / s.length) * Math.log2(k / s.length), 0);
+}
+// A PEM header with no key body after it: in a comment, or text a program builds a key around at runtime (field-test review).
+const PEM_NO_BODY = /^\s*(#|\/\/|\*|<!--|--\s)|PRIVATE KEY( BLOCK)?-----(\\n)?["'`]\s*(\+|\.join|,|\))/;
 // More fixed-prefix secrets this audience leaks: Stripe webhook secrets, Supabase secret keys, Resend keys (review P13).
 const MORE_KEYS = /\bwhsec_[0-9A-Za-z]{24,}|\bsb_secret_[0-9A-Za-z_-]{20,}|\bre_[0-9A-Za-z]{8,}_[0-9A-Za-z]{16,}/;
 /** A Supabase (or any) JWT whose payload says role: service_role. Decoded exactly, so near-zero false alarms. Pure. */
@@ -105,7 +113,11 @@ export const rules: Rule[] = [
       const m = l.match(KEY_FORMATS) ?? l.match(MORE_KEYS);
       // Placeholders say so: xoxb-your-bot-token, ghp_...fake..., a PEM header followed by "...", or by prose
       // ("starts with -----BEGIN PRIVATE KEY----- and"). 0 of 7 sampled secret findings were real (0.3.9 review).
-      return (!!m && !DOC_EXAMPLE.test(m[0]) && !/your[-_]|fake|dummy|placeholder|changeme|sample/.test(m[0]) /* lowercase words: real keys are random */
+      const pem = !!m && /-----BEGIN/.test(m[0]);
+      // The part after a fixed prefix must look random: ghp_aaaaaaaa... is a fill-in, not a token.
+      const tooRegular = !!m && !pem && entropy(m[0].replace(/^[A-Za-z]+[_-]+(?:[a-z]+[_-]+)?/, "")) < 3;
+      if (pem && PEM_NO_BODY.test(l)) return serviceRoleJwt(l) || dbUrlWithPassword(l);
+      return (!!m && !tooRegular && !DOC_EXAMPLE.test(m[0]) && !/your[-_]|fake|dummy|placeholder|changeme|sample/.test(m[0]) /* lowercase words: real keys are random */
         && !/PRIVATE KEY( BLOCK)?-----(["'`]|\.\.\.|\\n\s*\.\.\.|\s+[a-zA-Z])/.test(l)) || serviceRoleJwt(l) || dbUrlWithPassword(l); },
     // Translation files mention "API key" and "secret" in every language, never a real key. Type definition files
     // carry documentation examples, and secret-scanner configs list known test keys on purpose (0.3.9 review).

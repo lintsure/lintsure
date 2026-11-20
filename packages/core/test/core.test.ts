@@ -50,7 +50,6 @@ test("known findings stay put", async () => {
     "ai.synthetic-media@src/ai.ts:6",
     "ai.emotion-or-biometric@src/ai.ts:7",
     "transport.plain-http@src/billing.ts:4",
-    "secret.in-source@src/config.ts:2",
     "secret.in-source@src/config.ts:3",
     "mcp.tool-uses-secret@src/mcp/server.ts:3",
     "mcp.tool-runs-shell@src/mcp/server.ts:4",
@@ -864,4 +863,21 @@ test("every {…} in an f-string is read: a table name first doesn't hide a valu
   assert.equal(r.test!('sql = f"DELETE FROM {table} WHERE {where}"'), "partial");
   assert.equal(r.test!('cur.execute(f"SELECT * FROM {TABLE} WHERE id = {request.args[\'id\']}")'), true);
   assert.equal(r.test!('cur.execute(f"SELECT * FROM {TABLE}")'), false);
+});
+
+test("secret checks: Firebase databaseURL, PEM headers with no body, fill-in tokens; real keys still caught", () => {
+  const pub = rules.find((x) => x.id === "secret.public-env")!, src = rules.find((x) => x.id === "secret.in-source")!;
+  assert.equal(pub.test!("  databaseURL: process.env.REACT_APP_DATABASE_URL,"), false);
+  assert.equal(pub.test!("const db = process.env.NEXT_PUBLIC_DATABASE_URL;"), true);
+  assert.equal(src.test!("# Private key blocks: -----BEGIN RSA PRIVATE KEY----- ... -----END RSA PRIVATE KEY-----"), false);
+  assert.equal(src.test!('    return "-----BEGIN PRIVATE KEY-----\\n" + "\\n".join(lines) + "\\n-----END PRIVATE KEY-----\\n"'), false);
+  assert.equal(src.test!('git clone https://ghp_' + "a".repeat(36) + ':x@github.com/a/b.git'), false);
+  assert.equal(src.test!('const k = "sk_live_' + "4eC39HqLyjWDarjtT1zdp7dc" + '";'), true);
+  assert.equal(src.test!('-----BEGIN RSA PRIVATE KEY-----'), true);
+});
+
+test("an SQL comment counts as a comment, a key that starts with dashes is still a key", () => {
+  const src = rules.find((x) => x.id === "secret.in-source")!;
+  assert.equal(src.test!("-- e.g. -----BEGIN PRIVATE KEY----- goes in the vault"), false);
+  assert.equal(src.test!("--sk-----BEGIN PRIVATE KEY-----"), true);
 });
