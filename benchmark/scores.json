@@ -424,5 +424,17 @@
     "recall": 100,
     "cases": 10,
     "casesHash": "bce3d270dc93"
+  },
+  "mobile.backup-allowed": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5,
+    "casesHash": "58200c619aed"
+  },
+  "mobile.webview-any-origin": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 4,
+    "casesHash": "ec07a5886e53"
   }
 }

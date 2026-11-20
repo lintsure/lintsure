@@ -995,5 +995,26 @@
       "# - /var/run/docker.sock:/var/run/docker.sock",
       "      - ./data:/var/lib/app"
     ]
+  },
+  "mobile.backup-allowed": {
+    "flag": [
+      "    android:allowBackup=\"true\"",
+      "      \"allowBackup\": true,"
+    ],
+    "pass": [
+      "    android:allowBackup=\"false\"",
+      "      \"allowBackup\": false,",
+      "<!-- android:allowBackup lets users restore data -->"
+    ]
+  },
+  "mobile.webview-any-origin": {
+    "flag": [
+      "      <WebView originWhitelist={[\"*\"]} source={{ uri }} />",
+      "<WebView originWhitelist={ [ '*' ] } />"
+    ],
+    "pass": [
+      "      <WebView originWhitelist={[\"https://app.example.com\"]} source={{ uri }} />",
+      "<WebView source={{ uri: \"https://app.example.com\" }} />"
+    ]
   }
 }

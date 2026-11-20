@@ -202,4 +202,120 @@ export async function proxy(req, res) {
   res.redirect("/dashboard");
 }
 ` }, expect: [] },
+  // ---- rules with no cases before 2026-11-20: one plain catch and one safe version each ----
+  { name: "mcp tool runs what the agent passes", kind: "base", files: { "src/server.ts": `import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { execSync } from "node:child_process";
+const server = new McpServer({ name: "ops", version: "1.0.0" });
+server.registerTool("run", { description: "Run a command" }, async ({ cmd }) => ({
+  content: [{ type: "text", text: execSync(cmd).toString() }],
+}));
+` }, expect: [{ rule: "mcp.tool-runs-shell", file: "src/server.ts", at: "execSync(cmd)" }] },
+  { name: "mcp tool with no process at all", kind: "safe", files: { "src/server.ts": `import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+const server = new McpServer({ name: "notes", version: "1.0.0" });
+const notes = new Map();
+server.registerTool("save", { description: "Save a note" }, async ({ id, text }) => {
+  notes.set(id, text);
+  return { content: [{ type: "text", text: "saved" }] };
+});
+` }, expect: [] },
+  { name: "mcp server shares one token across tools", kind: "base", files: { "server.py": `import os
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("github")
+TOKEN = os.getenv("GITHUB_TOKEN")
+
+@mcp.tool()
+def list_issues(repo: str) -> str:
+    return gh(repo, TOKEN)
+` }, expect: [{ rule: "mcp.tool-uses-secret", file: "server.py", at: "GITHUB_TOKEN" }] },
+  { name: "supabase table without row level security", kind: "base", files: { "supabase/migrations/001_init.sql": `create table public.notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null,
+  body text
+);
+` }, expect: [{ rule: "supabase.rls-disabled", file: "supabase/migrations/001_init.sql", at: "create table public.notes" }] },
+  { name: "supabase table with row level security and a policy", kind: "safe", files: { "supabase/migrations/001_init.sql": `create table public.notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null,
+  body text
+);
+alter table public.notes enable row level security;
+create policy "own notes" on public.notes for all using (auth.uid() = user_id);
+` }, expect: [] },
+  { name: "edge function with the jwt check off and no auth", kind: "base", files: {
+    "supabase/config.toml": `[functions.chat]
+verify_jwt = false
+`,
+    "supabase/functions/chat/index.ts": `import OpenAI from "npm:openai";
+const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
+Deno.serve(async (req) => {
+  const { prompt } = await req.json();
+  const r = await openai.chat.completions.create({ model: "gpt-4o-mini", messages: [{ role: "user", content: prompt }], max_tokens: 300 });
+  return Response.json(r);
+});
+` }, expect: [{ rule: "supabase.function-no-auth", file: "supabase/config.toml", at: "verify_jwt = false" }, { rule: "ai.call-not-logged", file: "supabase/functions/chat/index.ts", at: "chat.completions.create" }] },
+  { name: "service role key in a client component", kind: "base", files: { "src/lib/supabase-browser.ts": `"use client";
+import { createClient } from "@supabase/supabase-js";
+export const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+` }, expect: [{ rule: "supabase.service-key-in-client", file: "src/lib/supabase-browser.ts", at: "SUPABASE_SERVICE_ROLE_KEY" }] },
+  { name: "service role key in a server route", kind: "safe", files: { "app/api/admin/route.ts": `import { createClient } from "@supabase/supabase-js";
+const admin = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+export async function POST() {
+  await admin.from("jobs").insert({ kind: "cleanup" });
+  return Response.json({ ok: true });
+}
+` }, expect: [] },
+  { name: "workflow puts an issue title into a shell step", kind: "base", files: { ".github/workflows/triage.yml": `name: triage
+on:
+  issues:
+    types: [opened]
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "New issue: \${{ github.event.issue.title }}"
+` }, expect: [{ rule: "ci.script-injection", file: ".github/workflows/triage.yml", at: "github.event.issue.title" }] },
+  { name: "workflow passes the issue title through env", kind: "safe", files: { ".github/workflows/triage.yml": `name: triage
+on:
+  issues:
+    types: [opened]
+permissions:
+  issues: write
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          TITLE: \${{ github.event.issue.title }}
+        run: echo "New issue: $TITLE"
+` }, expect: [] },
+  { name: "pull_request_target checks out the pull request", kind: "base", files: { ".github/workflows/preview.yml": `name: preview
+on: pull_request_target
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
+        with:
+          ref: \${{ github.event.pull_request.head.sha }}
+      - run: npm ci && npm run build
+` }, expect: [{ rule: "ci.prt-checkout-head", file: ".github/workflows/preview.yml", at: "head.sha" }] },
+  { name: "ai call with no output limit and no log", kind: "base", files: { "src/summarise.ts": `import OpenAI from "openai";
+const openai = new OpenAI();
+export async function summarise(text: string) {
+  const r = await openai.chat.completions.create({ model: "gpt-4o-mini", messages: [{ role: "user", content: text }] });
+  return r.choices[0].message.content;
+}
+` }, expect: [{ rule: "llm.no-output-limit", file: "src/summarise.ts", at: "chat.completions.create" }, { rule: "ai.call-not-logged", file: "src/summarise.ts", at: "chat.completions.create" }] },
+  { name: "ai call with a limit and a log", kind: "safe", files: { "src/summarise.ts": `import OpenAI from "openai";
+import { logger } from "./logger";
+const openai = new OpenAI();
+export async function summarise(text: string) {
+  const r = await openai.chat.completions.create({ model: "gpt-4o-mini", max_tokens: 400, messages: [{ role: "user", content: text }] });
+  logger.info("ai.summarise", { model: r.model, tokens: r.usage?.total_tokens });
+  return r.choices[0].message.content;
+}
+` }, expect: [] },
 ];
