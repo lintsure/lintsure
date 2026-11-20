@@ -81,9 +81,9 @@ export const owaspRules: Rule[] = [
   rule({ id: "path.user-input", title: "File path built from request data", status: "gap", severity: "high", controls: [A01],
     fix: "Don't pass request values into file paths. Map the request to a known file name, or use path.basename and check the result stays inside the allowed folder.",
     note: "A path like ../../etc/passwd lets someone read or overwrite files outside the folder you meant (path traversal, CWE-22).", extensions: CODE,
-    test: (l) => /\b(fs\.(readFile|readFileSync|createReadStream|writeFile|writeFileSync|unlink|unlinkSync)|res\.(sendFile|download)|send_file|send_from_directory|open)\s*\(/.test(l) && USER_INPUT.test(l) ? true
+    test: (l) => /\b(fs\.(readFile|readFileSync|createReadStream|writeFile|writeFileSync|unlink|unlinkSync)|res\.(sendFile|download)|send_file|send_from_directory|(?<![.\w])open)\s*\(/.test(l) && USER_INPUT.test(l) ? true
       // Unpacking an archive writes wherever its entry names point (zip slip), unless Python's filter= is set.
-      : /\.extractall\((?![^)]*\bfilter\s*=)|\.extractAllTo\(/.test(l) ? "partial" : false }),
+      : /\.extractall\((?!.*\bfilter\s*=)|\.extractAllTo\(/.test(l) ? "partial" : false }),
   rule({ id: "redirect.open", title: "Redirect to a URL taken from the request", status: "gap", severity: "medium", controls: [A01],
     fix: "Redirect only to paths on your own site, or check the target against a list of allowed hosts.",
     note: "Attackers send people a link to your site that bounces them to a phishing page (open redirect, CWE-601).", extensions: CODE,
@@ -114,7 +114,9 @@ export const owaspRules: Rule[] = [
     // `Secret: 'secret'` or a label `SECRET: "SECRET"` names a field, it doesn't set a key (review P19).
     test: (l) => {
       const m = /\b(SECRET_KEY|JWT_SECRET|SESSION_SECRET|secret|secretKey|jwtSecret|sessionSecret|secret_key|jwt_secret)\s*[:=]\s*["'](django-insecure-|changeme|change-me|secret\b|mysecret|keyboard cat|dev-secret|supersecret)([^"']*)["']?/.exec(l);
-      if (m && !(m[1] !== m[1].toLowerCase() && (m[2] + m[3]).toLowerCase() === m[1].toLowerCase())) return true;
+      // A map of names to themselves ({ user: "user", secret: "secret" }) is an enum, not a key.
+      const aliases = (l.match(/\b\w+\s*:\s*["']\w+["']/g) ?? []).filter((x) => { const [k, v] = x.split(/\s*:\s*/); return v.slice(1, -1) === k; }).length;
+      if (m && aliases < 2 && !(m[1] !== m[1].toLowerCase() && (m[2] + m[3]).toLowerCase() === m[1].toLowerCase())) return true;
       return /^\s*(SECRET_KEY|JWT_SECRET|SESSION_SECRET)\s*=\s*(django-insecure-|changeme|change-me|secret\b|mysecret|dev-secret|supersecret)/.test(l) || fallbackSecret(l);
     } }),
   // Python's standard XML parsers don't load external entities (since 3.7.1), so only explicit opt-ins count (field test).

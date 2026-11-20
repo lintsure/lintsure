@@ -799,3 +799,13 @@ test("enclosingKeys matches enclosingKey line by line, and stays fast on a large
   const t = Date.now(); enclosingKeys(big);
   assert.ok(Date.now() - t < 1000, "one pass, not one walk per line");
 });
+
+test("field-test fixes: extractall with filter after nested parens, webbrowser.open, alias maps; real cases still caught", async () => {
+  const r = rules.find((x) => x.id === "path.user-input")!, s = rules.find((x) => x.id === "config.default-secret-key")!;
+  assert.equal(r.test!('tf.extractall(str(skills), filter="data")'), false);
+  assert.equal(r.test!("tf.extractall(str(skills))"), "partial");
+  assert.equal(r.test!("webbrowser.open(request.args.get('url'))"), false);
+  assert.equal(r.test!("with open(request.args.get('path')) as f:"), true);
+  assert.equal(s.test!('const MODE = { user: "user", none: "none", secret: "secret" };'), false);
+  assert.equal(s.test!("app.use(session({ secret: 'secret', resave: false }))"), true);
+});
