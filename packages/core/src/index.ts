@@ -165,12 +165,12 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
 
 // Code that doesn't ship: tests, fixtures, examples, docs, demos, stories and seed data. Most false alarms in the
 // 139-repo field test came from here. Only the secret rules read these paths, and their findings there are Partial.
-export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|factories|\.dev|benchmarks?|scripts?|\.agents|\.claude|\.cursor|\.devcontainer)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
+export const NON_SHIPPING = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|factories|\.dev|benchmarks?|loadtests?|load-tests?|testdata|test-data|scripts?|\.agents|\.claude|\.cursor|\.devcontainer)\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$|(^|\/)\.env\.(example|sample|template|dist)$|(^|\/)(playwright|vitest|jest|cypress)\.config\.[cm]?[jt]s$/i;
 // In Next.js, Remix and Supabase a folder name is a route or a function name: app/api/demo and a function called
 // "test" are live endpoints (review P3). Inside these roots only real test files count as non-shipping.
 // Example, demo, docs and sample folders inside application source (src/, lib/, server/) are shipping code too.
 const LIVE_ROOT = /(^|\/)(app|pages|api|routes|supabase\/functions|src|lib|server)\//;
-const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?|scripts?|\.agents|\.claude|\.cursor|\.devcontainer)\//i;
+const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|examples?|samples?|demos?|cookbooks?|docs?|stories|storybook|seeds?|seeders|benchmarks?|loadtests?|load-tests?|testdata|test-data|scripts?|\.agents|\.claude|\.cursor|\.devcontainer)\//i;
 // Dev scripts at the top of a repo (scripts/test-*.mjs, build and seed helpers) and agent tooling (.agents/, .claude/)
 // don't ship: they were the largest single source of false alarms in the 0.3.9 labelled sample (44 of 242).
 const TEST_FILE = /(^|\/)__tests__\/|(^|\/)test[-_]?(utils?|helpers?|rig)\/|(^|\/)test-[^/]+\.[cm]?[jt]s$|[._-]tests?\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$/i;
@@ -235,23 +235,56 @@ export function exampleLines(lines: string[], ext: string): boolean[] {
 // shortcut: one assignment hop inside one file, no reassignment or function-argument flow; upgrade to a real data-flow pass if recall stays low.
 const HOP_RULES = new Set(["ssrf.user-url", "redirect.open", "path.user-input"]);
 const REQ_VALUE = /\b(?:req\.(?:body|query|params|headers|cookies)|request\.(?:args|form|json|data|GET|POST|query_params|files)|ctx\.query|event\.(?:body|queryStringParameters)|searchParams\.get)\b/;
+// A request value cleaned where it is assigned isn't request data any more; a lookup by a request id returns a server
+// record (field-test review 2026-11-20: 0 of 8 redirect and path findings were real, all through these).
+const SANITIZER = /\b(?:safe\w*|sanitiz\w*|validat\w*|isSafe\w*|isAllowed\w*|encodeURIComponent|encodeURI|quote|basename|secure_filename|parseInt|parseFloat|Number|escape\w*)\s*\(/i;
+const LOOKUP = /\.(?:find|findOne|findFirst|findById|findByPk|findUnique|getById|filter)\s*\(|\b(?:get_object_or_404|get_or_404|get\w*ById)\s*\(/;
+// Calls that hand the same value back (or join it into a path or URL). Any other call returns a new value.
+const PASS = new Set(["join", "resolve", "URL", "String", "str", "decodeURIComponent", "decodeURI", "unquote", "toString", "trim", "toLowerCase", "toUpperCase", "replace", "concat", "slice", "normalize", "format", "Path"]);
+const hasName = (t: string, n: string) => new RegExp(`(?<![.\\w])${n}\\b`).test(t);
+/** The text with every call that returns a new value blanked, so only values that pass straight through stay. Pure. */
+function passThrough(t: string): string {
+  for (let k = 0; k < 8; k++) {
+    const next = t.replace(/\b(\w+)\s*\(([^()]*)\)/g, (_m, fn: string, args: string) => (PASS.has(fn) ? " " + args + " " : " _ "));
+    if (next === t) break;
+    t = next;
+  }
+  return t;
+}
+const parentsOf = new WeakMap<Map<string, number>, Map<string, string[]>>();
 export function taintedNames(lines: string[]): Map<string, number> {
-  const out = new Map<string, number>();
+  const out = new Map<string, number>(), parents = new Map<string, string[]>();
   lines.forEach((l, i) => {
-    if (!REQ_VALUE.test(l) && ![...out.keys()].some((n) => new RegExp(`\\b${n}\\b`).test(l.split("=").slice(1).join("=")))) return;
     const m = l.match(/^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::[^=]+)?=(?!=)/) ?? l.match(/^\s*(\w+)\s*=(?!=)/);
     const d = l.match(/^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=/);
-    if (m) out.set(m[1], i);
-    if (d) for (const n of d[1].split(",")) { const k = n.split(":").pop()!.split("=")[0].trim(); if (/^\w+$/.test(k)) out.set(k, i); }
+    const lhs = [...(m ? [m[1]] : []), ...(d ? d[1].split(",").map((n) => n.split(":").pop()!.split("=")[0].trim()).filter((k) => /^\w+$/.test(k)) : [])];
+    if (!lhs.length) return;
+    const rhs = l.slice(l.indexOf("=") + 1);
+    let from: string[] | null = null;
+    if (REQ_VALUE.test(rhs)) from = SANITIZER.test(rhs) || LOOKUP.test(rhs) ? null : [];
+    else {
+      const via = [...out.keys()].filter((n) => hasName(rhs, n));
+      if (via.length && !SANITIZER.test(rhs)) { const kept = passThrough(rhs); const live = via.filter((n) => hasName(kept, n)); if (live.length) from = live; }
+    }
+    for (const n of lhs) { if (from) { out.set(n, i); parents.set(n, from); } else if (out.has(n)) { out.delete(n); parents.delete(n); } }
   });
+  parentsOf.set(out, parents);
   return out;
+}
+const GUARD = (n: string) => new RegExp(`\\b${n}(?:\\.\\w+)*\\s*(?:\\.(?:startsWith|endsWith|includes|match|test)\\(|[!=]==?)|\\b(?:allow\\w*|isAllowed\\w*|isValid\\w*|isSafe\\w*|is_safe\\w*|validate\\w*|sanitiz\\w*|safe\\w*)\\(\\s*${n}\\b|\\.(?:has|includes|test)\\(\\s*${n}\\b`);
+/** Checked between where it was set and line i, or its source was checked before it was copied. Pure. */
+function guarded(lines: string[], n: string, i: number, names: Map<string, number>, seen = new Set<string>()): boolean {
+  const at = names.get(n);
+  if (at === undefined || seen.has(n)) return false;
+  seen.add(n);
+  if (lines.slice(at + 1, i).some((l) => GUARD(n).test(l))) return true;
+  return (parentsOf.get(names)?.get(n) ?? []).some((p) => guarded(lines, p, at, names, seen));
 }
 export function hopLine(lines: string[], i: number, names: Map<string, number>): string | null {
   let t = lines[i], changed = false;
   for (const [n, at] of names) {
     if (at >= i || !new RegExp(`\\b${n}\\b`).test(t)) continue;
-    const checked = lines.slice(at + 1, i).some((l) => new RegExp(`\\b${n}\\s*(?:\\.(?:startsWith|endsWith|includes|match|test)\\(|[!=]==?)|\\b(?:allow\\w*|isValid\\w*|is_safe\\w*|validate\\w*)\\(\\s*${n}\\b|\\.(?:has|includes|test)\\(\\s*${n}\\b`).test(l));
-    if (checked) continue;
+    if (guarded(lines, n, i, names)) continue;
     t = t.replace(new RegExp(`(?<![.\\w])${n}\\b`, "g"), "req.query." + n); changed = true;
   }
   return changed ? t : null;

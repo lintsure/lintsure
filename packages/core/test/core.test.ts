@@ -825,3 +825,36 @@ test("Python SQL with the value quoted inside the query is caught", async () => 
   assert.equal(r.test!(`cursor.execute("SELECT * FROM t WHERE n = '%s'" % request.args["n"])`), true);
   assert.equal(r.test!(`cursor.execute("SELECT * FROM t WHERE n = %s", (request.args["n"],))`), false);
 });
+
+test("request data: sanitisers, lookups, new values and guards on the source stop the hop; real flows still caught", async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-"));
+  const files: Record<string, string> = {
+    // Quiet: shapes from the reviewed false alarms.
+    "safe.ts": "export async function loader({ request }) {\n  const returnTo = safeReturnPath(url.searchParams.get('returnTo'));\n  throw redirect(returnTo ?? '/me');\n}\n",
+    "lookup.js": "router.delete('/f/:id', (req, res) => {\n  const att = items.find(a => a.id === req.params.fileId)\n  const filePath = path.join(DIR, att.storedName)\n  fs.unlinkSync(filePath)\n})\n",
+    "newvalue.ts": "app.get('/i', async (req, res) => {\n  const returnTo = req.query.returnTo;\n  const state = await issueInstallState({ returnTo });\n  const installUrl = buildInstallUrl(state);\n  return res.redirect(installUrl);\n});\n",
+    "origin.ts": "export function GET(request) {\n  const redirectPath = request.nextUrl.searchParams.get('to');\n  let redirectUrl = '/home';\n  const wanted = new URL(redirectPath, request.url);\n  if (wanted.origin === request.nextUrl.origin) {\n    redirectUrl = wanted.toString();\n  }\n  return NextResponse.redirect(redirectUrl);\n}\n",
+    "encoded.ts": "app.get('/s', async (req, res) => {\n  const q = req.query.q;\n  const url = `https://api.example.com/search?q=${encodeURIComponent(q)}`;\n  const r = await fetch(url);\n});\n",
+    // Caught: a request value joined into a path, and a URL built from one with no check.
+    "joined.js": "app.get('/d', (req, res) => {\n  const name = req.query.name;\n  const full = path.join(ROOT, name);\n  res.sendFile(full);\n});\n",
+    "fetched.js": "app.post('/hook', async (req, res) => {\n  const target = req.body.url;\n  const u = new URL(target);\n  const r = await fetch(u);\n});\n",
+  };
+  for (const [f, t] of Object.entries(files)) await writeFile(join(dir, f), t);
+  const r = await coreScan(dir, undefined, { all: true });
+  const hits = r.findings.filter((f) => ["redirect.open", "path.user-input", "ssrf.user-url"].includes(f.ruleId)).map((f) => `${f.ruleId} ${f.file}`).sort();
+  assert.deepEqual(hits, ["path.user-input joined.js", "ssrf.user-url fetched.js"]);
+});
+
+test("load tests and test data folders don't ship", async () => {
+  const { isNonShipping } = await import("../src/index.js");
+  for (const f of ["loadtest/sim_worker.mjs", "load-tests/run.js", "testdata/conformance.json", "pkg/test-data/a.json"]) assert.equal(isNonShipping(f), true, f);
+  assert.equal(isNonShipping("src/loader.ts"), false);
+});
+
+test("send_file with an in-memory file isn't a path, even with request data in another argument", () => {
+  const r = rules.find((x) => x.id === "path.user-input")!;
+  assert.equal(r.test!('return send_file(io.BytesIO(result.payload), as_attachment=request.args.get("download") == "1")'), false);
+  assert.equal(r.test!('return send_file(request.args.get("path"))'), true);
+});

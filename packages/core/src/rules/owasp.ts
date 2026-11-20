@@ -81,7 +81,9 @@ export const owaspRules: Rule[] = [
   rule({ id: "path.user-input", title: "File path built from request data", status: "gap", severity: "high", controls: [A01],
     fix: "Don't pass request values into file paths. Map the request to a known file name, or use path.basename and check the result stays inside the allowed folder.",
     note: "A path like ../../etc/passwd lets someone read or overwrite files outside the folder you meant (path traversal, CWE-22).", extensions: CODE,
-    test: (l) => /\b(fs\.(readFile|readFileSync|createReadStream|writeFile|writeFileSync|unlink|unlinkSync)|res\.(sendFile|download)|send_file|send_from_directory|(?<![.\w])open)\s*\(/.test(l) && USER_INPUT.test(l) ? true
+    test: (l) => /\b(fs\.(readFile|readFileSync|createReadStream|writeFile|writeFileSync|unlink|unlinkSync)|res\.(sendFile|download)|send_file|send_from_directory|(?<![.\w])open)\s*\(/.test(l) && USER_INPUT.test(l)
+      // An in-memory file isn't a path: send_file(io.BytesIO(...), as_attachment=request...) (field-test review).
+      && !/\b(send_file|sendFile|download)\s*\(\s*(io\.)?(BytesIO|StringIO)\s*\(|\b(send_file|sendFile)\s*\(\s*Buffer\./.test(l) ? true
       // Unpacking an archive writes wherever its entry names point (zip slip), unless Python's filter= is set.
       : /\.extractall\((?!.*\bfilter\s*=)|\.extractAllTo\(/.test(l) ? "partial" : false }),
   rule({ id: "redirect.open", title: "Redirect to a URL taken from the request", status: "gap", severity: "medium", controls: [A01],
