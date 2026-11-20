@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.lintsure/lintsure",
   "title": "Lintsure",
-  "description": "Keeps AI coding agents on track: checks the code they write for security and privacy problems. Local.",
+  "description": "Keeps AI coding agents on track: checks the code they write for security and privacy problems.",
   "websiteUrl": "https://lintsure.com/docs/mcp",
   "repository": {
     "url": "https://github.com/lintsure/lintsure",
