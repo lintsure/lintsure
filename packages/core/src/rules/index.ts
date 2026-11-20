@@ -204,7 +204,9 @@ export const rules: Rule[] = [
       // A statement's shape: SELECT ... FROM, INSERT INTO, UPDATE x SET, DELETE FROM. "Could not update user ${id} from ..." is a message.
       if (!/(?<![.\w])(SELECT\b(?!\s*\()[^"'`]*\bFROM\b|INSERT\s+INTO\b|UPDATE\s+[\w."`${}]+\s+SET\b|DELETE\s+FROM\b)/i.test(l)) return false;
       if (/\b(throw|Error|message|msg)\b/.test(l) && !/\.(query|execute|exec|raw|run|prepare|all|get)\s*\(/.test(l)) return false;
-      const parts = [...l.matchAll(SQL_PARTS)].map((m) => m.slice(1).find(Boolean) ?? "");
+      // Every {…} in a Python f-string counts, not only the first: f"UPDATE {table} SET … WHERE {where}" (field test).
+      const fParts = [...l.matchAll(/\bf(["'])((?:(?!\1).)*)\1/g)].flatMap((m) => [...m[2].matchAll(/\{([^}]*)\}/g)].map((x) => x[1]));
+      const parts = [...[...l.matchAll(SQL_PARTS)].map((m) => m.slice(1).find(Boolean) ?? ""), ...fParts];
       if (!parts.length) return false;
       if (parts.some((p) => USER_INPUT.test(p))) return true;
       // Table and column names, placeholder lists and CONSTANTS are your own text, not values (field test, 139 repos).

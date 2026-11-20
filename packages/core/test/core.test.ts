@@ -858,3 +858,10 @@ test("send_file with an in-memory file isn't a path, even with request data in a
   assert.equal(r.test!('return send_file(io.BytesIO(result.payload), as_attachment=request.args.get("download") == "1")'), false);
   assert.equal(r.test!('return send_file(request.args.get("path"))'), true);
 });
+
+test("every {…} in an f-string is read: a table name first doesn't hide a value later", () => {
+  const r = rules.find((x) => x.id === "sql.string-built")!;
+  assert.equal(r.test!('sql = f"DELETE FROM {table} WHERE {where}"'), "partial");
+  assert.equal(r.test!('cur.execute(f"SELECT * FROM {TABLE} WHERE id = {request.args[\'id\']}")'), true);
+  assert.equal(r.test!('cur.execute(f"SELECT * FROM {TABLE}")'), false);
+});
