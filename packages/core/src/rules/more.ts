@@ -27,8 +27,8 @@ const SECRETISH = String.raw`[\w.$\[\]"'-]*(?:signature|token|secret|hmac|digest
 const UNSAFE_COMPARE = new RegExp(String.raw`(?<![\w.])${SECRETISH}\s*(?:===?|!==?)\s*${SECRETISH}`, "i");
 
 // A file that registers tools an AI agent can call over MCP (TypeScript or Python SDKs).
-const MCP_TOOL = /\.(registerTool|tool)\(\s*["'`]|@(mcp|server|app)\.tool\b|setRequestHandler\(\s*CallToolRequestSchema/;
-const SHELL = /\b(execSync|exec|execFile|execFileSync|spawn|spawnSync)\s*\(|\bos\.(system|popen)\s*\(|\bsubprocess\.\w+\s*\([^)]*shell\s*=\s*True/;
+const MCP_TOOL = /\.registerTool\(|\.tool\(\s*["'`]|@(mcp|server|app)\.tool\b|setRequestHandler\(\s*CallToolRequestSchema/;
+const SHELL = /(?<![.\w$])(execSync|exec|execFile|execFileSync|spawn|spawnSync)\s*\(|\b(child_process|childProcess|cp)\.(execSync|exec|execFile|execFileSync|spawn|spawnSync)\s*\(|\bos\.(system|popen)\s*\(|\bsubprocess\.\w+\s*\([^)]*shell\s*=\s*True/;
 const ENV_SECRET = /\b(process\.env|os\.environ(\.get)?|os\.getenv)\s*[.[(]\s*["']?\w*(TOKEN|SECRET|API_?KEY|PASSWORD|CREDENTIALS?)\w*/i;
 /** Lines matching re in a file that registers MCP tools; nothing in other files. Pure. */
 export function inMcpServer(lines: string[], re: RegExp): number[] {
@@ -48,7 +48,8 @@ export const moreRules: Rule[] = [
     note: "Every tool in this server acts with this credential's full access, so the riskiest tool sets the blast radius for all of them. A separate key name doesn't narrow anything if the key itself can do more.", extensions: CODE,
     confidence: "medium",
     unseen: "Lintsure can't see what this credential is allowed to do.",
-    fileTest: (lines) => inMcpServer(lines, ENV_SECRET) }),
+    // One finding per credential name: the same key read in five places is still one shared key.
+    fileTest: (lines) => { const seen = new Set<string>(); return inMcpServer(lines, ENV_SECRET).filter((n) => { const k = lines[n - 1].match(ENV_SECRET)![0]; return !seen.has(k) && !!seen.add(k); }); } }),
 
   rule({ id: "authz.no-owner-check", title: "Record loaded by an id from the request, with no owner check", status: "partial", severity: "high", controls: [A01],
     fix: "Look the record up by its id and the signed-in user (or tenant) together, for example where: { id, userId: req.user.id }, or check the owner before returning it.",

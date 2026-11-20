@@ -772,10 +772,13 @@ test("MCP rules: shell and shared credentials only in files that register tools"
   const { tmpdir } = await import("node:os");
   const dir = await mkdtemp(join(tmpdir(), "ls-"));
   await writeFile(join(dir, "server.ts"), `import { execSync } from "node:child_process";\nconst token = process.env.GITHUB_TOKEN;\nserver.registerTool("run", {}, async ({ cmd }) => ({ content: [{ type: "text", text: execSync(cmd).toString() }] }));\n`);
+  // regex.exec( and db.exec( are not shells; a tool whose name is on the next line still counts.
+  await writeFile(join(dir, "regex.ts"), `server.registerTool(\n  "parse",\n  {},\n  async ({ s }) => ({ content: [{ type: "text", text: /a(b)/.exec(s)?.[1] ?? "" }] }),\n);\nconst m = db.exec("select 1");\n`);
+  await writeFile(join(dir, "multi.ts"), `import cp from "node:child_process";\nserver.registerTool(\n  "git",\n  {},\n  async ({ args }) => cp.execSync("git " + args),\n);\n`);
   await writeFile(join(dir, "build.ts"), `import { execSync } from "node:child_process";\nexecSync("tsc");\nconst t = process.env.NPM_TOKEN;\n`);
   const r = await coreScan(dir, undefined, { all: true });
   const hits = r.findings.filter((f) => f.ruleId.startsWith("mcp.")).map((f) => `${f.ruleId} ${f.file}:${f.line}`);
-  assert.deepEqual(hits.sort(), ["mcp.tool-runs-shell server.ts:3", "mcp.tool-uses-secret server.ts:2"]);
+  assert.deepEqual(hits.sort(), ["mcp.tool-runs-shell multi.ts:5", "mcp.tool-runs-shell server.ts:3", "mcp.tool-uses-secret server.ts:2"]);
 });
 
 test("Lintsure's own report files are never scanned", async () => {
