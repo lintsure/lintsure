@@ -233,6 +233,7 @@ export function exampleLines(lines: string[], ext: string): boolean[] {
 // the request are found per file, and a later line is reread with the request value written in place. A variable that is
 // checked before use (startsWith, includes, a comparison, a test) is left alone. Hits are Partial: the hop is a guess.
 // shortcut: one assignment hop inside one file, no reassignment or function-argument flow; upgrade to a real data-flow pass if recall stays low.
+const REQUEST_SINK_RULES = new Set(["sql.string-built", "cmd.shell-built", "code.eval", "deserialize.unsafe", "ci.script-injection", "jwt.unverified"]);
 const HOP_RULES = new Set(["ssrf.user-url", "redirect.open", "path.user-input"]);
 const REQ_VALUE = /\b(?:req\.(?:body|query|params|headers|cookies)|request\.(?:args|form|json|data|GET|POST|query_params|files)|ctx\.query|event\.(?:body|queryStringParameters)|searchParams\.get)\b/;
 // A request value cleaned where it is assigned isn't request data any more; a lookup by a request id returns a server
@@ -606,7 +607,10 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const showAll = opts.all ?? config.show === "all";
   const medium = new Set(active.filter((r) => r.confidence === "medium").map((r) => r.id));
   // A key in a test or fixture file is usually a fake one (0 of 15 sampled were real): shown only with --all.
-  const isMedium = (f: Finding) => medium.has(f.ruleId) || (SECRET_RULES.has(f.ruleId) && isNonShipping(f.file));
+  // Request data reaching a query, a shell, eval or a CI script (status Gap) is shown by default even from a held-back
+  // rule: the default run found 61% of the benchmark's real problems, and these were most of the rest (2026-11-20).
+  const reachesSink = (f: Finding) => f.status === "gap" && REQUEST_SINK_RULES.has(f.ruleId) && !isNonShipping(f.file);
+  const isMedium = (f: Finding) => (medium.has(f.ruleId) && !reachesSink(f)) || (SECRET_RULES.has(f.ruleId) && isNonShipping(f.file));
   const changed = opts.changed && new Map(Object.entries(opts.changed.lines).map(([k, v]) => [k, new Set(v)]));
   const inDiff = (f: Finding) => !changed || changed.get(f.file)?.has(f.line) === true;
   const held = showAll ? 0 : unique.filter((f) => isMedium(f) && inDiff(f)).length;

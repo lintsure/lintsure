@@ -1,7 +1,7 @@
 {
   "precision": 100,
   "recall": 100,
-  "recallShownByDefault": 60.6,
+  "recallShownByDefault": 75.8,
   "gapsOpen": 0,
   "cases": 49,
   "passed": [

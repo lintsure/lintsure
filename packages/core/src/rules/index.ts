@@ -419,7 +419,7 @@ const MEDIUM_CONFIDENCE = new Set(["xss.raw-html", "error.empty-catch", "sql.str
   "ci.script-injection", "log.injection", "log.secret", "auth.hardcoded-password", "mobile.cleartext-traffic", "config.debug-on",
   "mobile.token-in-plain-storage",
   // 0 of 7 real in the 0.3.9 review: the data was the app's own database, cache or worker pipe.
-  "deserialize.unsafe",
-  // Reworked in 0.3.9 to need credentials; not yet measured on a fresh sample.
-  "cors.any-origin"]);
+  "deserialize.unsafe"]);
+// cors.any-origin is shown by default since 2026-11-20: it only fires on an open or reflected origin plus credentials,
+// 7 times in 304 field-test repos, and that pairing lets any site read logged-in answers.
 for (const r of rules) if (MEDIUM_CONFIDENCE.has(r.id)) r.confidence = "medium";

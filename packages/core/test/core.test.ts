@@ -881,3 +881,13 @@ test("an SQL comment counts as a comment, a key that starts with dashes is still
   assert.equal(src.test!("-- e.g. -----BEGIN PRIVATE KEY----- goes in the vault"), false);
   assert.equal(src.test!("--sk-----BEGIN PRIVATE KEY-----"), true);
 });
+
+test("request data reaching a shell or query is shown by default; a guess from the same rule stays held back", async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-"));
+  await writeFile(join(dir, "a.js"), "app.get('/ls', (req, res) => {\n  exec(`ls ${req.query.d}`);\n  db.query(\"SELECT * FROM t WHERE id = \" + req.query.id);\n  db.query(`SELECT * FROM ${tableName} WHERE x = 1`);\n});\n");
+  const r = await coreScan(dir);
+  const shown = r.findings.map((f) => `${f.ruleId}:${f.line}`).filter((x) => /^(cmd|sql)/.test(x)).sort();
+  assert.deepEqual(shown, ["cmd.shell-built:2", "sql.string-built:3"]);
+});

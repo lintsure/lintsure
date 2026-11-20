@@ -12,7 +12,6 @@ const core = await import(new URL("../packages/core/dist/src/index.js", import.m
 const cases = (await import(new URL("../benchmark/corpus.mjs", import.meta.url).href)).default;
 const scoresUrl = new URL("../benchmark/corpus-scores.json", import.meta.url);
 const known = new Set(core.rules.map((r) => r.id));
-const medium = new Set(core.rules.filter((r) => r.confidence === "medium").map((r) => r.id));
 const hygiene = (id) => /^(?:repo|release)\./.test(id);
 const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : 100);
 
@@ -27,12 +26,14 @@ for (const c of cases) {
     }
     const lineOf = (e) => text[e.file].split("\n").findIndex((l) => l.includes(e.at)) + 1;
     const got = (await core.scan(root, core.ALL_FRAMEWORKS, { all: true })).findings.filter((f) => !hygiene(f.ruleId)).map((f) => ({ rule: f.ruleId, file: f.file.replaceAll("\\", "/"), line: f.line }));
+    // What a default run (no --all) actually shows, from the engine itself rather than a copy of its hold-back list.
+    const byDefault = new Set((await core.scan(root, core.ALL_FRAMEWORKS, { all: false })).findings.map((f) => `${f.ruleId}|${f.file.replaceAll("\\", "/")}|${f.line}`));
     const k = (byKind[c.kind] ??= { tp: 0, fp: 0, fn: 0, gaps: 0 });
     const used = new Set(), problems = [];
     for (const e of c.expect) {
       const line = lineOf(e), i = got.findIndex((g, j) => !used.has(j) && g.rule === e.rule && g.file === e.file && g.line === line);
       if (!known.has(e.rule)) { gaps++; k.gaps++; if (i >= 0) gapsFound++; problems.push(`gap (no rule yet): ${e.rule} at ${e.file}:${line}`); continue; }
-      if (i >= 0) { used.add(i); tp++; k.tp++; if (!medium.has(e.rule)) tpShown++; } else { fn++; k.fn++; problems.push(`missed: ${e.rule} at ${e.file}:${line}`); }
+      if (i >= 0) { used.add(i); tp++; k.tp++; if (byDefault.has(`${e.rule}|${e.file}|${line}`)) tpShown++; } else { fn++; k.fn++; problems.push(`missed: ${e.rule} at ${e.file}:${line}`); }
     }
     got.forEach((g, j) => { if (!used.has(j)) { fp++; k.fp++; problems.push(`false alarm: ${g.rule} at ${g.file}:${g.line}`); } });
     const ok = !problems.some((p) => !p.startsWith("gap"));
