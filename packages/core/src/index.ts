@@ -146,6 +146,7 @@ export function extOf(abs: string): string {
 }
 
 /** Scout: list files to check, sorted so output order never depends on the file system. */
+const OWN_OUTPUT = /^lintsure(-report\.(md|json)|-assessment\.html|\.sarif)$/;
 export async function listFiles(root: string, ignore: string[] = []): Promise<string[]> {
   const out: string[] = [];
   const ignored = (p: string) => { const r = relative(root, p).split(sep).join("/"); return ignore.some((i) => r === i || r.startsWith(i + "/")); };
@@ -154,7 +155,8 @@ export async function listFiles(root: string, ignore: string[] = []): Promise<st
       if (SKIP.has(e.name) || BUNDLED.test(e.name)) continue;
       const p = join(dir, e.name);
       if (ignored(p)) continue;
-      if (e.isDirectory()) await walk(p); else if (e.isFile()) out.push(p);
+      // Lintsure's own reports quote the flagged lines, so scanning them would flag the same code again.
+      if (e.isDirectory()) await walk(p); else if (e.isFile() && !OWN_OUTPUT.test(e.name)) out.push(p);
     }
   }
   await walk(root);

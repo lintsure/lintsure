@@ -777,3 +777,13 @@ test("MCP rules: shell and shared credentials only in files that register tools"
   const hits = r.findings.filter((f) => f.ruleId.startsWith("mcp.")).map((f) => `${f.ruleId} ${f.file}:${f.line}`);
   assert.deepEqual(hits.sort(), ["mcp.tool-runs-shell server.ts:3", "mcp.tool-uses-secret server.ts:2"]);
 });
+
+test("Lintsure's own report files are never scanned", async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-"));
+  for (const f of ["lintsure-report.json", "lintsure.sarif", "lintsure-assessment.html"]) await writeFile(join(dir, f), `{"text": "- /var/run/docker.sock:/var/run/docker.sock"}\n`);
+  await writeFile(join(dir, "compose.yml"), "    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n");
+  const r = await coreScan(dir, undefined, { all: true });
+  assert.deepEqual(r.findings.filter((f) => f.ruleId === "docker.socket-mounted").map((f) => f.file), ["compose.yml"]);
+});

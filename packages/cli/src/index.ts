@@ -2,6 +2,7 @@
 // npx lintsure scan [path] [options]      npx lintsure baseline [path]
 // Writes reports into the current folder. Never sends anything over the network.
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -162,6 +163,7 @@ async function main(argv: string[]) {
   const flag = (n: string) => { const i = rest.indexOf(n); return i >= 0 ? rest[i + 1] : undefined; };
   const path = resolve(rest.find((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1])) ?? ".");
   const wanted = flag("--framework")?.split(",").map((s) => s.trim()) as FrameworkId[] | undefined;
+  if (!existsSync(path)) { console.error(`No folder at ${path}. Pass the project folder to scan, for example: lintsure scan .`); return 2; }
 
   const config = await readConfig(path);
   // Checked after the config loads its rule packs, so a pack's framework id is accepted.
