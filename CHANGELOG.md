@@ -2,6 +2,28 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.12 · 2026-11-20 · Fewer false alarms, ten new checks
+
+### New
+- **Ten new checks** (84 rules in all, up from 74):
+  - **Record loaded with no owner check** (`authz.no-owner-check`): a record looked up by an id from the request, with nothing tying it to the signed-in user. Partial and held back by default (shown with `--all`), since the check may live in middleware.
+  - **Token verified without an algorithm list** (`jwt.no-algorithm-pin`) and **token signed with a short secret written in the code** (`jwt.weak-secret`).
+  - **Request data deep-merged into an object** (`proto.pollution`): `_.merge`, `deepmerge` and `$.extend(true, …)` on the request body.
+  - **Web-socket server with no origin check** (`ws.no-origin-check`).
+  - **Container runs privileged or shares the host** (`k8s.privileged`) and **storage bucket open to the public** (`cloud.public-bucket`), in Kubernetes YAML, Terraform, CDK and SDK calls.
+  - **Secret compared with == instead of a constant-time check** (`crypto.unsafe-compare`). Held back by default.
+  - **New-tab link without rel="noopener"** (`html.tabnabbing`, low: current browsers already protect against it) and **GraphQL introspection on** (`graphql.introspection`, low).
+- **Request data followed through one variable:** the SSRF, open redirect and file path checks now catch a request value saved to a variable and used a few lines later, unless the variable is checked first (startsWith, includes, a comparison, an allowlist). These findings are Partial. Also caught: template URLs that start with request data, archive extraction without Python's `filter=` (zip slip), and `"none"` anywhere in a JWT algorithm list.
+- **Realistic benchmark** (`benchmark/corpus.mjs`, run by `npm test`): 36 small projects scored through the real scan, not single lines. It covers text that isn't code, request data through a variable, safe versions that must stay quiet, and plain true positives, and fails if precision, recall or a passing case gets worse.
+
+### Fewer false alarms
+- **Example code is no longer read as running code:** fenced code blocks in docs, values under example-style keys in JSON data (`example`, `code`, `snippet`, `bad`, `good` and similar), and calls that only appear inside a quoted string, such as a demo diff stored as text. Secret checks still look there, unless the key is plainly fake.
+- **The hidden-AI prompt check** (`ai.hides-being-ai`) reads markdown only in prompt files (`prompts/`, `AGENTS.md`, `CLAUDE.md`, `SKILL.md`, `.github`, `.cursor`, `.claude`), not in guides that explain the rule.
+- On our own website repo, a default scan went from 9 findings to 1 (the one left is a real, accepted dev-only log). On the realistic benchmark, precision went from 60% to 100%.
+
+### Other
+- Repo: Dependabot config, a CycloneDX SBOM (`npm run sbom`), CodeQL advanced setup, community files (code of conduct, issue and PR templates, accessibility statement).
+
 ## 0.3.11 · 2026-11-18 · Policy fingerprint
 
 ### New
