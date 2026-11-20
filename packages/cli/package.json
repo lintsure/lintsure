@@ -1,7 +1,7 @@
 {
   "name": "lintsure",
   "version": "0.3.14",
-  "description": "Readiness checks for the code your AI writes: EU AI Act, GDPR, OWASP, CWE Top 25, EU Cyber Resilience Act. Runs locally. Not an audit or legal advice.",
+  "description": "Keep your AI coding agents on track: checks the code Claude Code, Cursor and Codex write for secrets, open databases and unsafe patterns, mapped to OWASP, GDPR and the EU AI Act. Runs locally. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -32,12 +32,20 @@
     "access": "public"
   },
   "keywords": [
-    "compliance",
+    "ai-agents",
+    "claude-code",
+    "cursor",
+    "codex",
+    "coding-agent",
+    "guardrails",
+    "security",
+    "secrets",
+    "supabase",
+    "owasp",
     "gdpr",
     "eu-ai-act",
     "mcp",
-    "static-analysis",
-    "readiness"
+    "static-analysis"
   ],
   "scripts": {
     "prepublishOnly": "cd ../.. && npm test"

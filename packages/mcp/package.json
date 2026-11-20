@@ -2,7 +2,7 @@
   "name": "@lintsure/mcp",
   "version": "0.3.14",
   "mcpName": "io.github.lintsure/lintsure",
-  "description": "Lintsure MCP server for Claude Code, Cursor, Codex and Windsurf. Readiness checks, not an audit or legal advice.",
+  "description": "Lintsure MCP server: lets Claude Code, Cursor, Codex and other agents check their own code before they say they are done. Runs locally. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -35,15 +35,18 @@
     "access": "public"
   },
   "keywords": [
-    "compliance",
-    "gdpr",
-    "eu-ai-act",
     "mcp",
-    "static-analysis",
-    "readiness",
     "mcp-server",
+    "model-context-protocol",
+    "ai-agents",
     "claude-code",
-    "cursor"
+    "cursor",
+    "codex",
+    "guardrails",
+    "security",
+    "owasp",
+    "gdpr",
+    "eu-ai-act"
   ],
   "scripts": {
     "prepublishOnly": "cd ../.. && npm test"
