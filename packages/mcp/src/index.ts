@@ -49,7 +49,7 @@ server.tool("scan",
     const shown = [...picked].sort((a, b) => rank(a) - rank(b)).slice(0, limit);
     const gaps = picked.filter((f) => f.status === "gap").length;
     return reply([
-      `Lintsure ${report.rulesVersion}: ${picked.length} open finding${picked.length === 1 ? "" : "s"} (${gaps} gap, ${picked.length - gaps} partial)${scope || only ? " in the files and rules asked for" : ""}, ${report.filesChecked} files read.`,
+      `Lintsure ${report.rulesVersion}: ${picked.length} open finding${picked.length === 1 ? "" : "s"} (${gaps} gap, ${picked.length - gaps} partial)${scope || only ? " in the files and rules asked for" : ""}, ${report.filesChecked} files read${report.filesSkipped ? `, ${report.filesSkipped} skipped (over 1 MB, binary or unreadable)` : ""}.`,
       ...(picked.length > shown.length ? [`Showing the first ${shown.length}; raise limit or narrow with files to see more.`] : []),
       "",
       ...shown.map((f) => `- ${f.id} ${f.status === "gap" ? "Gap" : "Partial"} · ${f.severity} · ${f.file}:${f.line} · ${f.ruleId}: ${f.title}. Fix: ${f.fix}`),

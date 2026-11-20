@@ -427,6 +427,9 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       || (r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)) && (!r.pathMatch || r.pathMatch.test(file)) && !r.unlessPath?.test(file)));
   });
   for (let i = 0; i < needed.length; i += 32) await Promise.all(needed.slice(i, i + 32).map(textOf));
+  // Say what was not read, so "no findings" is never read as "checked everything".
+  let filesSkipped = 0;
+  for (const abs of needed) if ((await textOf(abs)) === null) filesSkipped++;
   // Rules that look across files get the joined text of every file they read, read once up front.
   const shared = new Map<string, string>();
   for (const r of active.filter((x) => x.sharedContext)) {
@@ -579,6 +582,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     met: active.filter((r) => !hit.has(r.id) && (perRule[r.id] ?? 0) > 0).map((r) => ({ ruleId: r.id, title: r.title, controls: r.controls.filter((c) => frameworks.includes(c.framework)) })),
     outside: outsideFor(frameworks),
     filesChecked,
+    ...(filesSkipped ? { filesSkipped } : {}),
     disclaimer: DISCLAIMER,
     ...(held ? { held } : {}),
     ...(rulesOff.length ? { rulesOff } : {}),
@@ -587,6 +591,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       ...(opts.changed ? [`Only lines changed since ${opts.changed.base} are listed. Older findings in the same files are not shown.`] : []),
       ...(held ? [`${held} medium-confidence finding${held === 1 ? " was" : "s were"} held back. Run with --all to see ${held === 1 ? "it" : "them"}.`] : []),
       ...(rulesOff.length ? [`Switched off in lintsure.config.yaml: ${rulesOff.join(", ")}.`] : []),
+      ...(filesSkipped ? [`${filesSkipped} file${filesSkipped === 1 ? " was" : "s were"} not read: over 1 MB, binary or unreadable. No finding there means not checked, not clean.`] : []),
       ...(ignore.length ? [`Ignored by config: ${ignore.join(", ")}.`] : []),
       ...(nonShipping ? [`${nonShipping} test, fixture or tooling file${nonShipping === 1 ? " was" : "s were"} checked only for secrets and agent hooks.`] : []),
       "Each rule reads one file at a time. Data that flows between files, and how the app behaves when it runs, are not checked.",

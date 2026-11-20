@@ -133,6 +133,8 @@ export interface Report {
   disclaimer: string;
   /** Files the rules actually read (after skipping folders, large and binary files). */
   filesChecked: number;
+  /** Files a rule wanted but couldn't read: over 1 MB, binary or unreadable. */
+  filesSkipped?: number;
   /** Present when the repo has a .lintsure/baseline.json. */
   baseline?: BaselineDiff;
   /** Medium-confidence findings not shown because --all (show: all) was off. */

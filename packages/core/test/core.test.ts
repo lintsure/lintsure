@@ -753,3 +753,14 @@ test("blankStrings empties quoted text in one pass, even on an unclosed quote wi
   const t = Date.now(); blankStrings("'" + "\'".repeat(200_000));
   assert.ok(Date.now() - t < 200, "linear time (CodeQL js/polynomial-redos)");
 });
+
+test("files a rule wanted but couldn't read are counted, not silently passed", async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "ls-"));
+  await writeFile(join(dir, "app.js"), "const a = 1;\n");
+  await writeFile(join(dir, "blob.js"), Buffer.from([0x63, 0x00, 0x64]));
+  const r = await coreScan(dir);
+  assert.equal(r.filesSkipped, 1);
+  assert.ok(r.notCovered?.some((l) => l.includes("not checked, not clean")));
+});

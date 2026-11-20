@@ -215,6 +215,7 @@ async function main(argv: string[]) {
   if (report.record) console.log(`Record ${report.record.id} · ${report.record.createdAt.replace("T", " ").slice(0, 16)} UTC · ${report.record.counts.checkPoints} check points${report.policy ? ` · Policy #${report.policy.fingerprint}` : ""}`);
   // A check mark only when nothing is open: "✓ 3 gaps" read as a pass.
   console.log(`${open.length ? "!" : "✓"} ${open.length} open findings · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
+  console.log(`  Read ${report.filesChecked} files${report.filesSkipped ? `, skipped ${report.filesSkipped} (over 1 MB, binary or unreadable)` : ""}`);
   if (report.diffBase) console.log(`  Only lines changed since ${report.diffBase}`);
   if (report.held) console.log(`  ${report.held} more at medium confidence: run with --all to see ${report.held === 1 ? "it" : "them"}`);
   if (report.baseline) console.log(`  Since the baseline of ${report.baseline.created}: ${report.baseline.newCount} new, ${report.baseline.fixed.length} fixed, ${report.baseline.unchangedCount} unchanged`);
