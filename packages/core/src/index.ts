@@ -208,13 +208,23 @@ export function enclosingKey(lines: string[], i: number): string {
   }
   return "";
 }
+/** enclosingKey for every line in one pass (calling it per line was quadratic: minutes on a large JSON file). Pure. */
+export function enclosingKeys(lines: string[]): string[] {
+  const stack: string[] = [], out: string[] = [];
+  for (const l of lines) {
+    out.push(stack.length ? stack[stack.length - 1] : "");
+    const key = l.match(/"([^"]+)"\s*:\s*\{/)?.[1] ?? "";
+    for (const ch of l) if (ch === "{") stack.push(key); else if (ch === "}") stack.pop();
+  }
+  return out;
+}
 // Example code that shows a pattern instead of running it (benchmark "fp" cases, self-scan 2026-11-19): a fenced block
 // in a doc, a value under an example-style key in JSON data. Only secret rules still look, and only for a real-looking key.
 const EXAMPLE_KEY = /^(?:examples?|code|snippets?|samples?|bad|good|before|after|demo|patch|diff|dont|do)$/i;
 const EXAMPLE_KEY_ON_LINE = /"(?:examples?|code|snippets?|samples?|bad|good|before|after|demo|patch|diff|dont|do)"\s*:/i;
 export function exampleLines(lines: string[], ext: string): boolean[] {
   if (ext === ".md" || ext === ".mdx") { let fence = false; return lines.map((l) => { if (/^\s*(```|~~~)/.test(l)) { fence = !fence; return true; } return fence; }); }
-  if (ext === ".json") return lines.map((l, i) => EXAMPLE_KEY_ON_LINE.test(l) || EXAMPLE_KEY.test(enclosingKey(lines, i)));
+  if (ext === ".json") { const keys = enclosingKeys(lines); return lines.map((l, i) => EXAMPLE_KEY_ON_LINE.test(l) || EXAMPLE_KEY.test(keys[i])); }
   return lines.map(() => false);
 }
 // Call-sink rules whose match must come from code, not from text inside a '...' or "..." string (a demo diff stored as

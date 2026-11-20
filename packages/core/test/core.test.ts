@@ -790,3 +790,12 @@ test("Lintsure's own report files are never scanned", async () => {
   const r = await coreScan(dir, undefined, { all: true });
   assert.deepEqual(r.findings.filter((f) => f.ruleId === "docker.socket-mounted").map((f) => f.file), ["compose.yml"]);
 });
+
+test("enclosingKeys matches enclosingKey line by line, and stays fast on a large JSON file", async () => {
+  const { enclosingKey, enclosingKeys } = await import("../src/index.js");
+  const json = JSON.stringify({ a: { examples: { bad: "x", good: { deep: 1 } }, code: "y" }, list: [{ k: 1 }, { k: 2 }] }, null, 2).split("\n");
+  assert.deepEqual(enclosingKeys(json), json.map((_, i) => enclosingKey(json, i)));
+  const big = JSON.stringify(Object.fromEntries(Array.from({ length: 20000 }, (_, i) => [`k${i}`, { v: i }])), null, 2).split("\n");
+  const t = Date.now(); enclosingKeys(big);
+  assert.ok(Date.now() - t < 1000, "one pass, not one walk per line");
+});
