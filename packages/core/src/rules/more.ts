@@ -73,7 +73,10 @@ export const moreRules: Rule[] = [
   rule({ id: "html.tabnabbing", title: "Link opens a new tab without rel=\"noopener\"", status: "partial", severity: "low", controls: [A06],
     fix: "Add rel=\"noopener noreferrer\" to links with target=\"_blank\".",
     note: "Current browsers already treat target=\"_blank\" as noopener, so this matters mainly for older browsers and webviews: the opened page could redirect your tab (CWE-1022).", extensions: MARKUP,
-    test: (l) => /\btarget\s*=\s*\{?\s*["']_blank["']/.test(l) && !/\brel\s*=\s*\{?\s*["'][^"']*\bno(opener|referrer)\b/.test(l) }),
+    // Held back by default (2,246 shown on 195 repos, field test 2026-11-20): low risk in current browsers, and JSX puts rel on the next line.
+    confidence: "medium",
+    test: (l) => /\btarget\s*=\s*\{?\s*["']_blank["']/.test(l) && !/\brel\s*=\s*\{?\s*["'][^"']*\bno(opener|referrer)\b/.test(l),
+    unlessNear: /\brel\s*=\s*\{?\s*["'][^"']*\bno(opener|referrer)\b/ }),
   rule({ id: "ws.no-origin-check", title: "Web-socket server with no origin check", status: "partial", severity: "medium", controls: [A01],
     fix: "Check the Origin header when a connection opens (verifyClient in ws, cors.origin or allowRequest in socket.io) and allow only your own sites.",
     note: "Browsers don't stop other sites opening a web socket to you, so a page on any site can use a signed-in visitor's cookies against it (cross-site WebSocket hijacking, CWE-1385).", extensions: JS,
