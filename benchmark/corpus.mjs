@@ -68,7 +68,7 @@ app.use((req, res, next) => {
   next();
 });
 ` }, expect: [{ rule: "cors.any-origin", file: "src/server.ts", at: "req.headers.origin" }] },
-  { name: "live key in config", kind: "base", files: { "src/config.ts": `export const stripe = { key: "sk_{{}}live_51HxQkLmNoPqRsTuVwXyZ0123456789abcdefABCDEF" };
+  { name: "live key in config", kind: "base", files: { "src/config.ts": `export const stripe = { key: "sk_{{}}live_51HxQkLmNo{{}}PqRsTuVwXyZ{{}}0123456789abcdefABCDEF" };
 ` }, expect: [{ rule: "secret.in-source", file: "src/config.ts", at: "stripe" }] },
   { name: "shell built from input", kind: "base", files: { "src/zip.ts": `import { exec } from "node:child_process";
 export const zip = (req) => exec(\`zip -r out.zip \${req.body.folder}\`);
