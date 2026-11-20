@@ -81,7 +81,9 @@ export const owaspRules: Rule[] = [
   rule({ id: "path.user-input", title: "File path built from request data", status: "gap", severity: "high", controls: [A01],
     fix: "Don't pass request values into file paths. Map the request to a known file name, or use path.basename and check the result stays inside the allowed folder.",
     note: "A path like ../../etc/passwd lets someone read or overwrite files outside the folder you meant (path traversal, CWE-22).", extensions: CODE,
-    test: (l) => /\b(fs\.(readFile|readFileSync|createReadStream|writeFile|writeFileSync|unlink|unlinkSync)|res\.(sendFile|download)|send_file|send_from_directory|open)\s*\(/.test(l) && USER_INPUT.test(l) }),
+    test: (l) => /\b(fs\.(readFile|readFileSync|createReadStream|writeFile|writeFileSync|unlink|unlinkSync)|res\.(sendFile|download)|send_file|send_from_directory|open)\s*\(/.test(l) && USER_INPUT.test(l) ? true
+      // Unpacking an archive writes wherever its entry names point (zip slip), unless Python's filter= is set.
+      : /\.extractall\((?![^)]*\bfilter\s*=)|\.extractAllTo\(/.test(l) ? "partial" : false }),
   rule({ id: "redirect.open", title: "Redirect to a URL taken from the request", status: "gap", severity: "medium", controls: [A01],
     fix: "Redirect only to paths on your own site, or check the target against a list of allowed hosts.",
     note: "Attackers send people a link to your site that bounces them to a phishing page (open redirect, CWE-601).", extensions: CODE,
@@ -89,7 +91,7 @@ export const owaspRules: Rule[] = [
   rule({ id: "ssrf.user-url", title: "Server fetches a URL taken from the request", status: "gap", severity: "high", controls: [A01],
     fix: "Don't let users choose the full URL your server calls. Allow only known hosts, and block internal addresses such as 169.254.169.254 and localhost.",
     note: "Your server can be made to call internal services or cloud metadata on an attacker's behalf (server-side request forgery, CWE-918).", extensions: CODE,
-    test: (l) => /\b(fetch|axios(\.(get|post|request))?|got|requests\.(get|post|request)|httpx\.(get|post)|urlopen)\s*\(\s*(req\.(body|query|params)|request\.(args|json|form|GET|data))/.test(l) }),
+    test: (l) => /\b(fetch|axios(\.(get|post|request))?|got|requests\.(get|post|request)|httpx\.(get|post)|urlopen)\s*\(\s*(`\$\{\s*)?(req\.(body|query|params)|request\.(args|json|form|GET|data))/.test(l) }),
   rule({ id: "csrf.disabled", title: "CSRF protection switched off", status: "partial", severity: "medium", controls: [A01],
     fix: "Keep CSRF protection on for routes that use cookies. Turning it off is only safe for APIs that authenticate with a token header, not cookies.",
     note: "Another site can make a logged-in user's browser submit forms to your app (cross-site request forgery, CWE-352).", extensions: CODE,
@@ -189,12 +191,12 @@ export const owaspRules: Rule[] = [
     fix: "Verify tokens with jwt.verify (Node) or jwt.decode with a key and an explicit algorithms list (Python). Never allow the 'none' algorithm.",
     note: "Without signature checks anyone can write their own token and claim to be any user (CWE-347).", extensions: CODE,
     test: (l) => {
-      if (/verify_signature["']?\s*:\s*False|\bverify\s*=\s*False|algorithms\s*[:=]\s*\[\s*["']none["']/i.test(l) && /jwt/i.test(l)) return true;
+      if (/verify_signature["']?\s*:\s*False|\bverify\s*=\s*False|algorithms\s*[:=]\s*\[[^\]]*["']none["']/i.test(l) && /jwt/i.test(l)) return true;
       return /\bjwt\.decode\(\s*[\w.]+\s*\)/.test(l) ? "partial" : false; // Node jwt.decode reads a token without verifying it
     },
     // Peeking at a claim before verifying it nearby is fine (field test, 139 repos).
     // Python peek-then-verify: a second decode with a key and an algorithms list nearby (review P21).
-    unlessNear: /\bjwt\.verify\(|\bjwtVerify\(|\bverify(Token|Jwt|JWT)\(|\bjwt\.decode\([^)]*\balgorithms\s*=/ }),
+    unlessNear: /\bjwt\.verify\((?![^\n]*["']none["'])|\bjwtVerify\(|\bverify(Token|Jwt|JWT)\(|\bjwt\.decode\([^)]*\balgorithms\s*=/ }),
 
   // A05 Injection
   rule({ id: "cmd.shell-built", title: "Shell command built from strings", status: "gap", severity: "high", controls: [A05],

@@ -217,6 +217,33 @@ export function exampleLines(lines: string[], ext: string): boolean[] {
 }
 // Call-sink rules whose match must come from code, not from text inside a '...' or "..." string (a demo diff stored as
 // data). Template literals are left alone: `exec(\`zip ${req.body.f}\`)` is real code.
+// One hop of request data (benchmark "hop" cases): a request value saved in `target`, then `target` passed to a URL call. Variables assigned from
+// the request are found per file, and a later line is reread with the request value written in place. A variable that is
+// checked before use (startsWith, includes, a comparison, a test) is left alone. Hits are Partial: the hop is a guess.
+// shortcut: one assignment hop inside one file, no reassignment or function-argument flow; upgrade to a real data-flow pass if recall stays low.
+const HOP_RULES = new Set(["ssrf.user-url", "redirect.open", "path.user-input"]);
+const REQ_VALUE = /\b(?:req\.(?:body|query|params|headers|cookies)|request\.(?:args|form|json|data|GET|POST|query_params|files)|ctx\.query|event\.(?:body|queryStringParameters)|searchParams\.get)\b/;
+export function taintedNames(lines: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  lines.forEach((l, i) => {
+    if (!REQ_VALUE.test(l) && ![...out.keys()].some((n) => new RegExp(`\\b${n}\\b`).test(l.split("=").slice(1).join("=")))) return;
+    const m = l.match(/^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::[^=]+)?=(?!=)/) ?? l.match(/^\s*(\w+)\s*=(?!=)/);
+    const d = l.match(/^\s*(?:const|let|var)\s*\{([^}]+)\}\s*=/);
+    if (m) out.set(m[1], i);
+    if (d) for (const n of d[1].split(",")) { const k = n.split(":").pop()!.split("=")[0].trim(); if (/^\w+$/.test(k)) out.set(k, i); }
+  });
+  return out;
+}
+export function hopLine(lines: string[], i: number, names: Map<string, number>): string | null {
+  let t = lines[i], changed = false;
+  for (const [n, at] of names) {
+    if (at >= i || !new RegExp(`\\b${n}\\b`).test(t)) continue;
+    const checked = lines.slice(at + 1, i).some((l) => new RegExp(`\\b${n}\\s*(?:\\.(?:startsWith|endsWith|includes|match|test)\\(|[!=]==?)|\\b(?:allow\\w*|isValid\\w*|is_safe\\w*|validate\\w*)\\(\\s*${n}\\b|\\.(?:has|includes|test)\\(\\s*${n}\\b`).test(l));
+    if (checked) continue;
+    t = t.replace(new RegExp(`(?<![.\\w])${n}\\b`, "g"), "req.query." + n); changed = true;
+  }
+  return changed ? t : null;
+}
 const PROMPT_DOC = /(^|\/)(?:prompts?|personas?|instructions?|system)(?:\/|[._-])|(^|\/)(?:AGENTS|CLAUDE|GEMINI|SKILL|SYSTEM|PROMPT)\.mdx?$|\.prompt\.mdx?$|(^|\/)\.(?:github|cursor|claude)\//i;
 const SINK_RULES = new Set(["path.user-input", "ssrf.user-url", "redirect.open", "code.eval", "cmd.shell-built", "deserialize.unsafe"]);
 export const blankStrings = (l: string) => l.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, (m) => m[0] + m[0]);
@@ -438,6 +465,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     const inTests = isNonShipping(file);
     if (inTests) nonShipping++;
     const comment = commentLines(lines, ext), example = exampleLines(lines, ext);
+    let tainted: Map<string, number> | undefined;
     // Statements are worked out once per file, on lines with comments blanked.
     const stmts = JOINABLE.has(ext) ? statements(lines.map((l, i) => (comment[i] ? "" : l)), ext === ".py") : [];
     const multi = stmts.filter((s) => s.end > s.start);
@@ -459,8 +487,9 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       if (r.test) lines.forEach((text, i) => {
         if (skip?.[i] || (prose[i] && !readsText)) return;
         if (example[i] && !(secret && !PLACEHOLDER.test(text))) return;
-        const hit = r.test!(text);
-        if (hit && SINK_RULES.has(r.id) && !r.test!(blankStrings(text))) return;
+        let hit = r.test!(text), probe = text;
+        if (!hit && HOP_RULES.has(r.id)) { const h = hopLine(lines, i, (tainted ??= taintedNames(lines))); if (h && r.test!(h)) { hit = "partial"; probe = h; } }
+        if (hit && SINK_RULES.has(r.id) && !r.test!(blankStrings(probe))) return;
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
         if (inTests && secret && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."

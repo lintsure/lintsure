@@ -184,6 +184,20 @@ export function file(req, res) {
 ` }, expect: [] },
   { name: "secret read from the environment", kind: "safe", files: { "src/config.ts": `export const stripe = { key: process.env.STRIPE_SECRET_KEY };
 ` }, expect: [] },
+  { name: "request url checked against an allowlist before fetch", kind: "safe", files: { "src/routes/proxy.ts": `const ALLOWED = new Set(["api.example.com"]);
+export async function proxy(req, res) {
+  const url = new URL(String(req.query.u));
+  if (!ALLOWED.has(url.host)) return res.status(400).end();
+  const r = await fetch(url);
+  res.send(await r.text());
+}
+` }, expect: [] },
+  { name: "variable holds a fixed url", kind: "safe", files: { "src/status.ts": `export async function status(req, res) {
+  const target = "https://status.example.com/api";
+  const r = await fetch(target);
+  res.json(await r.json());
+}
+` }, expect: [] },
   { name: "redirect only to a fixed path", kind: "safe", files: { "src/routes/login.ts": `export function done(req, res) {
   res.redirect("/dashboard");
 }

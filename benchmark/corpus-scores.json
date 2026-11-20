@@ -1,9 +1,9 @@
 {
   "precision": 100,
-  "recall": 53.8,
-  "recallShownByDefault": 30.8,
+  "recall": 100,
+  "recallShownByDefault": 69.2,
   "gapsOpen": 10,
-  "cases": 34,
+  "cases": 36,
   "passed": [
     "cors reflects origin with credentials",
     "deep merge of the request body",
@@ -13,26 +13,34 @@
     "graphql introspection on",
     "guide prose describes a bad prompt",
     "guide quotes a bad prompt",
+    "jwt alg none accepted",
     "jwt signed with a short literal secret",
     "jwt verify with a pinned algorithm",
     "jwt verify without an algorithm list",
     "live key in config",
     "new tab link with noopener",
     "new tab link without noopener",
+    "open redirect through a variable",
     "parameterised sql",
     "path kept inside its folder",
+    "path through path.join",
     "privileged kubernetes pod",
     "prompt file tells the AI to pose as human",
     "public s3 bucket",
     "record looked up with no owner check",
     "redirect only to a fixed path",
+    "request url checked against an allowlist before fetch",
     "request value only in an encoded query string",
     "rule data with a fake key example",
     "secret read from the environment",
     "shell built from input",
     "sql built from the request",
+    "ssrf through a template url",
+    "ssrf through a variable",
     "token compared with ==",
-    "websocket server with no origin check"
+    "variable holds a fixed url",
+    "websocket server with no origin check",
+    "zip slip on extract"
   ],
   "byKind": {
     "fp": {
@@ -44,16 +52,16 @@
     },
     "base": {
       "precision": 100,
-      "recall": 87.5,
+      "recall": 100,
       "falseAlarms": 0,
-      "missed": 1,
+      "missed": 0,
       "gaps": 0
     },
     "hop": {
       "precision": 100,
-      "recall": 0,
+      "recall": 100,
       "falseAlarms": 0,
-      "missed": 5,
+      "missed": 0,
       "gaps": 0
     },
     "gap": {
