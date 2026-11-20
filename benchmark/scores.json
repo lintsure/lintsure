@@ -358,5 +358,65 @@
     "recall": 100,
     "cases": 3,
     "casesHash": "4249ed8d7807"
+  },
+  "authz.no-owner-check": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 8,
+    "casesHash": "cd5a9b6fbcc0"
+  },
+  "jwt.no-algorithm-pin": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5,
+    "casesHash": "cd2c4a796cbf"
+  },
+  "jwt.weak-secret": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6,
+    "casesHash": "42efb5d1cc90"
+  },
+  "proto.pollution": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 6,
+    "casesHash": "a82b7979d991"
+  },
+  "html.tabnabbing": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 5,
+    "casesHash": "2aabd3474768"
+  },
+  "ws.no-origin-check": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 3,
+    "casesHash": "215b59ecf93f"
+  },
+  "k8s.privileged": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 8,
+    "casesHash": "160fe671fae3"
+  },
+  "cloud.public-bucket": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7,
+    "casesHash": "efb7aa6de704"
+  },
+  "crypto.unsafe-compare": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 7,
+    "casesHash": "b572ad74afd9"
+  },
+  "graphql.introspection": {
+    "precision": 100,
+    "recall": 100,
+    "cases": 2,
+    "casesHash": "f91c72449acf"
   }
 }

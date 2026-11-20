@@ -260,7 +260,9 @@ const JOIN_RULES = new Set(["pii.logged", "pii.to-analytics", "log.injection", "
   "ssrf.user-url", "path.user-input", "redirect.open", "nosql.operator-input", "template.user-string", "error.stack-to-client",
   // Narrow call-plus-value patterns, where unrelated parts of a statement rarely complete a match.
   "transport.plain-http", "transport.tls-verify-off", "jwt.unverified", "crypto.weak-cipher", "fs.world-writable",
-  "mobile.token-in-plain-storage", "config.debug-on", "cookie.trusted-role", "code.eval"]);
+  "mobile.token-in-plain-storage", "config.debug-on", "cookie.trusted-role", "code.eval",
+  // Added with rules/more.ts: call-plus-argument shapes, measured on the robustness check only (not yet on the 139 repos).
+  "authz.no-owner-check", "jwt.weak-secret", "jwt.no-algorithm-pin", "proto.pollution"]);
 const MAX_JOIN_LINES = 25, MAX_JOIN_CHARS = 2000;
 export interface Statement { start: number; end: number; text: string; prose: boolean }
 /** Groups lines into statements: lines join while a ( or [ or a template literal is open. Joining stops at a function

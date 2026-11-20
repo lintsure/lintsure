@@ -1,8 +1,8 @@
 {
   "precision": 100,
   "recall": 100,
-  "recallShownByDefault": 69.2,
-  "gapsOpen": 10,
+  "recallShownByDefault": 73.9,
+  "gapsOpen": 0,
   "cases": 36,
   "passed": [
     "cors reflects origin with credentials",
@@ -69,7 +69,7 @@
       "recall": 100,
       "falseAlarms": 0,
       "missed": 0,
-      "gaps": 10
+      "gaps": 0
     },
     "safe": {
       "precision": 100,

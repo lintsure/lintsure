@@ -862,5 +862,122 @@
       "import { streamText } from \"ai\";\nconst { messages } = await req.json();\nreturn streamText({ model, system: SYSTEM, messages });",
       "const { system } = await req.json();"
     ]
+  },
+  "authz.no-owner-check": {
+    "flag": [
+      "const inv = await prisma.invoice.findUnique({ where: { id: req.params.id } });",
+      "const doc = await Doc.findById(req.params.id);",
+      "order = Order.objects.get(pk=request.GET['id'])",
+      "const row = await repo.findOneBy({ id: req.query.id });"
+    ],
+    "pass": [
+      "const inv = await prisma.invoice.findUnique({ where: { id: req.params.id, userId: req.user.id } });",
+      "const doc = await Doc.findOne({ _id: req.params.id, owner: req.user.id });",
+      "const user = await User.findById(session.userId);",
+      "const plan = PLANS.find((p) => p.id === id);"
+    ]
+  },
+  "jwt.no-algorithm-pin": {
+    "flag": [
+      "const claims = jwt.verify(token, publicKey);",
+      "payload = jwt.decode(token, key)"
+    ],
+    "pass": [
+      "const claims = jwt.verify(token, key, { algorithms: [\"RS256\"] });",
+      "payload = jwt.decode(token, key, algorithms=[\"HS256\"])",
+      "jwt.verify(token, key, (err, d) => done(d));"
+    ]
+  },
+  "jwt.weak-secret": {
+    "flag": [
+      "const t = jwt.sign({ id }, \"secret123\", { expiresIn: \"1h\" });",
+      "token = jwt.encode(payload, \"changeme\", algorithm=\"HS256\")",
+      "jwt.verify(token, 'dev');"
+    ],
+    "pass": [
+      "const t = jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: \"1h\" });",
+      "token = jwt.encode(payload, settings.SECRET_KEY, algorithm=\"HS256\")",
+      "jwt.sign({ id }, key, { algorithm: \"RS256\" });"
+    ]
+  },
+  "proto.pollution": {
+    "flag": [
+      "const settings = _.merge({}, defaults, req.body);",
+      "const cfg = deepmerge(base, req.body);",
+      "$.extend(true, opts, req.query);"
+    ],
+    "pass": [
+      "const settings = { ...defaults, name: req.body.name };",
+      "const cfg = deepmerge(base, overrides);",
+      "Object.assign(target, req.body);"
+    ]
+  },
+  "html.tabnabbing": {
+    "flag": [
+      "<a href={url} target=\"_blank\">Docs</a>",
+      "<a href=\"https://x.com\" target='_blank'>X</a>"
+    ],
+    "pass": [
+      "<a href={url} target=\"_blank\" rel=\"noopener noreferrer\">Docs</a>",
+      "<a href=\"/docs\">Docs</a>",
+      "<a target=\"_blank\" rel=\"noreferrer\" href=\"x\">X</a>"
+    ]
+  },
+  "ws.no-origin-check": {
+    "flag": [
+      "import { WebSocketServer } from \"ws\";\nconst wss = new WebSocketServer({ port: 8080 });\nwss.on(\"connection\", (s) => s.send(\"hi\"));"
+    ],
+    "pass": [
+      "const wss = new WebSocketServer({ port: 8080, verifyClient: ({ origin }) => ALLOWED.has(origin) });",
+      "const wss = new WebSocketServer({ noServer: true });\nserver.on(\"upgrade\", (req, s, h) => { if (req.headers.origin !== SITE) return s.destroy(); wss.handleUpgrade(req, s, h, (ws) => wss.emit(\"connection\", ws)); });"
+    ]
+  },
+  "k8s.privileged": {
+    "flag": [
+      "            privileged: true",
+      "  hostNetwork: true",
+      "      allowPrivilegeEscalation: true",
+      "        runAsUser: 0"
+    ],
+    "pass": [
+      "            privileged: false",
+      "      allowPrivilegeEscalation: false",
+      "        runAsUser: 1000",
+      "  hostNetwork: false"
+    ]
+  },
+  "cloud.public-bucket": {
+    "flag": [
+      "  acl    = \"public-read\"",
+      "  block_public_acls = false",
+      "new s3.Bucket(this, \"Site\", { publicReadAccess: true });",
+      "s3.put_object(Bucket=b, Key=k, Body=d, ACL=\"public-read\")"
+    ],
+    "pass": [
+      "  acl    = \"private\"",
+      "  block_public_acls = true",
+      "new s3.Bucket(this, \"Site\", { publicReadAccess: false });"
+    ]
+  },
+  "crypto.unsafe-compare": {
+    "flag": [
+      "return req.headers[\"x-signature\"] == process.env.WEBHOOK_SECRET;",
+      "if (signature !== expectedSignature) return res.status(401).end();",
+      "if token == settings.API_TOKEN:"
+    ],
+    "pass": [
+      "if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) return;",
+      "if (token === undefined) return;",
+      "if (signature.length !== expected.length) return false;",
+      "if (tokenType === \"Bearer\") next();"
+    ]
+  },
+  "graphql.introspection": {
+    "flag": [
+      "export const server = new ApolloServer({ typeDefs, resolvers, introspection: true });"
+    ],
+    "pass": [
+      "const server = new ApolloServer({ typeDefs, resolvers, introspection: process.env.NODE_ENV !== \"production\" });"
+    ]
   }
 }

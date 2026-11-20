@@ -4,6 +4,7 @@
 import type { Rule } from "../types.js";
 import { owaspForExisting, owaspRules } from "./owasp.js";
 import { stackRules } from "./stack.js";
+import { moreRules } from "./more.js";
 import { craForExisting, craRules } from "./cra.js";
 import { standardsForExisting, standardsRules } from "./standards.js";
 
@@ -385,6 +386,7 @@ rules.push(
 // OWASP Top 10:2025: map the rules above, then add the OWASP rules.
 for (const r of rules) r.controls.push(...(owaspForExisting[r.id] ?? []));
 rules.push(...owaspRules);
+rules.push(...moreRules);
 // Supabase, Next.js and Vite: open databases and secrets reaching the browser.
 rules.push(...stackRules);
 for (const r of rules) r.controls.push(...(craForExisting[r.id] ?? []));
