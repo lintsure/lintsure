@@ -25,7 +25,7 @@ export { loadPacks, registerPack, type Pack } from "./packs.js";
 export { checksFor } from "./plan.js";
 import { configPacks, loadPacks, packFrameworks, packsLoaded } from "./packs.js";
 import { buildGraph, declaredEntries, reachOf } from "./reach.js";
-export const RULES_VERSION = "0.3.12";
+export const RULES_VERSION = "0.3.13";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =

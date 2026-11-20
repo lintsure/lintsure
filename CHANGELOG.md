@@ -2,6 +2,14 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.13 · 2026-11-20 · Docker socket check
+
+### New
+- **Docker socket mounted into a container** (`docker.socket-mounted`): `/var/run/docker.sock`, or the Windows `docker_engine` pipe, mounted in a compose file, a Kubernetes `hostPath`, a devcontainer mount or `docker run -v`. Whatever runs in that container gets the host's Docker and with it the whole machine; mounting it read-only doesn't stop that. Partial, since CI runners and reverse proxies sometimes need it. A `DOCKER_HOST` setting and commented-out lines don't count. 85 rules in all.
+
+### Fixed
+- Blanking quoted text (used to tell a demo string from real code) now takes one pass over the line. The old pattern slowed down with the square of the line length on an unclosed quote followed by many escapes (CodeQL `js/polynomial-redos`). Same results on every case checked.
+
 ## 0.3.12 · 2026-11-20 · Fewer false alarms, ten new checks
 
 ### New
