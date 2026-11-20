@@ -246,7 +246,16 @@ export function hopLine(lines: string[], i: number, names: Map<string, number>):
 }
 const PROMPT_DOC = /(^|\/)(?:prompts?|personas?|instructions?|system)(?:\/|[._-])|(^|\/)(?:AGENTS|CLAUDE|GEMINI|SKILL|SYSTEM|PROMPT)\.mdx?$|\.prompt\.mdx?$|(^|\/)\.(?:github|cursor|claude)\//i;
 const SINK_RULES = new Set(["path.user-input", "ssrf.user-url", "redirect.open", "code.eval", "cmd.shell-built", "deserialize.unsafe"]);
-export const blankStrings = (l: string) => l.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, (m) => m[0] + m[0]);
+// One pass, no regex: a line with an unclosed quote and many escapes must not cost more than its length (CodeQL js/polynomial-redos).
+export function blankStrings(l: string): string {
+  let out = "", q = "", start = 0;
+  for (let i = 0; i < l.length; i++) {
+    const c = l[i];
+    if (q) { if (c === "\\") i++; else if (c === q) { out += q + q; q = ""; } continue; }
+    if (c === "'" || c === '"') { q = c; start = i; } else out += c;
+  }
+  return q ? out + l.slice(start) : out; // an unclosed quote is left as it was, like the old regex that didn't match it
+}
 const HASH_COMMENTS = new Set([".py", ".rb", ".sh", ".yml", ".yaml", ".toml", ".env"]);
 const C_LIKE = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".swift", ".go", ".css", ".scss"]);
 

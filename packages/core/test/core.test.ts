@@ -745,3 +745,11 @@ test("code review fixes: linear import regex, YAML comments in quotes, api/ entr
   const g = buildGraph({ "api/hello.ts": "export default 1;\n", "src/lib/api/client.ts": "export const c = 1;\n" });
   assert.ok(g.entries.has("api/hello.ts") && !g.entries.has("src/lib/api/client.ts"));
 });
+
+test("blankStrings empties quoted text in one pass, even on an unclosed quote with many escapes", async () => {
+  const { blankStrings } = await import("../src/index.js");
+  assert.equal(blankStrings(`fs.readFileSync("x" + req.query.p)`), `fs.readFileSync("" + req.query.p)`);
+  assert.equal(blankStrings(`it's fetch(req.query.u)`), `it's fetch(req.query.u)`); // an unclosed quote is left alone
+  const t = Date.now(); blankStrings("'" + "\'".repeat(200_000));
+  assert.ok(Date.now() - t < 200, "linear time (CodeQL js/polynomial-redos)");
+});
