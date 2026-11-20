@@ -22,7 +22,7 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **A missing folder** now gives a plain message instead of a raw error; `--fail-on` help says held-back findings count only with `--all`.
 
 ### Fewer false alarms
-From a hand-check of 117 findings on public repos:
+From 117 findings on public repos, reviewed one by one against the code:
 - **Request data is followed more carefully** (file paths, server-side requests, redirects). A value cleaned where it is assigned (`safe…`, `sanitize…`, `validate…`, `encodeURIComponent`, `basename`, `secure_filename`, `parseInt`) or looked up by id (`.find(…)`, `findById`) no longer counts, and request data only passes through calls that keep the value (`path.join`, `new URL`, `String`). An origin check (`x.origin === …`) or a guard on the variable it came from counts as a check. On 304 public repos these three rules went from 101 findings to 31; all 10 reviewed false alarms are gone and the real one is still caught.
 - **Secrets:** fill-in tokens that aren't random enough to be keys (`ghp_aaaa…`), key headers with no key in a comment or in code that builds a key, and a Firebase web config's `databaseURL` are no longer flagged.
 - **Smaller fixes:** `extractall(…, filter=…)` after nested brackets, `webbrowser.open`, alias maps such as `{ secret: "secret" }`, `chmod` masks (`mode & 0o777`), in-memory `send_file(io.BytesIO(…))`, binaries in test folders, and load-test and test-data folders.
