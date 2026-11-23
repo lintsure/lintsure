@@ -186,6 +186,8 @@ export function isNonShipping(file: string): boolean {
   if (TEST_FILE.test(file)) return true;
   // Shell scripts in scripts/ are often the installer people run (curl ... | sh): those still count.
   if (/\.(sh|bash|zsh|ps1)$/i.test(file) && !/(^|\/)(tests?|__tests__|e2e|fixtures?|examples?|demos?|\.devcontainer)\//i.test(file)) return false;
+  // In a monorepo, apps/api/ or packages/app/ is a package that happens to share a route folder's name, not a route root.
+  file = file.replace(/(^|\/)(apps|packages|services)\/(app|api|pages|routes)\//g, "$1$2/_/");
   const live = LIVE_ROOT.exec(file), ns = NS_FOLDER.exec(file);
   if (!live || (ns && ns.index < live.index)) return NON_SHIPPING.test(file);
   // Under a route root every folder is a URL or function name, so only test files (handled above) are skipped.

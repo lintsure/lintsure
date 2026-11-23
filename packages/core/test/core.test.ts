@@ -1140,6 +1140,10 @@ test("native code: weak ciphers, TLS checks off, fixed IVs, weak parameters, deb
 
 test("dev scripts, seed and demo files inside the app folder don't ship; routes and CLIs still do", async () => {
   const { isNonShipping, scan: s } = await import("../src/index.js");
+  // A monorepo package named like a route folder: apps/api/ is a package, not /api routes.
+  assert.equal(isNonShipping("apps/api/src/demo/seed-demo-venue.ts"), true);
+  // A folder named playwright can be product code (a plugin), so it is not skipped as tests.
+  for (const f of ["apps/web/app/api/demo/route.ts", "apps/api/src/routes/users.ts", "plugins/playwright/bridge/registry.py"]) assert.equal(isNonShipping(f), false, f);
   for (const f of ["server/scripts/reset_admin_password.py", "server/scripts/seed.js", "src/demo.ts", "src/data/seed-users.ts", "lib/orders.mock.ts", "src/user.fixture.ts", ".devcontainer/setup-dev.sh"]) assert.equal(isNonShipping(f), true, f);
   // A page or route called demo is a live URL; a shell script in scripts/ is often the installer people run; a CLI ships.
   for (const f of ["pages/demo.tsx", "app/api/demo/route.ts", "app/seed/page.tsx", "scripts/install.sh", "server/scripts/deploy.sh", "packages/cli/src/commands/auth.ts", "src/demonstrate.ts", "src/seedling.ts"]) assert.equal(isNonShipping(f), false, f);

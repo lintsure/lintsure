@@ -280,7 +280,9 @@ export const owaspRules: Rule[] = [
   rule({ id: "auth.hardcoded-password", title: "Password written in the code", status: "partial", severity: "high", controls: [A07],
     fix: "Load passwords from environment variables or a secret manager, and rotate any that were committed.",
     note: "Anyone with the code has the password, and it can't be changed without a release (CWE-259, CWE-798).", extensions: CODE,
-    unlessPath: /(^|\/)(locales?|i18n|lang|langs|translations?)\//i, // the word "password" in other languages
+    // The word "password" in other languages; and example, sample and browser-test code, whose logins are placeholders by
+    // design. Only for this rule: a folder named playwright can also be product code (a plugin), so it is not skipped everywhere.
+    unlessPath: /(^|\/)(locales?|i18n|lang|langs|translations?|examples?|samples?|playwright|cypress)\//i,
     // A password used when the environment variable is missing ships with the code just the same. Partial: it may be a
     // local-only default.
     test: (l) => (/\b(os\.environ\.get|os\.getenv)\(\s*["'][A-Z_]*(PASSWORD|PASSWD)["']\s*,\s*["'][^"'\s]{4,}["']\s*\)|\bprocess\.env\.[A-Z_]*(PASSWORD|PASSWD)\s*(\|\||\?\?)\s*["'][^"'\s]{4,}["']/.test(l)
