@@ -1,7 +1,7 @@
 // Rules added from the realistic benchmark (benchmark/corpus.mjs, "gap" cases), 2026-11-20. Same approach as the other
 // rule files: patterns on a line or a file, no data flow across files, our own wording. Beta: awaiting review.
 import type { Control, Rule } from "../types.js";
-import { AGENT_CONFIG, poisonedDescription } from "./owasp.js";
+import { AGENT_CONFIG, AST, poisonedDescription } from "./owasp.js";
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 const JS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
@@ -40,6 +40,29 @@ export function inMcpServer(lines: string[], re: RegExp): number[] {
 const LLM03 = { framework: "owasp-llm", id: "LLM03:2026", title: "Excessive Agency" } as Control;
 const LLM04 = { framework: "owasp-llm", id: "LLM04:2026", title: "Supply Chain" } as Control;
 const LLM01 = { framework: "owasp-llm", id: "LLM01:2026", title: "Prompt Injection" } as Control;
+
+// Files an agent loads as a skill or a command: a SKILL.md anywhere, or a file in an agent's skills, commands or agents folder.
+// AGENTS.md and CLAUDE.md are left out: a project telling its own agent to keep its notes up to date is ordinary.
+const SKILL_FILE = /(^|\/)SKILL\.md$|(^|\/)\.(claude|agents|codex|gemini|cursor)\/(skills|commands|agents)\/.+\.md$/i;
+// A line that forbids the thing describes a guard, it doesn't ask for it.
+const FORBIDDEN = /\b(never|do not|don'?t|must not|avoid|refuse)\b/i;
+// "Follow the instructions at <url>", or "fetch <url> and follow it": what the agent does next is decided by that page.
+const FOLLOW_REMOTE = new RegExp([
+  String.raw`\b(follow|obey|execute|carry out|apply|act on|do what)\b[^.\n]{0,60}\b(instructions?|steps|commands?|rules|guidance|prompts?)\b[^.\n]{0,40}\b(at|from|in|on)\s+[<(\x60]?https?:\/\/`,
+  String.raw`\b(fetch|download|curl|wget|retrieve|load|read|open|visit|get)\b[^.\n]{0,60}https?:\/\/\S+[^.\n]{0,80}\b(and|then)\s+(follow|execute|run|apply|obey|do what)\b`,
+].join("|"), "i");
+/** A skill line that sends the agent to a page on the internet for its next instructions. Pure. */
+export const followsRemote = (l: string) => FOLLOW_REMOTE.test(l) && !FORBIDDEN.test(l) && !/https?:\/\/(localhost|127\.|\[::1\])/i.test(l);
+// The files an agent reads as its own standing instructions or settings.
+const MEMORY_FILE = String.raw`(AGENTS\.md|CLAUDE\.md|GEMINI\.md|SOUL\.md|MEMORY\.md|\.cursorrules|\.windsurfrules|copilot-instructions\.md|\.claude\/settings(\.local)?\.json)`;
+const WRITES_MEMORY = new RegExp(String.raw`\b(append|add|adds|write|writes|insert|modify|update|edit|overwrite|save|persist|put)\b[^.\n]{0,70}\b(to|into|in)\s+[\x60"'*]*(the\s+|your\s+)?[\x60"'*]*(?:[\w~.-]+\/)*` + MEMORY_FILE, "i");
+/** A skill line that has the agent change its own standing instructions or settings. Pure. */
+export const writesMemory = (l: string) => WRITES_MEMORY.test(l) && !FORBIDDEN.test(l);
+// Front matter that hands a skill the whole shell: Bash with no command limit, every tool, or shell: true.
+const OPEN_SHELL = /^\s*allowed[-_]tools\s*:.*(?<![\w-])Bash(?!\s*\()(?![\w-])|^\s*allowed[-_]tools\s*:\s*["']?\*["']?\s*$|^\s*shell\s*:\s*true\b/i;
+// A server told to listen on every network interface.
+// A list of allowed values in a type ("127.0.0.1" | "0.0.0.0") names the address without listening on it.
+const ALL_INTERFACES = { test: (l: string) => /["'\x60]0\.0\.0\.0["'\x60]/.test(l) && !/["'\x60]\s*\|\s*["'\x60]/.test(l) } as RegExp;
 
 /** MCP config: a server run from a version that can change after you approved it (Partial), or reached over plain HTTP (Gap). Pure.
  *  shortcut: reads npx-style args only ("-y", "pkg"); add uvx and docker image tags when a field test shows them. */
@@ -231,7 +254,7 @@ export const moreRules: Rule[] = [
     fix: "Pass the secret when the container starts (an environment variable or a mounted secret), or use `RUN --mount=type=secret` for build steps. Rotate the value: it is in every image built so far.",
     note: "ENV and ARG values are stored in the image. Anyone who can pull the image, or read its build history, can read the secret (CWE-798).",
     extensions: [""], fileName: DOCKERFILE, test: (l) => BUILD_SECRET.test(l) }),
-  rule({ id: "mcp.config-unsafe-server", title: "MCP server run from a moving version or over plain HTTP", status: "partial", severity: "medium", controls: [LLM04, A08],
+  rule({ id: "mcp.config-unsafe-server", title: "MCP server run from a moving version or over plain HTTP", status: "partial", severity: "medium", controls: [LLM04, A08, AST("02", "Supply Chain Compromise"), AST("07", "Update Drift")],
     fix: "Pin the server to an exact version you have looked at, for example some-server@1.4.2, and update it on purpose. Use https for a remote server.",
     note: "An agent trusts the tools this server offers. With no version, or @latest, the next start can load different code and different tool descriptions than the ones you approved. Over plain HTTP anyone on the network path can change them (OWASP LLM04, CWE-829).",
     extensions: [".json"], pathMatch: AGENT_CONFIG,
@@ -251,6 +274,33 @@ export const moreRules: Rule[] = [
       return lines.flatMap((l, i) => (poisonedDescription(l) && !/^\s*(\/\/|#)/.test(l) && (code || /"description"\s*:/.test(l))
         && !/re\.compile\(|new RegExp\(|\(\?i\)|\b(attempt|detect\w*|patterns?|injection)\b/i.test(l) ? [i + 1] : []));
     } }),
+  // Skills are prose an agent follows. These three read a skill the way a reviewer would: where its next instructions
+  // come from, whether it rewrites the agent's own standing instructions, and how much of the machine it asks for.
+  rule({ id: "skill.fetches-remote-instructions", title: "Skill tells the agent to follow a page on the internet", status: "partial", severity: "medium", controls: [AST("05", "Untrusted External Instructions"), LLM01],
+    fix: "Put the steps in the skill itself, or keep a reviewed copy in the repo and point to that. If the page must be fetched, tell the agent to treat it as reference text and to ask before acting on it.",
+    note: "The skill was reviewed once, but the page can change at any time, and whoever controls it then decides what the agent does with your permissions (CWE-829).",
+    extensions: [".md", ".mdc"], pathMatch: SKILL_FILE,
+    unseen: "Lintsure can't see what the page says today or who controls it, and it can't tell reference reading from instructions the agent will act on.",
+    test: followsRemote }),
+  rule({ id: "skill.writes-agent-memory", title: "Skill changes the agent's own instructions or settings", status: "partial", severity: "medium", controls: [AST("01", "Malicious Skills"), AST("03", "Over-Privileged Skills")],
+    fix: "Have the skill show the change and ask the user before writing to these files. If writing them is not the skill's stated job, remove the line.",
+    note: "AGENTS.md, CLAUDE.md, memory files and agent settings are read at the start of every later session. A skill that writes to them keeps its influence after it has finished, and can loosen limits for everything that follows.",
+    extensions: [".md", ".mdc"], pathMatch: SKILL_FILE,
+    unseen: "Lintsure can't tell a skill whose stated job is to manage these files, with the user's agreement, from one that changes them on the quiet.",
+    test: writesMemory }),
+  rule({ id: "skill.unrestricted-shell", title: "Skill is allowed any shell command", status: "partial", severity: "low", controls: [AST("03", "Over-Privileged Skills"), LLM03],
+    fix: "List the commands the skill needs, for example `Bash(npm run test:*)`, and leave the rest to the agent's normal permission prompts.",
+    note: "With the whole shell allowed, the skill's other limits mean little: any file can be read or changed and anything can be sent out through a command. One poisoned input to the skill then reaches the whole machine.",
+    extensions: [".md", ".mdc"], pathMatch: SKILL_FILE,
+    unlessPath: /(^|\/)evals?\//, // an eval's own settings file sits in the skill folder and is not a skill
+    // shortcut: reads allowed-tools on one line; a YAML list spread over several lines is not read. Upgrade when one is seen in the field.
+    unseen: "Lintsure can't see the agent's own settings, which may still ask before each command.",
+    test: (l) => OPEN_SHELL.test(l) }),
+  rule({ id: "mcp.server-binds-all-interfaces", title: "MCP server listens on every network interface", status: "partial", severity: "medium", controls: [AST("06", "Weak Isolation"), A02],
+    fix: "Listen on 127.0.0.1 unless other machines must reach the server. If they must, require sign-in on every request and put it behind a firewall.",
+    note: "An agent's tool server usually runs on a developer's machine. On 0.0.0.0, anyone on the same network can call its tools, which often read files and run commands (CWE-1327).", extensions: CODE,
+    unseen: "Lintsure can't see a firewall, a container network or sign-in in front of this server.",
+    fileTest: (lines) => inMcpServer(lines, ALL_INTERFACES) }),
   rule({ id: "mcp.tool-runs-shell", title: "MCP tool that runs shell commands", status: "partial", severity: "high", controls: [LLM03, A06],
     fix: "Run a fixed program with execFile and an argument list, never a command string. Check every argument against an allow-list, and ask the user before anything that changes files or systems.",
     note: "The agent decides what to pass to this tool, and anything it reads (a web page, an issue, a file) can steer it. If tool input reaches the command, a prompt injection becomes a shell on this machine (CWE-78).", extensions: CODE,

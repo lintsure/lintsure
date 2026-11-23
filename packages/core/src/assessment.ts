@@ -13,7 +13,7 @@ export interface AssessmentOptions {
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const NAME: Record<string, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", "owasp-top10": "OWASP Top 10:2025", cra: "EU Cyber Resilience Act", "owasp-llm": "OWASP Top 10 for LLM Applications 2025", "cwe-top25": "CWE Top 25 (2025)" };
+const NAME: Record<string, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", "owasp-top10": "OWASP Top 10:2025", cra: "EU Cyber Resilience Act", "owasp-ast": "OWASP Agentic Skills Top 10", "owasp-llm": "OWASP Top 10 for LLM Applications 2025", "cwe-top25": "CWE Top 25 (2025)" };
 // Frameworks from rule packs use the name in their own knowledge.
 const fwName = (f: string) => NAME[f] ?? knowledge.find((k) => k.id === f)?.name ?? f;
 const STATUS: Record<string, string> = { gap: "Gap", partial: "Partial", met: "Met", outside: "Outside code" };

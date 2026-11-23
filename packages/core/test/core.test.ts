@@ -37,6 +37,9 @@ test("known findings stay put", async () => {
   assert.deepEqual(got, [
     "agent.config-runs-remote-code@.claude/settings.json:4",
     "agent.permissions-allow-all@.claude/settings.json:8",
+    "skill.unrestricted-shell@.claude/skills/deploy/SKILL.md:3",
+    "skill.fetches-remote-instructions@.claude/skills/deploy/SKILL.md:6",
+    "skill.writes-agent-memory@.claude/skills/deploy/SKILL.md:7",
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:5",
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:6",
     "release.env-not-ignored@.gitignore:1",
@@ -57,6 +60,7 @@ test("known findings stay put", async () => {
     "mcp.tool-uses-secret@src/mcp/server.ts:3",
     "mcp.tool-runs-shell@src/mcp/server.ts:4",
     "mcp.tool-description-poisoned@src/mcp/server.ts:5",
+    "mcp.server-binds-all-interfaces@src/mcp/server.ts:6",
     "ml.unsafe-model-load@src/model.py:3",
     "config.debug-on@src/settings.py:2",
     "pii.logged@src/users.ts:5",
@@ -655,7 +659,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "A5E3-DBBF");
+  assert.equal(r.policy?.fingerprint, "0640-2404");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {
@@ -689,7 +693,7 @@ test("the numbers the README states match the code", async () => {
   const stated = readme.match(/`packages\/core` \| Finding schema, (\d+) rules/);
   assert.ok(stated, "README should state the rule count");
   assert.equal(Number(stated![1]), rules.length, `README says ${stated![1]} rules, the engine has ${rules.length}`);
-  for (const f of ["eu-ai-act", "gdpr", "owasp-top10", "owasp-llm", "cwe-top25", "cra"]) assert.ok(knowledge.some((k) => k.id === f));
+  for (const f of ["eu-ai-act", "gdpr", "owasp-top10", "owasp-llm", "cwe-top25", "cra", "owasp-ast"]) assert.ok(knowledge.some((k) => k.id === f));
 });
 
 test("reachability: routes reach helpers through relative and tsconfig-alias imports; unknown when an import can't be resolved", async () => {

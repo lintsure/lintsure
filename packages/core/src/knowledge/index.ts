@@ -4,11 +4,11 @@ import { euAiAct } from "./eu-ai-act.js";
 import { gdpr } from "./gdpr.js";
 import { owaspTop10 } from "./owasp-top10.js";
 import { cra } from "./cra.js";
-import { cweTop25, owaspLlm } from "./more.js";
+import { cweTop25, owaspAst, owaspLlm } from "./more.js";
 import type { FrameworkKnowledge, Profile } from "./types.js";
 
 export * from "./types.js";
-export const knowledge: FrameworkKnowledge[] = [euAiAct, gdpr, owaspTop10, cra, owaspLlm, cweTop25];
+export const knowledge: FrameworkKnowledge[] = [euAiAct, gdpr, owaspTop10, cra, owaspLlm, cweTop25, owaspAst];
 export const getKnowledge = (id: FrameworkId) => knowledge.find((k) => k.id === id);
 
 /** Classifier: suggest frameworks with a reason. The user confirms; nothing is auto-applied. */

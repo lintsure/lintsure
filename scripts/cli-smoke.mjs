@@ -128,7 +128,7 @@ const seen = run("skills", sk);
 assert.ok(seen.includes("No project found here") && seen.includes(".agents/skills/lintsure-check  add") && seen.includes("Would install 7 skills") && seen.includes("lintsure skills --yes") && !existsSync(at(".agents")), "the skills preview lists the files and writes nothing");
 assert.ok(fails("skills", sk, "--only", "nope").includes("Choose from: lintsure-setup, lintsure-check, lintsure-fix, lintsure-triage, lintsure-ship, lintsure-rules, lintsure-stay-on-track"));
 assert.match(run("skills", sk, "--only", "lintsure-check", "--yes"), /Done! Installed 1 skill\n.*✓ \.agents\/skills\/lintsure-check  added/);
-assert.ok(readFileSync(at(".agents/skills/lintsure-check/SKILL.md"), "utf8").startsWith("---\nname: lintsure-check\n") && !existsSync(at(".claude")) && !existsSync(at(".agents/skills/lintsure-ship")));
+assert.ok(/^---\r?\nname: lintsure-check\r?\n/.test(readFileSync(at(".agents/skills/lintsure-check/SKILL.md"), "utf8")) && !existsSync(at(".claude")) && !existsSync(at(".agents/skills/lintsure-ship")));
 mkdirSync(at(".claude")); writeFileSync(at(".agents/skills/lintsure-check/SKILL.md"), "older");
 const again = run("skills", sk, "--yes");
 assert.ok(again.includes("Project found: it has .agents") === false && again.includes(".claude/skills/lintsure-triage  added") && again.includes("lintsure-check  updated") && readFileSync(at(".agents/skills/lintsure-check/SKILL.md.lintsure-backup"), "utf8") === "older");

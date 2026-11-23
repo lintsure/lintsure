@@ -51,6 +51,9 @@ export function instructionsUnsafe(l: string): boolean | "partial" {
 }
 const DRAFT = { mappedBy: "beta", reviewedAt: "pending" };
 const LLM01: Control = { framework: "owasp-llm", id: "LLM01:2026", title: "Prompt Injection" }, LLM03: Control = { framework: "owasp-llm", id: "LLM03:2026", title: "Excessive Agency" };
+/** A risk in the OWASP list for agent skills. Ids and names only. */
+export const AST = (n: string, title: string): Control => ({ framework: "owasp-ast", id: `AST${n}`, title });
+const AST01 = AST("01", "Malicious Skills"), AST02 = AST("02", "Supply Chain Compromise"), AST03 = AST("03", "Over-Privileged Skills"), AST04 = AST("04", "Insecure Metadata");
 const A = (n: string, title: string): Control => ({ framework: "owasp-top10", id: `A${n}:2025`, title });
 const A01 = A("01", "Broken Access Control"), A02 = A("02", "Security Misconfiguration"), A03 = A("03", "Software Supply Chain Failures"),
   A04 = A("04", "Cryptographic Failures"), A05 = A("05", "Injection"), A06 = A("06", "Insecure Design"),
@@ -163,7 +166,7 @@ export const owaspRules: Rule[] = [
     test: (l) => /"(pre|post)?install"\s*:\s*"[^"]*\b(curl|wget|Invoke-WebRequest)\b/.test(l) }),
   // Agent settings that run commands on their own (Claude Code hooks, MCP servers, editor tasks). An attacker who can
   // edit one of these files gets code run on every developer machine that opens the repo with that agent.
-  rule({ id: "agent.config-runs-remote-code", title: "Agent config downloads and runs code", status: "gap", severity: "high", controls: [A03],
+  rule({ id: "agent.config-runs-remote-code", title: "Agent config downloads and runs code", status: "gap", severity: "high", controls: [A03, AST02],
     fix: "Don't download and run scripts from agent hooks, MCP server commands or editor tasks. Pin a reviewed local script or a versioned package instead, and review changes to these files like code.",
     note: "Agents run these commands on their own, often at startup, with your user's permissions. A changed URL or script runs on every machine that opens the repo (CWE-829, CWE-494).",
     extensions: [".json"], pathMatch: AGENT_CONFIG,
@@ -172,7 +175,7 @@ export const owaspRules: Rule[] = [
   // Instruction files are now code an agent follows: skills, AGENTS.md, CLAUDE.md, Cursor and Copilot rules. A line that
   // tells the agent to drop earlier instructions, hide something from the user, send secrets out, or download and run a
   // script is acted on the next time any agent opens the repo (skill collections spread these widely).
-  rule({ id: "agent.instructions-unsafe", title: "Agent instructions that override, hide or download and run", status: "gap", severity: "high", controls: [A03, LLM01],
+  rule({ id: "agent.instructions-unsafe", title: "Agent instructions that override, hide or download and run", status: "gap", severity: "high", controls: [A03, LLM01, AST01, AST04],
     fix: "Remove the line, or rewrite it so the agent asks the user first. Install tools with a pinned, reviewed command instead of piping a download into a shell, and never tell an agent to keep something from the user.",
     note: "Agents read these files as instructions and act on them with your permissions. Gap when the line overrides earlier instructions, hides something from the user, carries characters a person can't see, or sends secrets out. Partial when it downloads and runs a script, which some setup guides do on purpose (CWE-829, OWASP LLM01).",
     extensions: [".md", ".mdc", ""], pathMatch: AGENT_INSTRUCTIONS,
@@ -180,7 +183,7 @@ export const owaspRules: Rule[] = [
     test: instructionsUnsafe }),
   // A project file that switches off the agent's own permission prompts: every agent that opens the repo then runs any
   // command or edit without asking (Continue's headless default allows every tool, field study 2026-11).
-  rule({ id: "agent.permissions-allow-all", title: "Agent settings that skip every permission prompt", status: "gap", severity: "high", controls: [A02, LLM03],
+  rule({ id: "agent.permissions-allow-all", title: "Agent settings that skip every permission prompt", status: "gap", severity: "high", controls: [A02, LLM03, AST03],
     fix: "Remove the bypass from the shared project file. Allow the few commands you trust by name (for example Bash(npm test)), and keep wider permissions in your own local settings, not in the repo.",
     note: "Committed agent settings apply to everyone who opens the repo with that agent. Skipping prompts or allowing every shell command lets a bad instruction, a poisoned file or a mistake run without a person seeing it (CWE-250, OWASP LLM03 Excessive Agency).",
     extensions: [".json", ".toml"], pathMatch: /(^|\/)(\.claude\/settings\.json|\.gemini\/settings\.json|\.codex\/config\.toml|\.continue\/(config|permissions)\.ya?ml|\.vscode\/settings\.json)$/,

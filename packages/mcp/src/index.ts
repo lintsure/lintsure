@@ -133,7 +133,7 @@ server.tool("plan_checks",
 
 server.tool("explain_framework",
   "Explain a compliance framework in plain words: what it is, who it applies to, key dates (marked as already applying or upcoming), what it asks for, which parts Lintsure can check in code and which need work outside code. Use when the user asks 'what is the EU AI Act?', 'does the Cyber Resilience Act apply to us?', 'when does it apply?' or 'what does SOC 2 need from our code?', often before a scan. Returns text; read-only.",
-  { framework: z.string().describe("Which framework to explain: \"eu-ai-act\", \"gdpr\", \"owasp-top10\", \"cra\" (EU Cyber Resilience Act), \"owasp-llm\" or \"cwe-top25\". Rule packs installed with Lintsure add more.") }, RO,
+  { framework: z.string().describe("Which framework to explain: \"eu-ai-act\", \"gdpr\", \"owasp-top10\", \"cra\" (EU Cyber Resilience Act), \"owasp-llm\", \"owasp-ast\" (agent skills) or \"cwe-top25\". Rule packs installed with Lintsure add more.") }, RO,
   async ({ framework }) => {
     const k = getKnowledge(framework as FrameworkId);
     if (!k) return { isError: true, content: [{ type: "text" as const, text: `Unknown framework: ${framework}. Known: ${ALL_FRAMEWORKS.join(", ")}.` }] };

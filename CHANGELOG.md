@@ -2,6 +2,18 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## Unreleased
+
+### New
+- **A seventh framework: the OWASP Agentic Skills Top 10.** It lists ten risks in the skills, instruction files and tool servers that coding agents load. The list is version 1.0 from an OWASP incubator project and was in public review when we mapped it. Seven of its ten risks have checks; the other three (scanning, governance, reuse across platforms) can't be seen in code and are listed as such. Use it with `--framework owasp-ast`.
+- **Four new checks** (110 rules in all):
+  - a skill that tells the agent to follow a page on the internet (`skill.fetches-remote-instructions`)
+  - a skill that changes the agent's own instructions or settings, such as `AGENTS.md` or `.claude/settings.json` (`skill.writes-agent-memory`)
+  - a skill that is allowed any shell command (`skill.unrestricted-shell`)
+  - an MCP server that listens on every network interface (`mcp.server-binds-all-interfaces`)
+- All four are shown as Partial: each names what Lintsure can't see, such as whether writing to those files is the skill's stated job.
+- Existing agent checks now map to the new list too: unsafe agent instructions, agent configs that download and run code, agent permissions that allow everything, and MCP servers run from a moving version.
+
 ## 0.3.15 · 2026-11-23 · 17 new checks, fewer false alarms, a start menu, skills for any agent
 
 ### New

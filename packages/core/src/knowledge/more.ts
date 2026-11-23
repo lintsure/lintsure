@@ -68,3 +68,48 @@ export const cweTop25: FrameworkKnowledge = {
   checkedOn: "2026-11-09",
 };
 
+
+// The list is an OWASP incubator project, version 1.0 (2026), in public review when this was written. Ids and names only.
+export const owaspAst: FrameworkKnowledge = {
+  id: "owasp-ast", name: "OWASP Agentic Skills Top 10", kind: "standard",
+  summary: "Ten risks in the skills, instruction files and tool servers that AI coding agents load: malicious skills, a poisoned supply chain, too many permissions, misleading metadata, instructions fetched at run time, weak isolation, silent updates, weak scanning, no inventory and reuse across platforms. It's a young awareness list, still in public review, not a law or certification.",
+  whoItAppliesTo: "Any team whose developers or products use an AI agent that loads skills, instruction files or MCP servers.",
+  applies(p) {
+    // The profile describes the product, not the team's tools, so this follows the same signal as the LLM list.
+    return p.usesAI && (p.generativeAI || p.interactsWithPeople) ? "Agents load skills, instruction files and tool servers as instructions, so what is in them is part of your supply chain." : null;
+  },
+  obligations: [
+    { ref: "AST01", title: "Malicious Skills", inCode: "partly", rules: ["agent.instructions-unsafe", "skill.writes-agent-memory"],
+      plain: "A skill can look useful and still tell the agent to hide a step, send secrets out or change its own instructions. Read a skill's text like code before an agent uses it.",
+      evidence: "Where each installed skill came from, and who read it before it was added." },
+    { ref: "AST02", title: "Supply Chain Compromise", inCode: "partly", rules: ["agent.config-runs-remote-code", "mcp.config-unsafe-server"],
+      plain: "Skills, hooks and tool servers come from others. Pin them to a version you have read, and treat config files an agent runs by itself as code.",
+      evidence: "A list of installed skills and servers with their versions and sources." },
+    { ref: "AST03", title: "Over-Privileged Skills", inCode: "partly", rules: ["agent.permissions-allow-all", "skill.unrestricted-shell"],
+      plain: "A skill should get only the tools, files and network access its job needs. Open shell access makes every other limit moot.",
+      evidence: "The permissions each skill declares, and why it needs them." },
+    { ref: "AST04", title: "Insecure Metadata", inCode: "partly", rules: ["agent.instructions-unsafe"],
+      plain: "A skill's description and front matter are read by the agent too. They must match what the skill does and carry no hidden characters.",
+      evidence: "A check that each skill's description matches its behaviour." },
+    { ref: "AST05", title: "Untrusted External Instructions", inCode: "partly", rules: ["skill.fetches-remote-instructions"],
+      plain: "A skill that tells the agent to fetch a page and follow it hands control to whoever owns that page tomorrow. Keep the instructions inside the skill, or pin what is fetched.",
+      evidence: "Every outside page or file a skill reads at run time." },
+    { ref: "AST06", title: "Weak Isolation", inCode: "partly", rules: ["mcp.server-binds-all-interfaces"],
+      plain: "Skills and tool servers should run boxed in: local interfaces only, with sign-in, and limited to the files they declare.",
+      evidence: "How each tool server is started, where it listens and who can reach it." },
+    { ref: "AST07", title: "Update Drift", inCode: "partly", rules: ["mcp.config-unsafe-server"],
+      plain: "A skill or server that updates by itself can change after you approved it. Pin versions and look again on every update.",
+      evidence: "How updates to skills and servers are approved." },
+    { ref: "AST08", title: "Poor Scanning", inCode: "no",
+      plain: "A pattern scanner reads code well and prose badly, and a skill is mostly prose. Use more than one kind of check, and never rely on a scanner that is itself a skill.",
+      evidence: "Which checks run on a skill before it is installed, and what they cannot see." },
+    { ref: "AST09", title: "No Governance", inCode: "no",
+      plain: "Someone should know which skills are installed, who approved each one and how to remove one fast.",
+      evidence: "A skill inventory with an owner, an approval and a review date for each entry." },
+    { ref: "AST10", title: "Cross-Platform Reuse", inCode: "no",
+      plain: "A skill moved from one agent to another can lose its limits on the way, because each agent enforces different things. Check it again on each one.",
+      evidence: "For a skill used on several agents, what each agent enforces." },
+  ],
+  watchOut: ["The list is version 1.0 from an OWASP incubator project and was in public review when we mapped it, so ids and names may change.", "Lintsure reads a skill one line at a time. It can't judge whether a skill's description matches what it does, and it doesn't run the skill."],
+  checkedOn: "2026-11-23",
+};

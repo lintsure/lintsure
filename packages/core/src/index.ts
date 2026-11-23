@@ -53,7 +53,7 @@ export function nextSteps(r: Report): string[] {
     "Ask a qualified compliance professional to review the results before you rely on them.",
   ].filter(Boolean);
 }
-export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "eu-ai-act", "owasp-top10", "cra", "owasp-llm", "cwe-top25"];
+export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "eu-ai-act", "owasp-top10", "cra", "owasp-llm", "cwe-top25", "owasp-ast"];
 
 /** Reads the frameworks list from lintsure.config.yaml in the repo root, if there is one.
  *  Lists can be written either way:
@@ -261,7 +261,7 @@ export function importedNames(file: string, text: string, files: Set<string>, by
   }
   return out;
 }
-const TOOLING_RULES = new Set(["agent.config-runs-remote-code", "agent.instructions-unsafe", "agent.permissions-allow-all"]);
+const TOOLING_RULES = new Set(["agent.config-runs-remote-code", "agent.instructions-unsafe", "agent.permissions-allow-all", "skill.fetches-remote-instructions", "skill.writes-agent-memory", "skill.unrestricted-shell"]);
 // Lines a person already reviewed. lintsure-ignore and the secret allowlist pragma count only in a comment and apply
 // to every rule. Other linters' markers (noqa, nosec, NOSONAR) don't hide secrets: `# noqa: E501` is about line length.
 const REVIEWED = /(#|\/\/|\/\*|--)\s*(lintsure-ignore|pragma:\s*allowlist secret)\b/;

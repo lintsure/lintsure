@@ -188,7 +188,7 @@ export function parseDiff(text: string): Record<string, number[]> {
   return out;
 }
 
-const FRAMEWORK_NAMES: Record<string, string> = { "owasp-top10": "OWASP Top 10", "cwe-top25": "CWE Top 25", gdpr: "GDPR", "eu-ai-act": "EU AI Act", "owasp-llm": "OWASP Top 10 for LLM apps", cra: "EU Cyber Resilience Act" };
+const FRAMEWORK_NAMES: Record<string, string> = { "owasp-top10": "OWASP Top 10", "cwe-top25": "CWE Top 25", gdpr: "GDPR", "eu-ai-act": "EU AI Act", "owasp-llm": "OWASP Top 10 for LLM apps", "owasp-ast": "OWASP Agentic Skills Top 10", cra: "EU Cyber Resilience Act" };
 
 /** First-run setup: three questions, saved once, never asked in CI. */
 async function init(path: string): Promise<number> {
@@ -201,7 +201,7 @@ async function init(path: string): Promise<number> {
     for (;;) { const a = Number((await rl.question("> ")).trim() || "1"); if (a >= 1 && a <= options.length) return a; console.log(`Type a number from 1 to ${options.length}.`); }
   };
   console.log("Lintsure setup: 3 questions. Press Enter for the first answer.");
-  const what = await pick("1. What should Lintsure check?", ["Security only (OWASP Top 10, CWE Top 25)", "Security and privacy (adds GDPR)", "Everything (all six frameworks)", "Let me pick"]);
+  const what = await pick("1. What should Lintsure check?", ["Security only (OWASP Top 10, CWE Top 25)", "Security and privacy (adds GDPR)", "Everything (all seven frameworks)", "Let me pick"]);
   let chosen: string[] = what === 1 ? ["owasp-top10", "cwe-top25"] : what === 2 ? ["owasp-top10", "cwe-top25", "gdpr"] : [...ALL_FRAMEWORKS];
   if (what === 4) {
     console.log("\nType the numbers you want, separated by commas, or press Enter for all:");

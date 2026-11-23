@@ -11,7 +11,7 @@ export const APPROVAL_RULES = `Before you do anything (edit, create or delete a 
 4. The benefit to the user if they approve it.
 Then ask the user to approve that one proposal and wait. Only a clear yes is approval. Silence, "maybe" or a question is not. Do only what was approved, then show what changed. One proposal at a time.`;
 
-const NAMES: Record<string, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", "owasp-top10": "OWASP Top 10", cra: "Cyber Resilience Act", "owasp-llm": "OWASP LLM Top 10", "cwe-top25": "CWE Top 25" };
+const NAMES: Record<string, string> = { "eu-ai-act": "EU AI Act", gdpr: "GDPR", "owasp-top10": "OWASP Top 10", cra: "Cyber Resilience Act", "owasp-ast": "OWASP Agentic Skills Top 10", "owasp-llm": "OWASP LLM Top 10", "cwe-top25": "CWE Top 25" };
 const refs = (cs: Control[]) => cs.map((c) => `${NAMES[c.framework] ?? c.framework} ${c.id}`).join(", ");
 
 /** Lays a finding out as a proposal a person can approve or decline. */
