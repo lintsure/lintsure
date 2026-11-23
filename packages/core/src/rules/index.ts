@@ -7,6 +7,7 @@ import { stackRules } from "./stack.js";
 import { moreRules } from "./more.js";
 import { craForExisting, craRules } from "./cra.js";
 import { standardsForExisting, standardsRules } from "./standards.js";
+import { apiForExisting, apiRules } from "./api.js";
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 // Beta: mapped by us from our own reading of the public texts.
@@ -433,6 +434,9 @@ rules.push(...craRules);
 rules.push(...standardsRules);
 // After the push, so the new LLM rules also get their CWE tags.
 for (const r of rules) r.controls.push(...(standardsForExisting[r.id] ?? []));
+// OWASP API Security Top 10: one rule of its own, then tags on the rules above.
+rules.push(...apiRules);
+for (const r of rules) r.controls.push(...(apiForExisting[r.id] ?? []));
 
 // Measured on 270 findings reviewed one by one from 139 public repositories (0.3.9). These rules were real in fewer than
 // half of their sampled findings, so they are held back unless --all (show: all) is set, and the report says how many.

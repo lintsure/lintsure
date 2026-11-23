@@ -4,7 +4,7 @@
 export type Status = "met" | "partial" | "gap" | "outside";
 export type Severity = "high" | "medium" | "low";
 /** Built-in frameworks. Rule packs can add more, so FrameworkId is open to other strings. */
-export type BuiltinFrameworkId = "gdpr" | "eu-ai-act" | "owasp-top10" | "cra" | "owasp-llm" | "cwe-top25" | "owasp-ast";
+export type BuiltinFrameworkId = "gdpr" | "eu-ai-act" | "owasp-top10" | "cra" | "owasp-llm" | "cwe-top25" | "owasp-ast" | "owasp-api";
 export type FrameworkId = BuiltinFrameworkId | (string & {});
 
 export interface Control { framework: FrameworkId; id: string; title: string }

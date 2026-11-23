@@ -53,7 +53,7 @@ export function nextSteps(r: Report): string[] {
     "Ask a qualified compliance professional to review the results before you rely on them.",
   ].filter(Boolean);
 }
-export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "eu-ai-act", "owasp-top10", "cra", "owasp-llm", "cwe-top25", "owasp-ast"];
+export const ALL_FRAMEWORKS: FrameworkId[] = ["gdpr", "eu-ai-act", "owasp-top10", "cra", "owasp-llm", "cwe-top25", "owasp-ast", "owasp-api"];
 
 /** Reads the frameworks list from lintsure.config.yaml in the repo root, if there is one.
  *  Lists can be written either way:

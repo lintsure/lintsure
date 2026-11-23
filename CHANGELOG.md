@@ -6,7 +6,9 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 
 ### New
 - **A seventh framework: the OWASP Agentic Skills Top 10.** It lists ten risks in the skills, instruction files and tool servers that coding agents load. The list is version 1.0 from an OWASP incubator project and was in public review when we mapped it. Seven of its ten risks have checks; the other three (scanning, governance, reuse across platforms) can't be seen in code and are listed as such. Use it with `--framework owasp-ast`.
-- **Four new checks** (110 rules in all):
+- **An eighth framework: the OWASP API Security Top 10 (2023).** Twenty-six existing checks now map to it, covering seven of its ten risks. Three have no check, because they can't be read from code: abuse of business flows, old API versions left running, and how far a third-party API's answers are trusted beyond its transport. Use it with `--framework owasp-api`.
+- **An admin endpoint with no access check in sight** (`authz.admin-route-no-check`). For route files that are their own endpoint (Next.js, Nuxt, SvelteKit) with `admin` in the path: Partial when the file checks no role, session or token, and the project's middleware has no check either or lets API paths through.
+- **Four more new checks** (111 rules in all):
   - a skill that tells the agent to follow a page on the internet (`skill.fetches-remote-instructions`)
   - a skill that changes the agent's own instructions or settings, such as `AGENTS.md` or `.claude/settings.json` (`skill.writes-agent-memory`)
   - a skill that is allowed any shell command (`skill.unrestricted-shell`)

@@ -260,7 +260,10 @@ export const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, proc
 ` }, expect: [{ rule: "supabase.service-key-in-client", file: "src/lib/supabase-browser.ts", at: "SUPABASE_SERVICE_ROLE_KEY" }] },
   { name: "service role key in a server route", kind: "safe", files: { "app/api/admin/route.ts": `import { createClient } from "@supabase/supabase-js";
 const admin = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-export async function POST() {
+export async function POST(req: Request) {
+  // The role check keeps this case about the key alone: without it the endpoint itself is open to anyone.
+  const { data } = await admin.auth.getUser(req.headers.get("authorization")?.slice(7));
+  if (data.user?.app_metadata.role !== "admin") return new Response(null, { status: 403 });
   await admin.from("jobs").insert({ kind: "cleanup" });
   return Response.json({ ok: true });
 }

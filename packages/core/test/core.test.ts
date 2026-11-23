@@ -45,6 +45,7 @@ test("known findings stay put", async () => {
     "agent.permissions-allow-all@.continue/permissions.yaml:2",
     "release.env-not-ignored@.gitignore:1",
     "mcp.config-unsafe-server@.mcp.json:3",
+    "authz.admin-route-no-check@app/api/admin/users/route.ts:3",
     "llm.client-controls-system@app/api/chat/route.ts:4",
     "llm.unbounded-agent-loop@app/api/chat/route.ts:5",
     "auth.no-rate-limit@app/api/login/route.ts:3",
@@ -107,7 +108,7 @@ test("outside-code items come from obligations code can't prove", () => {
 
 test("classifier suggests, with reasons", () => {
   const s = classify({ euUsers: true, personalData: true, usesAI: true, decisionArea: "credit", b2bCustomers: true, usMarket: true });
-  assert.deepEqual(s.map((x) => x.framework), ["eu-ai-act", "gdpr", "owasp-top10", "cwe-top25"]);
+  assert.deepEqual(s.map((x) => x.framework), ["eu-ai-act", "gdpr", "owasp-top10", "cwe-top25", "owasp-api"]);
   assert.match(s[0].reason, /high-risk/);
   assert.deepEqual(classify({ usesAI: true }), []);
 });
@@ -660,7 +661,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "0640-2404");
+  assert.equal(r.policy?.fingerprint, "B689-93B8");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {
@@ -694,7 +695,7 @@ test("the numbers the README states match the code", async () => {
   const stated = readme.match(/`packages\/core` \| Finding schema, (\d+) rules/);
   assert.ok(stated, "README should state the rule count");
   assert.equal(Number(stated![1]), rules.length, `README says ${stated![1]} rules, the engine has ${rules.length}`);
-  for (const f of ["eu-ai-act", "gdpr", "owasp-top10", "owasp-llm", "cwe-top25", "cra", "owasp-ast"]) assert.ok(knowledge.some((k) => k.id === f));
+  for (const f of ["eu-ai-act", "gdpr", "owasp-top10", "owasp-llm", "cwe-top25", "cra", "owasp-ast", "owasp-api"]) assert.ok(knowledge.some((k) => k.id === f));
 });
 
 test("reachability: routes reach helpers through relative and tsconfig-alias imports; unknown when an import can't be resolved", async () => {
@@ -1246,4 +1247,17 @@ test("agent rules read each agent's own folders", async () => {
   // Only the allow list counts: the same entry under ask or exclude is a limit.
   assert.deepEqual(yamlAllowsAll(["allow:", "  - Read(*)", "  - Bash", '  - "*"', "ask:", "  - Bash", "exclude: []"]), [3, 4]);
   assert.deepEqual(yamlAllowsAll(["allow:", "  - Bash(npm test*)", "ask:", "  - Bash"]), []);
+});
+
+test("an admin endpoint is judged with the project's middleware", async () => {
+  const { adminRouteNoCheck } = await import("../src/rules/api.js");
+  const open = ["export default async function handler(req, res) {", "  res.json(await db.users.all());", "}"];
+  assert.deepEqual(adminRouteNoCheck(open), [{ line: 1, status: "partial" }]);
+  // Middleware that checks a session covers the endpoint; one that returns early for /api, or leaves api out of its matcher, does not.
+  assert.deepEqual(adminRouteNoCheck(open, "", { "middleware.ts": "const session = await getSession(req); if (!session) return redirect();" }), []);
+  assert.equal(adminRouteNoCheck(open, "", { "middleware.ts": "if (pathname.startsWith('/api/')) return true;\nconst session = cookies.get('s');" }).length, 1);
+  assert.equal(adminRouteNoCheck(open, "", { "middleware.ts": "export const config = { matcher: ['/((?!api|_next/static).*)'] }; // session check below" }).length, 1);
+  // A wrapper that names the check counts, whatever the project calls it.
+  for (const guard of ["await requireAdminAuthAPI(req);", "return adminHandler(req, async () => {", "if (session.user.role !== 'admin') return res.status(403).end();"])
+    assert.deepEqual(adminRouteNoCheck([open[0], "  " + guard, open[1], open[2]]), []);
 });
