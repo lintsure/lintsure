@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { status, pick, setup, undo } from "./agents.js";
+import { status, pick, plan, setup, undo } from "./agents.js";
 import { parseActivity, toOtlp } from "./otel.js";
 import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isHygiene, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
@@ -44,8 +44,29 @@ const START: { label: string; run: string[] | null }[] = [
   { label: "Every command and option", run: ["--help"] },
   { label: "Quit", run: null },
 ];
-// True once a command was picked from the start menu: that person is using menus, so a scan ends with one too.
+// True once a command was picked from the start menu: that person is using menus, so every command ends with one too.
 let viaMenu = false;
+let sawMenu = false;   // the command that just ran ended with its own menu
+let wantsMenu = false; // the person chose "Main menu"
+const HINT = "    Up and Down to move, Enter to run, q to quit";
+/** The menu a command ends with when it was started from the start menu: what fits next, then the way back.
+ *  Returns the exit code of the command it ran, or undefined when nothing was run (Main menu or Quit). */
+async function offer(rows: { text: string; run: string[] }[], color: boolean): Promise<number | undefined> {
+  sawMenu = true;
+  const pick = await choose([...rows.map((r) => r.text), "Main menu", "Quit"], HINT, color);
+  if (pick === rows.length) wantsMenu = true;
+  if (pick === null || pick >= rows.length) return undefined;
+  sawMenu = false; // the command run next gets its own ending
+  return main(rows[pick].run);
+}
+const COMMANDS = ["scan", "baseline", "init", "info", "setup", "status", "export"];
+/** The command someone most likely meant: the same word without dashes, or one within two typing slips. Pure. */
+function nearest(word: string): string | undefined {
+  const slips = (a: string, b: string) => { let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) { const next = [i]; for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); row = next; }
+    return row[b.length]; };
+  return COMMANDS.find((c) => c === word) ?? COMMANDS.map((c) => [slips(c, word), c] as const).filter(([n]) => n <= 2).sort((x, y) => x[0] - y[0])[0]?.[1];
+}
 const startRows = () => START.map((s) => (s.run ? `${s.label.padEnd(28)}lintsure ${s.run.join(" ")}` : s.label));
 
 const HELP = `lintsure scan [path] [options]
@@ -192,7 +213,15 @@ async function main(argv: string[]): Promise<number> {
     const i = raw.indexOf("--agents");
     const agents = await pick(root, i >= 0 ? raw[i + 1]?.split(",").map((s) => s.trim()) : undefined);
     if (typeof agents === "string") { console.error(agents); return 2; }
-    return raw.includes("--undo") ? undo(root, agents) : setup(root, agents, raw.includes("--yes"));
+    if (raw.includes("--undo")) return undo(root, agents);
+    const code = await setup(root, agents, raw.includes("--yes"));
+    // From the menu, the preview is followed by the choice to write it, so nobody has to retype the command with --yes.
+    if (viaMenu && !raw.includes("--yes") && process.stdin.isTTY && process.stdout.isTTY && (await Promise.all(agents.map((a) => plan(root, a)))).some((p) => p.text)) {
+      console.log("");
+      const ran = await offer([{ text: `${"Write these changes".padEnd(54)}lintsure setup --yes`, run: ["setup", ...raw, "--yes"] }], !process.env.NO_COLOR && process.env.TERM !== "dumb");
+      if (ran !== undefined) return ran;
+    }
+    return code;
   }
   if (cmd === "init" || cmd === "info") return (cmd === "init" ? init : info)(resolve(raw.find((a) => !a.startsWith("--")) ?? "."));
   // The start screen is for a person at a terminal. Piped output and CI logs stay exactly as they were.
@@ -201,17 +230,25 @@ async function main(argv: string[]): Promise<number> {
   if (!cmd && (process.stdout.isTTY || process.env.FORCE_COLOR)) {
     console.log(banner());
     if (!process.stdin.isTTY || !process.stdout.isTTY) { console.log(startRows().slice(0, -1).map((r) => `    ${r}`).join("\n") + "\n"); return 0; }
-    const pick = await choose(startRows(), "    Up and Down to move, Enter to run, q to quit", !process.env.NO_COLOR && process.env.TERM !== "dumb");
-    const run = pick === null ? null : START[pick].run;
-    if (run) viaMenu = true;
-    return run ? main(run) : 0;
+    // The menu is home. After each command the person can come back here, so no screen is a dead end.
+    const color = !process.env.NO_COLOR && process.env.TERM !== "dumb";
+    for (let code = 0; ;) {
+      const pick = await choose(startRows(), HINT, color);
+      const run = pick === null ? null : START[pick].run;
+      if (!run) return code;
+      viaMenu = true; sawMenu = false; wantsMenu = false;
+      code = await main(run);
+      if (!sawMenu) await offer([], color); // a command with no menu of its own still ends with the way back
+      if (!wantsMenu) return code;
+      console.log(`\nLintsure ${RULES_VERSION}\n`);
+    }
   }
   if (cmd === "--version" || cmd === "-v") { console.log(RULES_VERSION); return 0; }
   if (cmd !== "scan" && cmd !== "baseline") {
     if (!cmd || ["--help", "-h", "help"].includes(cmd)) { console.log(HELP); return 0; }
     // A command typed with dashes (lintsure --scan) or misspelt: say what was meant, not the whole manual.
-    const bare = cmd.replace(/^-+/, "");
-    console.error(`Unknown command: ${cmd}${["scan", "baseline", "init", "info", "setup", "status", "export"].includes(bare) ? `\nDid you mean: lintsure ${bare}` : ""}\nRun lintsure --help for every command and option.`);
+    const guess = nearest(cmd.replace(/^-+/, ""));
+    console.error(`Unknown command: ${cmd}${guess ? `\nDid you mean: lintsure ${guess}` : ""}\nRun lintsure --help for every command and option.`);
     return 2;
   }
   const parsed = parseArgs(raw);
@@ -225,7 +262,7 @@ async function main(argv: string[]): Promise<number> {
   const config = await readConfig(path);
   // Checked after the config loads its rule packs, so a pack's framework id is accepted.
   const bad = wanted?.filter((f) => !ALL_FRAMEWORKS.includes(f));
-  if (bad?.length) { console.error(`Unknown framework: ${bad.join(", ")}`); return 2; }
+  if (bad?.length) { console.error(`Unknown framework: ${bad.join(", ")}\nChoose from: ${ALL_FRAMEWORKS.join(", ")}`); return 2; }
   if (config.problems.length) { console.error("Problems in lintsure.config.yaml (fix them so the scan checks what you meant):"); config.problems.forEach((p) => console.error(`  ${p}`)); return 2; }
   if (!wanted && config.skipped.length) console.log(`Skipping, not checked yet: ${config.skipped.join(", ")}`);
   const why = wanted ? "Chosen with --framework on the command line." : config.frameworks ? "Listed in lintsure.config.yaml." : undefined;
@@ -233,8 +270,8 @@ async function main(argv: string[]): Promise<number> {
   const base = flag("--diff");
   let changed: { base: string; lines: Record<string, number[]> } | undefined;
   if (base) {
-    try { changed = { base, lines: parseDiff(execFileSync("git", ["-c", "core.quotePath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--relative", base, "--"], { cwd: path, encoding: "utf8", maxBuffer: 64 << 20 })) }; }
-    catch { console.error(`--diff: git could not compare with "${base}". Fetch it first (for example git fetch origin main).`); return 2; }
+    try { changed = { base, lines: parseDiff(execFileSync("git", ["-c", "core.quotePath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--relative", base, "--"], { cwd: path, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 << 20 })) }; }
+    catch { console.error(`--diff: git could not compare with "${base}".\nCheck that this folder is inside a git repository and that "${base}" exists here (for example: git fetch origin main).`); return 2; }
   }
   // LINTSURE_WORKSPACE_RULES: path to a JSON file of account rules the caller already has (the plugin writes it).
   // Read only to hash into the policy fingerprint; the CLI never fetches them. A file it can't read is an error, not a silent skip.
@@ -335,8 +372,8 @@ async function main(argv: string[]): Promise<number> {
 
   if (asMenu) {
     console.log("\nRun next:");
-    const pick = await choose([...followRows, "Quit"], "    Up and Down to move, Enter to run, q to quit", color);
-    if (pick !== null && pick < follow.length) return main(follow[pick].run);
+    const ran = await offer(follow.map((f, i) => ({ text: followRows[i], run: f.run })), color);
+    if (ran !== undefined) return ran;
   }
   const failOn = flag("--fail-on")?.toLowerCase();
   const counted = rest.includes("--new-only") && report.baseline ? open.filter((f) => f.change === "new") : open;

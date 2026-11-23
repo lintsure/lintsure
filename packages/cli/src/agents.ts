@@ -57,8 +57,8 @@ export async function setup(root: string, agents: Agent[], apply: boolean): Prom
     console.log(`- ${p.agent.name}: ${p.existed ? "add to" : "create"} ${p.agent.file}\n    "lintsure": ${JSON.stringify(serverEntry(p.agent))}`);
   }
   const todo = plans.filter((p) => p.text);
-  if (!todo.length) return 0;
-  if (!apply) { console.log("\nNothing written. Run again with --yes to apply. Existing files are backed up first (<file>.lintsure-backup)."); return 0; }
+  if (!todo.length) { console.log("\nNothing to write. Check the connection with: lintsure status"); return 0; }
+  if (!apply) { console.log("\nNothing written yet. To apply, run: lintsure setup --yes\nExisting files are backed up first (<file>.lintsure-backup)."); return 0; }
   for (const p of todo) {
     await mkdir(dirname(p.path), { recursive: true });
     // The first backup is the user's original: never overwrite it on a later run. Owner-only, it may hold tokens.

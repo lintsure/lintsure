@@ -76,6 +76,15 @@ assert.ok(!term.includes("\x1b[") && term.trimEnd().split("\n").slice(-4).every(
 // A command typed with dashes gets a hint, not the manual.
 try { run("--scan"); assert.fail("unknown command should exit 2"); } catch (e) { assert.equal(e.status, 2); assert.ok(String(e.stderr).includes("Did you mean: lintsure scan") && !String(e.stdout).includes("scan options:")); }
 assert.match(run("--version"), /^\d+\.\d+\.\d+\s*$/);
+// No dead ends: a typing slip gets the nearest command, a wrong value gets the valid ones, a finished setup says what to run.
+const fails = (...a) => { try { run(...a); } catch (e) { return String(e.stderr) + String(e.stdout); } assert.fail(`lintsure ${a.join(" ")} should fail`); };
+assert.ok(fails("scna").includes("Did you mean: lintsure scan") && fails("statsu").includes("lintsure status") && !fails("frobnicate").includes("Did you mean"));
+assert.ok(fails("scan", T, "--framework", "nope").includes("Choose from: gdpr"));
+assert.ok(!/usage: git|--output <file>/.test(fails("scan", T, "--diff", "no-such-branch")), "git's own usage text stays out of the --diff message");
+const fresh = mkdtempSync(join(tmpdir(), "ls-nav-"));
+run("setup", fresh, "--yes");
+assert.match(run("setup", fresh, "--yes"), /already set up\n\nNothing to write\. Check the connection with: lintsure status/);
+rmSync(fresh, { recursive: true, force: true });
 // The menu's pure parts: arrows wrap, Home and End jump, the chosen row is marked with or without colour.
 const { moved, frame } = await import(new URL("../packages/cli/dist/src/menu.js", import.meta.url).href);
 assert.deepEqual([moved("down", 0, 5), moved("down", 4, 5), moved("up", 0, 5), moved("end", 1, 5), moved("home", 3, 5), moved("x", 2, 5)], [1, 0, 4, 4, 0, 2]);
