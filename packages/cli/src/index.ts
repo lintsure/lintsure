@@ -2,15 +2,27 @@
 // npx lintsure scan [path] [options]      npx lintsure baseline [path]
 // Writes reports into the current folder. Never sends anything over the network.
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { status, pick, plan, setup, undo } from "./agents.js";
+import { AGENTS, CONNECT_NOTE, MANUAL, detected, status, pick, plan, setup, undo } from "./agents.js";
 import { parseActivity, toOtlp } from "./otel.js";
 import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isHygiene, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
-import { choose } from "./menu.js";
+import { choose, chooseMany } from "./menu.js";
+import { installSkills, removeSkills, skillFolders, skills } from "./skills.js";
+
+// The old Windows console can't draw block, line or diamond characters reliably, so it gets plain ones.
+const legacy = (env = process.env) => process.platform === "win32" && !env.WT_SESSION && !env.TERM_PROGRAM && !env.ConEmuANSI && !env.FORCE_COLOR;
+// Brand colours: the logo blue for names and choices, gold for the rail that ties the steps of one task together.
+const BLUE = "38;2;98;137;254", GOLD = "38;2;224;176;64";
+// A badge: dark text on the logo blue. Without colour the same words stand as they are.
+const BADGE = "48;2;98;137;254;38;2;16;24;48";
+const tint = (code: string, s: string) => ((process.stdout.isTTY || !!process.env.FORCE_COLOR) && !process.env.NO_COLOR && process.env.TERM !== "dumb" ? `\x1b[${code}m${s}\x1b[0m` : s);
+/** One step of a task: a marked title, then its lines hung on a rail, so a screen reads as a sequence of steps. */
+const step = (title: string, body: string[] = []) => { const rail = tint(GOLD, legacy() ? "|" : "│"); console.log([`${tint(GOLD, legacy() ? "*" : "◇")}  ${title}`, ...body.map((b) => `${rail}  ${b}`), rail].join("\n")); };
 
 /** The Prism in half-block characters, to the proportions of the brand mark: four heavy bands with narrow gaps, a solid
  *  tip, and the bottom band split into a long piece and a square. Each character holds two square pixels; `band` and
@@ -28,19 +40,60 @@ function prism(band = 6, gap = 2): string[] {
 /** Start screen for a person at a terminal: the Prism in brand green beside the name, version and first commands.
  *  NO_COLOR is respected; the old Windows console, which can't draw the blocks, gets the name and version only. */
 function banner(env = process.env): string {
-  if (process.platform === "win32" && !env.WT_SESSION && !env.TERM_PROGRAM && !env.ConEmuANSI && !env.FORCE_COLOR) return `Lintsure ${RULES_VERSION}\n`;
+  if (legacy(env)) return `Lintsure ${RULES_VERSION}\n`;
   const color = !env.NO_COLOR && env.TERM !== "dumb";
   const paint = (code: string, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
-  const text = [`${paint("1", "Lintsure")}${paint("2", `  ${RULES_VERSION}`)}`, "Keep your AI agents on track and in context.", "", paint("2", "Everything stays on this machine.")];
+  const text = [`${paint("38;2;98;137;254", "Lintsure")}${paint("2", `  ${RULES_VERSION}`)}`, "", paint("2", "Everything stays on this machine.")];
   const mark = prism(), width = Math.max(...mark.map((l) => l.length)), top = Math.floor((mark.length - text.length) / 2);
-  return "\n" + mark.map((l, i) => (paint("38;2;11;110;79", l.padEnd(width)) + "    " + (text[i - top] ?? "")).trimEnd()).join("\n") + "\n";
+  return "\n" + mark.map((l, i) => (paint("38;2;98;137;254", l.padEnd(width)) + "    " + (text[i - top] ?? "")).trimEnd()).join("\n") + "\n";
+}
+
+// Files and folders that mark the top of a software project, in any of the common stacks.
+const PROJECT_MARKERS = [".git", "package.json", "pyproject.toml", "requirements.txt", "setup.py", "Pipfile", "go.mod", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "pubspec.yaml", "Package.swift", "deno.json", "Dockerfile", "docker-compose.yml", "compose.yaml", "lintsure.config.yaml", ".lintsure"];
+const isWholeDisk = (dir: string) => dir === homedir() || dirname(dir) === dir; // the home folder or a drive root
+/** Whether a folder is a software project or sits inside one: a marker file in the folder itself, or a git repository
+ *  around it. Folders above count only through .git, because a stray package.json in a temp or documents folder is
+ *  common. The home folder and a drive root never count. */
+export const looksLikeProject = (dir: string): boolean => projectSign(dir) !== null;
+/** What shows that a folder is a project, in words for a person, or null when nothing does. */
+function projectSign(dir: string): string | null {
+  if (isWholeDisk(dir)) return null;
+  const marker = PROJECT_MARKERS.find((m) => existsSync(join(dir, m)));
+  if (marker) return marker === ".git" ? "a git repository" : `it has ${marker}`;
+  for (let at = dirname(dir); !isWholeDisk(at); at = dirname(at)) if (existsSync(join(at, ".git"))) return `inside the git repository ${basename(at)}`;
+  return null;
+}
+/** The folder and whether a project was found in it, as one step. */
+function showFolder(title: string, dir: string): void {
+  const sign = projectSign(dir);
+  step(`${title}  ${tint(BLUE, basename(dir) || dir)}`, [tint("2", dir), sign ? `${tint("32", "Project found")}: ${sign}` : tint(GOLD, "No project found here")]);
+}
+/** Asks a person for their project folder. Returns its full path, "" for Enter alone (use this folder), or null to stop.
+ *  A pasted path may carry quotes, and ~ stands for the home folder. Only call this at a terminal. */
+async function askFolder(allowHere: boolean): Promise<string | null> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    for (let tries = 0; tries < 3; tries++) {
+      const typed = (await rl.question(`Type or paste the path to your project folder, then press Enter.\n${allowHere ? "Enter alone checks this folder anyway. " : ""}q stops.\n> `)).trim().replace(/^["']|["']$/g, "");
+      if (typed.toLowerCase() === "q") return null;
+      if (!typed) { if (allowHere) return ""; console.log("That would check every file you have. Name one project folder.\n"); continue; }
+      const full = resolve(typed.replace(/^~(?=$|[\\/])/, homedir()));
+      if (existsSync(full) && statSync(full).isDirectory()) { console.log(`\n${tint("32", "Found")} ${full}${looksLikeProject(full) ? "" : "\nIt doesn't look like a project, so Lintsure checks the folder as it is."}`); return full; }
+      console.log(`${tint(GOLD, "Not found:")} no folder at ${full}. Check the path and try again.\n`);
+    }
+    console.log("Stopped. When you have the path, run: lintsure scan <folder>");
+    return null;
+  } finally { rl.close(); }
 }
 
 // What the start menu offers, in the order a new user needs them. `run` is the command line it stands for.
-const START: { label: string; run: string[] | null }[] = [
-  { label: "Check this project", run: ["scan"] },
+const START: { label: string; run: string[] | null; show?: string; badge?: boolean }[] = [
+  { label: "Check this folder", run: ["scan"] },
+  // `show` is the command to learn; the menu itself asks for the folder with --pick.
+  { label: "Check another folder", run: ["scan", "--pick"], show: "scan <folder>" },
   { label: "Is everything set up?", run: ["status"] },
   { label: "Connect your coding agent", run: ["setup"] },
+  { label: "Give your agent skills", run: ["skills"], badge: true },
   { label: "Every command and option", run: ["--help"] },
   { label: "Quit", run: null },
 ];
@@ -51,15 +104,20 @@ let wantsMenu = false; // the person chose "Main menu"
 const HINT = "    Up and Down to move, Enter to run, q to quit";
 /** The menu a command ends with when it was started from the start menu: what fits next, then the way back.
  *  Returns the exit code of the command it ran, or undefined when nothing was run (Main menu or Quit). */
-async function offer(rows: { text: string; run: string[] }[], color: boolean): Promise<number | undefined> {
+async function offer(rows: { text: string; run: string[] | (() => Promise<void>) }[], color: boolean): Promise<number | undefined> {
   sawMenu = true;
-  const pick = await choose([...rows.map((r) => r.text), "Main menu", "Quit"], HINT, color);
-  if (pick === rows.length) wantsMenu = true;
-  if (pick === null || pick >= rows.length) return undefined;
-  sawMenu = false; // the command run next gets its own ending
-  return main(rows[pick].run);
+  for (;;) {
+    const pick = await choose([...rows.map((r) => r.text), "Main menu", "Quit"], HINT, color);
+    if (pick === rows.length) wantsMenu = true;
+    if (pick === null || pick >= rows.length) return undefined;
+    const run = rows[pick].run;
+    // A row that only shows something comes back to this menu afterwards.
+    if (typeof run === "function") { await run(); console.log(""); continue; }
+    sawMenu = false; // the command run next gets its own ending
+    return main(run);
+  }
 }
-const COMMANDS = ["scan", "baseline", "init", "info", "setup", "status", "export"];
+const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "status", "export"];
 /** The command someone most likely meant: the same word without dashes, or one within two typing slips. Pure. */
 function nearest(word: string): string | undefined {
   const slips = (a: string, b: string) => { let row = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -67,7 +125,7 @@ function nearest(word: string): string | undefined {
     return row[b.length]; };
   return COMMANDS.find((c) => c === word) ?? COMMANDS.map((c) => [slips(c, word), c] as const).filter(([n]) => n <= 2).sort((x, y) => x[0] - y[0])[0]?.[1];
 }
-const startRows = () => START.map((s) => (s.run ? `${s.label.padEnd(28)}lintsure ${s.run.join(" ")}` : s.label));
+const startRows = () => START.map((s) => { const row = s.run ? `${s.label.padEnd(28)}lintsure ${s.show ?? s.run.join(" ")}` : s.label; return s.badge ? tint(BADGE, row) : row; });
 
 const HELP = `lintsure scan [path] [options]
 lintsure baseline [path]
@@ -75,7 +133,12 @@ lintsure init [path]     Three questions, saved to lintsure.config.yaml
 lintsure info [path]     Show the settings a scan would use, and where each comes from
 lintsure setup [path]    Add the Lintsure MCP server to this project's agent configs
                          (shows the change; --yes writes it; --undo takes it out;
-                         --agents claude,cursor,vscode,gemini)
+                         --agents claude,cursor,vscode,gemini,codex;
+                         --manual for an agent set up in its own settings)
+lintsure skills [path]   Add Lintsure's skills to this project: short instruction files that
+                         tell your agent when to check code and how to handle findings
+                         (at a terminal you pick which; --yes adds all; --only a,b;
+                         --undo takes them out)
 lintsure status [path]   Check that this project is ready: Node, config, rules, agents
 lintsure export --otlp-json [path]  Write .lintsure/activity.jsonl as an OpenTelemetry
                          traces file (lintsure.otlp.json) for your own observability tool
@@ -95,6 +158,7 @@ scan options:
   --new-only          With --fail-on: count only findings that are new since
                       .lintsure/baseline.json
   --github            Print GitHub Actions annotations, so findings show on the lines
+  --pick              Ask which folder to check (at a terminal)
   --save-record       Also save this run's readiness check record to
                       .lintsure/records/<id>.json, building a dated history (no code inside)
 
@@ -110,7 +174,7 @@ ${DISCLAIMER}
 Lintsure never sends your code anywhere.`;
 
 const VALUE_FLAGS = ["--framework", "--fail-on", "--project", "--diff"];
-const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "--save-record", "--all"];
+const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "--save-record", "--all", "--pick"];
 
 /** Changed line numbers per file from `git diff -U0` output. Pure. */
 export function parseDiff(text: string): Record<string, number[]> {
@@ -207,18 +271,67 @@ async function main(argv: string[]): Promise<number> {
     console.log(`Wrote lintsure.otlp.json: ${rows.length} events. Nothing was sent; load the file into your collector or tool (OTLP/JSON).`);
     return 0;
   }
+  if (cmd === "skills") {
+    const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--only") ?? ".");
+    const bad = raw.find((a) => a.startsWith("--") && !["--yes", "--undo", "--only"].includes(a));
+    if (bad) { console.error(`Unknown option: ${bad}. Use --yes, --only <names> or --undo.`); return 2; }
+    if (!existsSync(root)) { console.error(`No folder at ${root}.`); return 2; }
+    if (raw.includes("--undo")) { const said = await removeSkills(root); console.log(said.length ? said.join("\n") : "No Lintsure skills in this project."); return 0; }
+    const all = skills(), i = raw.indexOf("--only"), names = i >= 0 ? (raw[i + 1] ?? "").split(",").map((s) => s.trim()) : undefined;
+    const unknown = names?.filter((n) => !all.some((s) => s.name === n));
+    if (unknown?.length) { console.error(`Unknown skill: ${unknown.join(", ")}. Choose from: ${all.map((s) => s.name).join(", ")}`); return 2; }
+    let chosen = names ? all.filter((s) => names.includes(s.name)) : all;
+    const folders = skillFolders(root), yes = raw.includes("--yes"), picking = !yes && !names && !!process.stdin.isTTY && !!process.stdout.isTTY;
+    console.log("");
+    step(tint(BADGE, " Lintsure skills "), ["A skill is a short instruction file. It tells your coding agent when to use Lintsure and what", "to do with what it finds. Connecting gives the agent the tools; skills give it the habit."]);
+    showFolder("Project", root);
+    step("Where they go", folders.map((f) => `${tint(BLUE, f)}  ${tint("2", f.startsWith(".agents") ? "read by Codex, Cursor, Gemini CLI and many others" : "read by Claude Code")}`));
+    if (picking) {
+      step(`Found ${all.length} skills. Which do you want?`);
+      const width = Math.max(...all.map((s) => s.name.length)) + 2;
+      const picked = await chooseMany(all.map((s) => `${s.name.padEnd(width)}${s.about}`), (n) => (n ? `Install the ${n} selected` : "Install (none selected yet)"), "    Up and Down to move, Enter to select or de-select, a for all, q to quit", !process.env.NO_COLOR && process.env.TERM !== "dumb");
+      if (!picked?.length) { console.log("Nothing installed. Come back any time: lintsure skills"); return 0; }
+      chosen = picked.map((n) => all[n]);
+    }
+    const apply = yes || picking;
+    const steps = await installSkills(root, chosen, apply);
+    const word = { add: apply ? "added" : "add", update: apply ? "updated, the earlier files kept as .lintsure-backup" : "update (the files there now are kept as backups)", same: "already there" };
+    const lines = steps.map((s) => `${apply ? `${tint("32", "✓")} ` : ""}${s.folder}  ${tint("2", word[s.state])}`);
+    if (!apply) { step(`Would install ${chosen.length} skill${chosen.length === 1 ? "" : "s"}`, lines); console.log(`Nothing written yet. To apply, run: lintsure skills ${names ? `--only ${names.join(",")} ` : ""}--yes`); return 0; }
+    step(tint("32", `Done! Installed ${chosen.length} skill${chosen.length === 1 ? "" : "s"}`), lines);
+    console.log("Restart the agent so it reads them. Take them out any time with: lintsure skills --undo");
+    return 0;
+  }
   if (cmd === "setup" || cmd === "status") {
     const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents") ?? ".");
     if (cmd === "status") return status(root);
+    if (raw.includes("--manual")) { console.log(MANUAL()); return 0; }
+    const named = raw.includes("--agents"), here = named ? [] : await detected(root);
+    // From the menu, ask which agent. Claude Code used to be the silent choice when the project had no agent folder yet.
+    if (viaMenu && !named && !raw.includes("--yes") && !raw.includes("--undo") && process.stdin.isTTY && process.stdout.isTTY) {
+      console.log("");
+      step("Connect your coding agent", CONNECT_NOTE.split("\n"));
+      showFolder("Project", root);
+      step("Which agent?");
+      const rows = AGENTS.map((a) => ({ text: `${a.name.padEnd(22)}${a.file.padEnd(24)}${here.includes(a) ? "used in this project" : ""}`.trimEnd(), run: ["setup", ...raw, "--agents", a.id] }));
+      rows.push({ text: "Another agent (Devin, Windsurf, Zed, ...)", run: ["setup", ...raw, "--manual"] });
+      if (here.length > 1) rows.unshift({ text: `All ${here.length} used in this project`, run: ["setup", ...raw, "--agents", here.map((a) => a.id).join(",")] });
+      return (await offer(rows, !process.env.NO_COLOR && process.env.TERM !== "dumb")) ?? 0;
+    }
+    // Typed by hand with no agent named and none found here: say which one this is for, and how to pick another.
+    if (!named && !here.length && !raw.includes("--undo")) console.log(`No agent folder in this project, so this is for Claude Code. For another one: lintsure setup --agents ${AGENTS.slice(1).map((a) => a.id).join(" | ")}\nFor an agent set up in its own settings (Devin, Windsurf, Zed): lintsure setup --manual\n`);
     const i = raw.indexOf("--agents");
     const agents = await pick(root, i >= 0 ? raw[i + 1]?.split(",").map((s) => s.trim()) : undefined);
     if (typeof agents === "string") { console.error(agents); return 2; }
     if (raw.includes("--undo")) return undo(root, agents);
     const code = await setup(root, agents, raw.includes("--yes"));
     // From the menu, the preview is followed by the choice to write it, so nobody has to retype the command with --yes.
-    if (viaMenu && !raw.includes("--yes") && process.stdin.isTTY && process.stdout.isTTY && (await Promise.all(agents.map((a) => plan(root, a)))).some((p) => p.text)) {
+    // Once the agent is connected, the next thing on offer is the skills that tell it when to use Lintsure.
+    if (viaMenu && process.stdin.isTTY && process.stdout.isTTY) {
+      const pending = !raw.includes("--yes") && (await Promise.all(agents.map((a) => plan(root, a)))).some((p) => p.text);
+      const folder = raw.filter((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents").slice(0, 1);
       console.log("");
-      const ran = await offer([{ text: `${"Write these changes".padEnd(54)}lintsure setup --yes`, run: ["setup", ...raw, "--yes"] }], !process.env.NO_COLOR && process.env.TERM !== "dumb");
+      const ran = await offer([pending ? { text: `${"Write these changes".padEnd(54)}lintsure setup --yes`, run: ["setup", ...raw, "--yes"] } : { text: `${"Install Lintsure's skills for your agent".padEnd(54)}lintsure skills`, run: ["skills", ...folder] }], !process.env.NO_COLOR && process.env.TERM !== "dumb");
       if (ran !== undefined) return ran;
     }
     return code;
@@ -233,6 +346,7 @@ async function main(argv: string[]): Promise<number> {
     // The menu is home. After each command the person can come back here, so no screen is a dead end.
     const color = !process.env.NO_COLOR && process.env.TERM !== "dumb";
     for (let code = 0; ;) {
+      showFolder("You are in", process.cwd());
       const pick = await choose(startRows(), HINT, color);
       const run = pick === null ? null : START[pick].run;
       if (!run) return code;
@@ -240,7 +354,7 @@ async function main(argv: string[]): Promise<number> {
       code = await main(run);
       if (!sawMenu) await offer([], color); // a command with no menu of its own still ends with the way back
       if (!wantsMenu) return code;
-      console.log(`\nLintsure ${RULES_VERSION}\n`);
+      console.log(`\n${tint(BLUE, "Lintsure")} ${RULES_VERSION}\n`);
     }
   }
   if (cmd === "--version" || cmd === "-v") { console.log(RULES_VERSION); return 0; }
@@ -258,6 +372,28 @@ async function main(argv: string[]): Promise<number> {
   const path = resolve(rest.find((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1])) ?? ".");
   const wanted = flag("--framework")?.split(",").map((s) => s.trim()) as FrameworkId[] | undefined;
   if (!existsSync(path)) { console.error(`No folder at ${path}. Pass the project folder to scan, for example: lintsure scan .`); return 2; }
+  // No folder was named and this one isn't a project. Lintsure can't guess where the project is: at a terminal it asks,
+  // elsewhere it says how to name it. A named folder is taken at its word.
+  const namedFolder = rest.some((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1]));
+  // --pick: ask for the folder. It is what "Check another folder" in the menu runs.
+  if (rest.includes("--pick")) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) { console.error(`--pick asks a question, so it needs a terminal. Name the folder: lintsure ${cmd} <folder>`); return 2; }
+    console.log("");
+    const where = await askFolder(false);
+    return where ? main([cmd, where, ...rest.filter((a) => a !== "--pick")]) : 0;
+  }
+  if (!namedFolder && !looksLikeProject(path)) {
+    const why = `This folder doesn't look like a project: ${path}\nLintsure checks one project folder at a time, and it can't tell where yours is.`;
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      console.log(`\n${why}\n`);
+      const where = await askFolder(!isWholeDisk(path));
+      if (where === null) return 0;
+      if (where) return main([cmd, where, ...rest]);
+    } else {
+      console.error(`${why}\nGo to your project folder first, or name it: lintsure ${cmd} <folder>`);
+      if (isWholeDisk(path)) return 2; // a whole home folder or drive is never what was meant
+    }
+  }
 
   const config = await readConfig(path);
   // Checked after the config loads its rule packs, so a pack's framework id is accepted.
@@ -281,6 +417,8 @@ async function main(argv: string[]): Promise<number> {
     try { workspaceRules = JSON.parse(await readFile(wsFile, "utf8")); }
     catch { console.error(`Couldn't read workspace rules from LINTSURE_WORKSPACE_RULES (${wsFile}).`); process.exit(2); }
   }
+  // A large project takes a few seconds: say that work has started, so the screen isn't blank.
+  if (process.stdout.isTTY) { console.log(""); showFolder(`${tint(BLUE, "Lintsure")} is checking`, path); }
   const report = await scan(path, wanted ?? config.frameworks ?? ALL_FRAMEWORKS, { why, source, all: rest.includes("--all") || undefined, changed, workspaceRules });
   const date = new Date().toISOString().slice(0, 10);
 
@@ -326,29 +464,52 @@ async function main(argv: string[]): Promise<number> {
   const paint = (code: string, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
   const width = Math.min(process.stdout.columns || 100, 100);
   // The old Windows console can't draw line characters reliably, so it gets plain dashes.
-  const dash = process.platform === "win32" && !process.env.WT_SESSION && !process.env.TERM_PROGRAM && !process.env.ConEmuANSI && !process.env.FORCE_COLOR ? "-" : "─";
-  const ruled = (title: string) => `\n${paint("1", `${dash}${dash} ${title} `)}${paint("2", dash.repeat(Math.max(3, width - title.length - 4)))}`;
+  const dash = legacy() ? "-" : "─";
+  const ruled = (title: string) => `\n${paint("38;2;98;137;254", `${dash}${dash} ${title} `)}${paint("2", dash.repeat(Math.max(3, width - title.length - 4)))}`;
   const group = (title: string, items: typeof listed) => {
     if (!items.length) return;
     console.log(ruled(`${title} (${items.length})`));
     let file = "";
     for (const f of items) {
-      if (f.file !== file) { file = f.file; console.log(`\n  ${paint("1", file)}`); }
+      if (f.file !== file) { file = f.file; console.log(`\n  ${paint("38;2;98;137;254", file)}`); }
       const status = f.accepted && !f.accepted.expired ? "accepted" : f.status;
       const badge = status === "gap" ? paint("1;31", "GAP     ") : status === "partial" ? paint("33", "PARTIAL ") : paint("2", "ACCEPTED");
       console.log(`    ${badge} ${paint("2", String(f.line).padStart(5))}  ${f.title}${f.change === "new" ? paint("36", "  (new)") : ""}`);
     }
   };
+  // The first few to fix: gaps before partials, higher risk first, reached code first.
+  const inCode = open.filter((f) => !isHygiene(f));
+  const order = (f: (typeof open)[number]) => (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity] + (f.reach?.status === "unreachable" ? 0.5 : 0);
+  const ranked = [...inCode].sort((a, b) => order(a) - order(b)), first = ranked.slice(0, 3);
+  const fold = (t: string, pad: string) => t.replace(new RegExp(`(.{1,${width - pad.length - 2}})(\\s+|$)`, "g"), `$1\n${pad}`).trimEnd();
+  const reportFile = resolve("lintsure-report.md");
+  // A request a person can paste into any coding agent, connected or not: it names the finding and where the proposal is.
+  const request = (fs: typeof open) => `Fix ${fs.length === 1 ? "this Lintsure finding" : "these Lintsure findings, one at a time"}: ${fs.map((f) => `${f.id} "${f.title}" at ${f.file}:${f.line}`).join("; ")}. The proposal for ${fs.length === 1 ? "it" : "each"} is in ${reportFile}. Show me ${fs.length === 1 ? "the" : "each"} change before you apply it, then check the file with Lintsure again.`;
   if (pretty) {
+    // One line that fits the outcome, so the result is clear before any detail. It reports what the rules found and
+    // never calls a project safe: "nothing found" is said in those words.
+    const gaps = inCode.filter((f) => f.status === "gap");
+    const headline = !open.length ? paint("1;32", "Done! Nothing found by the current rules.")
+      : !inCode.length ? paint("1;32", "Done! Nothing in the code. Only housekeeping is left.")
+      : gaps.some((f) => f.severity === "high") ? `${paint(BLUE, "Lintsure")} ${paint("1;31", "found something that needs your attention.")}`
+      : gaps.length ? `${paint(BLUE, "Lintsure")} ${paint("1;33", "found something interesting.")}`
+      : inCode.every((f) => f.severity === "low") ? paint("1;33", inCode.length === 1 ? "A minor finding, worth a look." : "Minor findings, worth a look.")
+      : paint("1;33", "Worth a look.");
+    console.log(`\n${headline}`);
     group("Findings in the code", listed.filter((f) => !isHygiene(f)));
     group("Repo hygiene: housekeeping, not flaws in the code", listed.filter(isHygiene));
+    if (first.length) {
+      console.log(ruled(`Start here (${first.length} of ${inCode.length})`));
+      first.forEach((f, i) => console.log(`\n  ${i + 1}. ${f.title}\n     ${paint("2", `${f.file}:${f.line}`)}\n     ${paint("36", "Fix:")} ${fold(f.fix, "          ")}`));
+      if (inCode.length > first.length) console.log(`\n  ${paint("2", `The fix for every finding is in ${resolve("lintsure-report.md")}`)}`);
+    }
     console.log(ruled("What next") + "\n");
   } else for (const f of listed) console.log(`${f === listed.find(isHygiene) ? "Repo hygiene (housekeeping, not flaws in the code):\n" : ""}${(f.accepted && !f.accepted.expired ? "accepted" : f.status).padEnd(8)} ${f.file}:${f.line}  ${f.title}${f.change === "new" ? "  (new)" : ""}`);
   if (rest.includes("--github")) for (const f of open) {
     const msg = `${f.title}. Proposed change, needs your approval: ${f.proposal.what}`.replace(/%/g, "%25").replace(/\r?\n/g, " ");
     console.log(`::${f.status === "gap" ? "error" : "warning"} file=${f.file},line=${f.line},title=Lintsure ${f.ruleId}::${msg}`);
   }
-  console.log("Report saved to lintsure-report.md");
+  console.log(`Report saved to ${pretty ? resolve("lintsure-report.md") : "lintsure-report.md"}`);
   if (rest.includes("--report")) console.log("Assessment saved to lintsure-assessment.html (open it in a browser to read, print or save as PDF). It is a draft until a qualified person reviews and signs it.");
   console.log("\nNext steps:");
   nextSteps(report).forEach((x, i) => console.log(`  ${i + 1}. ${x}`));
@@ -362,6 +523,18 @@ async function main(argv: string[]): Promise<number> {
     ...(rest.includes("--report") ? [] : [{ label: "Write a printable assessment", run: ["scan", ...here, "--report"] }]),
     { label: "Connect your coding agent, then ask it to fix one", run: ["setup", ...here] },
   ];
+  // Menu only: the full proposal for one finding, and a request to paste into a coding agent. Lintsure never edits code.
+  const showFix = async () => {
+    const list = [...ranked, ...open.filter(isHygiene)].slice(0, 15);
+    console.log(`\nWhich finding?${open.length > list.length ? ` (the first ${list.length} of ${open.length}; the rest are in the report)` : ""}`);
+    const pick = await choose([...list.map((f) => `${f.id}  ${f.title}  ${f.file}:${f.line}`.slice(0, width - 6)), "Back"], HINT, color);
+    if (pick === null || pick >= list.length) return;
+    const f = list[pick], row = (name: string, text: string) => console.log(`  ${paint(GOLD, name.padEnd(8))}${fold(text, "          ")}`);
+    console.log(ruled(`${f.id}  ${f.title}`) + "\n");
+    row("Where", f.proposal.where); row("Change", f.proposal.what); row("Why", f.proposal.why); row("Gain", f.proposal.benefit);
+    console.log(`\n  ${paint("2", "Nothing was changed. To hand it over, paste this into your coding agent:")}\n\n  ${fold(request([f]), "  ")}`);
+  };
+  const fixRows = open.length ? [{ text: "Show the fix for a finding", run: showFix }, ...(first.length ? [{ text: `Hand the first ${first.length === 1 ? "one" : first.length} to your coding agent`, run: async () => console.log(`\n  ${paint("2", "Paste this into your coding agent:")}\n\n  ${fold(request(first), "  ")}`) }] : [])] : [];
   // A folder with a space in its name is quoted, so the line can be pasted as it is.
   const followRows = follow.map((f) => `${f.label.padEnd(54)}lintsure ${f.run.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`);
   const asMenu = viaMenu && !!process.stdin.isTTY && !!process.stdout.isTTY;
@@ -372,7 +545,7 @@ async function main(argv: string[]): Promise<number> {
 
   if (asMenu) {
     console.log("\nRun next:");
-    const ran = await offer(follow.map((f, i) => ({ text: followRows[i], run: f.run })), color);
+    const ran = await offer([...fixRows, ...follow.map((f, i) => ({ text: followRows[i], run: f.run as string[] | (() => Promise<void>) }))], color);
     if (ran !== undefined) return ran;
   }
   const failOn = flag("--fail-on")?.toLowerCase();
