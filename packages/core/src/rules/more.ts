@@ -64,11 +64,13 @@ const NATIVE = [".java", ".kt", ".swift", ".go", ".dart"];
 // AES-GCM outright and leaks patterns in CBC. A buffer that is filled with random bytes on the next lines is fine (unlessNear).
 const STATIC_IV = /\b(iv|IV|nonce|initVector|initializationVector)\s*[:=]\s*(Buffer\.alloc\(\s*\d+\s*(,\s*0\s*)?\)|Buffer\.from\(\s*["'][^"']+["'])|\b(iv|nonce)\s*=\s*(b["'][^"']+["']|bytes\(\s*\d+\s*\))|\b(Iv|GCM)ParameterSpec\(\s*(\d+\s*,\s*)?(new\s+byte\[\d+\]|ByteArray\(\d+\)|"[^"]+"\.(getBytes|toByteArray)\()|\b(iv|nonce)\s*:?=\s*\[\]byte\("[^"]+"\)/;
 /** Key sizes and work factors below what current guidance accepts. Pure. */
-export function weakCryptoParameter(l: string): boolean {
+export function weakCryptoParameter(l: string): boolean | "partial" {
+  // PBKDF2 is also used to derive cache keys and ids, where the round count doesn't matter: Gap only when a password is named.
+  const kdf = () => (/pass(word|wd|phrase)?/i.test(l) ? true : "partial" as const);
   if (/^\s*(\/\/|#|\*)/.test(l)) return false;
   // PBKDF2 under 10,000 rounds (OWASP asks for 600,000 with SHA-256; a four-digit count is far off any guidance).
-  if (/\bpbkdf2(Sync)?\(\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*,|\bpbkdf2_hmac\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*[,)]|\bPBEKeySpec\(\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*,/.test(l)) return true;
-  if (/\bPBKDF2\w*\(/.test(l) && /\biterations\s*=\s*\d{1,4}\s*[,)]/.test(l)) return true;
+  if (/\bpbkdf2(Sync)?\(\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*,|\bpbkdf2_hmac\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*[,)]|\bPBEKeySpec\(\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*,/.test(l)) return kdf();
+  if (/\bPBKDF2\w*\(/.test(l) && /\biterations\s*=\s*\d{1,4}\s*[,)]/.test(l)) return kdf();
   // bcrypt below 10 rounds.
   if (/\bbcrypt\.(hash|hashSync|genSalt|genSaltSync)\(\s*(?:[^,()]+,\s*)?[1-9]\s*[,)]|\bgensalt\(\s*(?:rounds\s*=\s*)?[1-9]\s*\)/.test(l)) return true;
   // RSA keys under 2048 bits.
@@ -170,7 +172,7 @@ export function dockerImageUnpinned(lines: string[]): number[] {
   });
 }
 // A secret given a value at build time stays in the image's layers and history for anyone who pulls it.
-const BUILD_SECRET = /^\s*(ENV|ARG)\s+\w*(PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_KEY)(=|\s+)["']?(?!changeme|change[_-]me|example|your[_-]|placeholder|dummy|xxx|none\b|null\b|true\b|false\b)[^\s"'$<{]{6,}/i;
+const BUILD_SECRET = /^\s*(ENV|ARG)\s+(?!NEXT_PUBLIC_|VITE_|PUBLIC_|EXPO_PUBLIC_|REACT_APP_)\w*(PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_KEY)(=|\s+)["']?(?!changeme|change[_-]me|example|your[_-]|placeholder|dummy|xxx|none\b|null\b|true\b|false\b)[^\s"'$<{]{6,}/i;
 
 export const moreRules: Rule[] = [
   rule({ id: "crypto.static-iv", title: "Encryption with a fixed IV or nonce", status: "gap", severity: "medium", controls: [A04, GDPR("Art. 32", "Security of processing")],

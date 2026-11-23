@@ -272,7 +272,7 @@ export const owaspRules: Rule[] = [
     note: "Users can set fields you didn't expect, such as role or isAdmin (mass assignment, CWE-915).", extensions: CODE,
     // Also the body as the second argument of an update, as Prisma's `data`, or passed to a model constructor.
     test: (l) => /\.(create|update|insert|build|insertOne|updateOne)\(\s*req\.body\s*[),]|\bObject\.assign\(\s*\w+\s*,\s*req\.body\s*\)|\(\s*\*\*request\.(json|form|data)\b/.test(l)
-      || /\.(findByIdAndUpdate|findOneAndUpdate|updateOne|updateMany|update)\(\s*[^,()]+,\s*req\.body\s*[),]/.test(l)
+      || /\.(findByIdAndUpdate|findOneAndUpdate|updateOne|updateMany)\(\s*[^,()]+,\s*req\.body\s*[),]/.test(l)
       || (/\.(create|update|upsert|createMany|updateMany)\(/.test(l) && /\bdata\s*:\s*req\.body\s*[,}]/.test(l))
       || /\bnew\s+(?!URLSearchParams|FormData|Map|Set|Error|Date|URL|Blob|Uint8Array)[A-Z]\w*\(\s*req\.body\s*\)/.test(l) }),
 
@@ -296,7 +296,7 @@ export const owaspRules: Rule[] = [
     fix: "Add expiresIn (Node) or an exp claim (Python), and keep access tokens short-lived.",
     note: "A stolen token without an expiry works forever (insufficient session expiration, CWE-613). Partial because the expiry may be set in a payload built elsewhere.", extensions: CODE,
     // Also a check that is told to ignore the expiry.
-    test: (l) => /\bignoreExpiration\s*:\s*true\b|["']verify_exp["']\s*:\s*False\b/.test(l) || (/\bjwt\.(sign|encode)\(/.test(l) && !/expiresIn|\bexp\b/.test(l)), unlessNear: /expiresIn|["']exp["']|\bexp\s*[:=]/ }),
+    test: (l) => (/\bignoreExpiration\s*:\s*true\b|["']verify_exp["']\s*:\s*False\b/.test(l) && !/verify_signature["']?\s*:\s*False/.test(l)) || (/\bjwt\.(sign|encode)\(/.test(l) && !/expiresIn|\bexp\b/.test(l)), unlessNear: /expiresIn|["']exp["']|\bexp\s*[:=]/ }),
 
   // A08 Software or Data Integrity Failures
   rule({ id: "deserialize.unsafe", title: "Unsafe deserialisation", status: "gap", severity: "high", controls: [A08],

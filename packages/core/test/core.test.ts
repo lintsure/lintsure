@@ -1111,7 +1111,7 @@ test("privacy: pre-ticked consent, stored card security code, sensitive categori
 
 test("native code: weak ciphers, TLS checks off, fixed IVs, weak parameters, debuggable builds", async () => {
   const { weakCryptoParameter, debuggableBuild } = await import("../src/rules/more.js");
-  for (const bad of ["const k = crypto.pbkdf2Sync(password, salt, 1000, 32, \"sha256\");", "kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=1000)", "const h = await bcrypt.hash(password, 8);", "salt = bcrypt.gensalt(rounds=6)", "crypto.generateKeyPairSync(\"rsa\", { modulusLength: 1024 });", "key, _ := rsa.GenerateKey(rand.Reader, 1024)", "openssl genrsa -out key.pem 1024"])
+  for (const bad of ["const k = crypto.pbkdf2Sync(password, salt, 1000, 32, \"sha256\");", "password_kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=1000)", "const h = await bcrypt.hash(password, 8);", "salt = bcrypt.gensalt(rounds=6)", "crypto.generateKeyPairSync(\"rsa\", { modulusLength: 1024 });", "key, _ := rsa.GenerateKey(rand.Reader, 1024)", "openssl genrsa -out key.pem 1024"])
     assert.equal(weakCryptoParameter(bad), true, bad);
   for (const ok of ["const k = crypto.pbkdf2Sync(password, salt, 600000, 32, \"sha256\");", "const h = await bcrypt.hash(password, 12);", "crypto.generateKeyPairSync(\"rsa\", { modulusLength: 4096 });", "openssl genrsa -out key.pem 4096", "list.initialize(1024)"])
     assert.equal(weakCryptoParameter(ok), false, ok);

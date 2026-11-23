@@ -53,13 +53,16 @@ const CI_FILES = /(^|\/)(\.github\/workflows\/|\.gitlab-ci|\.circleci\/|azure-pi
 export function scanCannotFail(lines: string[]): number[] {
   return lines.flatMap((l, i) => {
     if (/^\s*#/.test(l)) return [];
-    if (SCANNER.test(l) && /\|\|\s*(true\b|exit\s+0\b|:\s*$|echo\b)|--exit-code[= ]0\b|--soft-fail\b|--no-fail\b/.test(l)) return [i + 1];
+    // Output written to a file is a report collected for a later step, not a result thrown away (review: 4 of 4).
+    if (SCANNER.test(l) && /\|\|\s*(true\b|exit\s+0\b|:\s*$|echo\b)|--exit-code[= ]0\b|--soft-fail\b|--no-fail\b/.test(l)) return /\s>\s*\S/.test(l.replace(/[12]?>\s*(&1|\/dev\/null)/g, "")) ? [] : [i + 1];
     // continue-on-error belongs to a step: look a few lines either side, stopping at the next step.
     if (!/^\s*(continue-on-error|allow_failure)\s*:\s*true\b/.test(l)) return [];
     const from = lines.slice(Math.max(0, i - 6), i).reverse(), to = lines.slice(i + 1, i + 7);
     const cut = (xs: string[]) => { const k = xs.findIndex((x) => /^\s*-\s+(name|uses|run)\s*:/.test(x)); return k < 0 ? xs : xs.slice(0, k + 1); };
     const before = cut(from), after = to.slice(0, Math.max(0, to.findIndex((x) => /^\s*-\s+(name|uses|run)\s*:/.test(x)) < 0 ? to.length : to.findIndex((x) => /^\s*-\s+(name|uses|run)\s*:/.test(x))));
     // In a `uses:` line the scanner's name is part of the action's path (aquasecurity/trivy-action).
+    // Uploading a report, or a step named for installing the tool, is not the scan.
+    if ([...before, ...after].some((x) => /upload-sarif|^\s*-?\s*name\s*:.*\binstall/i.test(x))) return [];
     return [...before, ...after].some((x) => SCANNER.test(x) || /\buses:.*(trivy|semgrep|gitleaks|trufflehog|snyk|codeql|checkov|grype)/i.test(x)) ? [i + 1] : [];
   });
 }
