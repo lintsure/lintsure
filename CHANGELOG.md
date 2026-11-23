@@ -16,7 +16,11 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **Existing rules catch more.** Mass assignment through an update call or Prisma's `data`; a JWT check with no algorithm list or with the expiry ignored; a websocket origin set to `"*"`; a real password used when the environment variable is missing; `curl -k` in scripts; one-line `privileged: true`, host namespaces, added capabilities and switched-off security profiles in Compose and Kubernetes files.
 - **Weak ciphers and switched-off TLS checks are found in Java, Kotlin, Swift, Go and Dart**, not only JavaScript, TypeScript and Python.
 - **`api.Dockerfile` and `Containerfile` are scanned.**
-- **A start screen.** `lintsure` with no arguments shows the Prism, the version and three starter commands when a person runs it in a terminal. Piped output and CI logs are unchanged, and `NO_COLOR` is respected.
+- **A start menu.** `lintsure` with no arguments shows the Prism and a short menu when a person runs it in a terminal: Up and Down to move, Enter to run. The full manual is behind `lintsure --help`.
+- **Findings are easier to read in a terminal.** Ruled headings split findings in the code, repo hygiene and what to do next; each file gets its own block; the status is in colour.
+- **A scan ends with the commands to run next**, such as `lintsure scan --all` for held-back findings or `lintsure baseline` to remember today's. Only the ones that apply are listed.
+- **A mistyped command gets a hint.** `lintsure --scan` answers "Did you mean: lintsure scan" where it used to print the whole manual. `lintsure --version` is new.
+- Piped output, CI logs and the report files are unchanged by all of the above, and `NO_COLOR` is respected.
 
 ### Changed
 - **Repo hygiene is listed after findings in the code** in the CLI, the Markdown report and the MCP reply, so a missing security policy no longer sits above a leaked key. The two Dockerfile basics (root user, unpinned image) are in this group. JSON and SARIF output are unchanged.
