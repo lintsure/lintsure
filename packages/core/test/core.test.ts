@@ -655,7 +655,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "268D-CAF0");
+  assert.equal(r.policy?.fingerprint, "A5E3-DBBF");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {
@@ -1135,6 +1135,34 @@ test("native code: weak ciphers, TLS checks off, fixed IVs, weak parameters, deb
     assert.deepEqual(at("crypto.static-iv"), ["app/Enc.java:3", "app/enc.ts:1"]);
     assert.deepEqual(at("transport.tls-verify-off").sort(), ["app/Net.kt:1", "app/net.go:1"]);
     assert.deepEqual(at("mobile.token-in-plain-storage"), ["app/Store.swift:1"]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("across files: an imported masking helper counts, and unreached code is ranked after reached code", async () => {
+  const { importedNames, toMarkdown, scan: s } = await import("../src/index.js");
+  const files = new Set(["src/log.ts", "src/lib/mask.ts", "src/util/index.ts", "backend/notify/helpers.py", "backend/notify/job.py"]);
+  assert.deepEqual(importedNames("src/log.ts", 'import { refusal as r, other } from "./lib/mask";\nimport x from "pkg";\nconst { helper: h } = require("./util");\nimport { a } from "@/lib/mask";', files),
+    [{ name: "refusal", local: "r", from: "src/lib/mask.ts" }, { name: "other", local: "other", from: "src/lib/mask.ts" }, { name: "helper", local: "h", from: "src/util/index.ts" }, { name: "a", local: "a", from: "src/lib/mask.ts" }]);
+  assert.deepEqual(importedNames("backend/notify/job.py", "from backend.notify.helpers import Answer, _refusal\nfrom .helpers import (\n    one,\n    two as t,\n)\nfrom os import path\n", files).map((x) => `${x.local}<${x.from}`),
+    ["Answer<backend/notify/helpers.py", "_refusal<backend/notify/helpers.py", "one<backend/notify/helpers.py", "t<backend/notify/helpers.py"]);
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs"); const { tmpdir } = await import("node:os"); const { dirname } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "ls-cross-"));
+  try {
+    const proj: Record<string, string> = {
+      "backend/notify/helpers.py": "def _refusal(email, answer):\n    return f\"{pseudonym(email)} with {answer.code}\"\n\n\n\n\n\n\n\n\n\n\n\n\n\ndef plain(email):\n    return email\n",
+      "backend/notify/job.py": "from backend.notify.helpers import _refusal, plain\nlogger.warning(\"failed for %s\", _refusal(change.email, answer))\nlogger.warning(\"failed for %s\", plain(change.email))\n",
+      "src/lib/mask.ts": "export function safe(email: string) {\n  return maskEmail(email);\n}\n",
+      "src/index.ts": "import { safe } from \"./lib/mask\";\nconsole.log(\"signup\", safe(user.email));\nconsole.log(\"signup\", user.email);\n",
+      "src/orphan.ts": "console.log(\"signup\", user.email);\n",
+    };
+    for (const [p, text] of Object.entries(proj)) { mkdirSync(dirname(join(dir, p)), { recursive: true }); writeFileSync(join(dir, p), text); }
+    const r = await s(dir, undefined, { all: true });
+    const logged = r.findings.filter((f) => f.ruleId === "pii.logged");
+    assert.deepEqual(logged.map((f) => `${f.file}:${f.line}`), ["backend/notify/job.py:3", "src/index.ts:3", "src/orphan.ts:1"]);
+    // Same status and risk level: the entry file is listed before the file nothing imports.
+    const md = toMarkdown(r);
+    assert.equal(logged.find((f) => f.file === "src/orphan.ts")!.reach?.status, "unreachable");
+    assert.ok(md.indexOf("`src/index.ts:3`") < md.indexOf("`src/orphan.ts:1`"));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -2,6 +2,35 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.15 · 2026-11-23 · 17 new checks, fewer false alarms, a start screen
+
+### New
+- **17 new checks** (106 rules in all):
+  - **Agents and MCP:** an MCP tool description that gives the agent orders (`mcp.tool-description-poisoned`), and an MCP server run from a moving version or over plain HTTP (`mcp.config-unsafe-server`).
+  - **CI and supply chain:** a security scan in CI that can never fail the build (`ci.scan-cannot-fail`), and packages fetched from a source that can be swapped (`deps.unsafe-source`).
+  - **Containers:** an image that runs as root (`docker.runs-as-root`), a base image with no fixed version (`docker.image-unpinned`), and a secret given a value in a Dockerfile (`docker.secret-in-build`).
+  - **Infrastructure files:** a database reachable from the internet (`cloud.database-public`), an admin or database port open to the world (`cloud.network-open`), a policy that allows everything (`cloud.iam-allow-all`), and a function URL anyone can call (`cloud.function-url-no-auth`).
+  - **Privacy:** a consent box that starts ticked (`privacy.consent-preticked`), a sensitive category of personal data stored (`privacy.special-category-field`), and a card security code stored (`payment.card-code-stored`).
+  - **Cryptography and mobile:** encryption with a fixed IV or nonce (`crypto.static-iv`), a key size or work factor that is too low (`crypto.weak-parameters`), and an Android release build that can be debugged (`mobile.debuggable-build`).
+- **Agent instruction files are checked for hidden characters.** Invisible Unicode tags, direction overrides and runs of zero-width characters in `SKILL.md`, `AGENTS.md` and similar files are a finding, and so is an order to read key files such as `~/.aws/credentials`.
+- **Existing rules catch more.** Mass assignment through an update call or Prisma's `data`; a JWT check with no algorithm list or with the expiry ignored; a websocket origin set to `"*"`; a real password used when the environment variable is missing; `curl -k` in scripts; one-line `privileged: true`, host namespaces, added capabilities and switched-off security profiles in Compose and Kubernetes files.
+- **Weak ciphers and switched-off TLS checks are found in Java, Kotlin, Swift, Go and Dart**, not only JavaScript, TypeScript and Python.
+- **`api.Dockerfile` and `Containerfile` are scanned.**
+- **A start screen.** `lintsure` with no arguments shows the Prism, the version and three starter commands when a person runs it in a terminal. Piped output and CI logs are unchanged, and `NO_COLOR` is respected.
+
+### Changed
+- **Repo hygiene is listed after findings in the code** in the CLI, the Markdown report and the MCP reply, so a missing security policy no longer sits above a leaked key. The two Dockerfile basics (root user, unpinned image) are in this group. JSON and SARIF output are unchanged.
+- **Within the same status and risk level, code no route or entry point reaches is ranked lower.** It is a tie-break only: nothing is hidden.
+- **A masking helper imported from another file counts.** A log line that passes an email through a helper defined elsewhere in the project is no longer reported when that helper masks the value.
+
+### Fewer false alarms
+From findings on 304 public repos, reviewed one by one against the code:
+- **Code that doesn't ship.** Seed, demo, mock and dev-script files inside the app folder, and packages in a monorepo that share a route folder's name (`apps/api/`), are no longer read as live code.
+- **Context nearby is read.** A setting inside the branch that only runs outside production, a consent check around an analytics call, a signing-key lookup after a token peek, a socket proxy, a policy for `service_role` alone, a scan whose report is saved for a later step, and a line already marked for another scanner.
+- **Test values are recognised.** A private key with no real key body, a "secret" that decodes to a sentence, logins in example and browser-test folders, and `NEXT_PUBLIC_` values in a Dockerfile.
+- **Doubles are gone.** A host-name check off next to a certificate check off, and a token with both the signature and the expiry check off, are one finding each.
+- More than 40 reviewed false alarms no longer show, and no reviewed real finding was lost.
+
 ## 0.3.14 · 2026-11-20 · MCP, model and default-password checks; fewer false alarms
 
 ### New

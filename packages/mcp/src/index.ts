@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIMER, checksFor, classify, getKnowledge, isHygiene, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
-const server = new McpServer({ name: "lintsure", version: "0.3.14" }, { instructions: AGENT_GUIDANCE });
+const server = new McpServer({ name: "lintsure", version: "0.3.15" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 // Checked in the handler, not a startup enum, so frameworks from a repo's rule packs are accepted too.
@@ -45,7 +45,7 @@ server.tool("scan",
     const scope = files?.map(norm);
     const picked = report.findings.filter((f) => (!scope || scope.some((p) => f.file === p || f.file.startsWith(p + "/")))
       && (!only || only.includes(f.ruleId)) && (status === "all" || f.status === status) && !(f.accepted && !f.accepted.expired));
-    const rank = (f: (typeof picked)[number]) => (isHygiene(f) ? 6 : 0) + (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity];
+    const rank = (f: (typeof picked)[number]) => (isHygiene(f) ? 6 : 0) + (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity] + (f.reach?.status === "unreachable" ? 0.5 : 0);
     const shown = [...picked].sort((a, b) => rank(a) - rank(b)).slice(0, limit);
     const gaps = picked.filter((f) => f.status === "gap").length;
     const hygiene = picked.filter(isHygiene).length; // sorted last, so the limit drops these first

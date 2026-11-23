@@ -59,5 +59,13 @@ git("init", "-q"); writeFileSync(join(G, "a b.ts"), "export const x = 1;" + NL);
 writeFileSync(join(G, "a b.ts"), "export const x = 1;" + NL + 'const api = fetch("http://api.example.com/data");' + NL);
 const d = execFileSync(process.execPath, [CLI, "scan", ".", "--diff", "HEAD"], { cwd: G, encoding: "utf8" });
 assert.ok(d.includes("a b.ts:2"), "finding on the changed line of a path with a space");
+// Start screen: plain when piped; the Prism for a terminal (FORCE_COLOR stands in for one here); no colour with NO_COLOR.
+const start = (env) => execFileSync(process.execPath, [CLI], { encoding: "utf8", env: { ...process.env, FORCE_COLOR: "", NO_COLOR: "", ...env } });
+assert.ok(start({}).startsWith("lintsure scan"), "piped start screen is the plain command list");
+const shown = start({ FORCE_COLOR: "1" });
+assert.ok(shown.includes("█") && shown.includes("\x1b[38;2;11;110;79m") && shown.includes("lintsure scan [path]"), "terminal start screen has the Prism in brand green, then the command list");
+const plain = start({ FORCE_COLOR: "1", NO_COLOR: "1" });
+assert.ok(plain.includes("█") && !plain.includes("\x1b["), "NO_COLOR keeps the Prism and drops the colour");
+assert.equal(plain.split("\n").slice(1, 16).filter((l) => /[█▀▄]/.test(l)).length, 12, "the Prism has four bands of three lines");
 rmSync(T, { recursive: true, force: true });
 console.log("CLI setup/status smoke test passed");

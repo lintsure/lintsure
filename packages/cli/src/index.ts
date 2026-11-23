@@ -10,6 +10,30 @@ import { status, pick, setup, undo } from "./agents.js";
 import { parseActivity, toOtlp } from "./otel.js";
 import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isHygiene, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
+/** The Prism in half-block characters, to the proportions of the brand mark: four heavy bands with narrow gaps, a solid
+ *  tip, and the bottom band split into a long piece and a square. Each character holds two square pixels; `band` and
+ *  `gap` are heights in those pixels. Pure. */
+function prism(band = 6, gap = 2): string[] {
+  const SLOPE = 0.56, height = 4 * band + 3 * gap, half = Math.ceil(SLOPE * height);
+  const on = (c: number, h: number) => {
+    if (h % (band + gap) >= band || Math.abs(c - half) > SLOPE * (h + 1)) return false; // a gap, or outside the slope
+    if (h < 3 * band + 3 * gap) return true;
+    const at = (c - half + SLOPE * height) / (2 * SLOPE * height); // bottom band: long piece, gap, square
+    return at <= 0.6 || (at >= 0.72 && at <= 0.9);
+  };
+  return Array.from({ length: height / 2 }, (_, r) => Array.from({ length: 2 * half + 1 }, (_, c) => { const t = on(c, 2 * r), b = on(c, 2 * r + 1); return t && b ? "█" : t ? "▀" : b ? "▄" : " "; }).join(""));
+}
+/** Start screen for a person at a terminal: the Prism in brand green beside the name, version and first commands.
+ *  NO_COLOR is respected; the old Windows console, which can't draw the blocks, gets the name and version only. */
+function banner(env = process.env): string {
+  if (process.platform === "win32" && !env.WT_SESSION && !env.TERM_PROGRAM && !env.ConEmuANSI && !env.FORCE_COLOR) return `Lintsure ${RULES_VERSION}\n`;
+  const color = !env.NO_COLOR && env.TERM !== "dumb";
+  const paint = (code: string, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
+  const text = [`${paint("1", "Lintsure")}${paint("2", `  ${RULES_VERSION}`)}`, "Keep your AI agents on track and in context.", "", paint("2", "lintsure scan      check this project"), paint("2", "lintsure status    is everything set up?"), paint("2", "lintsure setup     connect your coding agent")];
+  const mark = prism(), width = Math.max(...mark.map((l) => l.length)), top = Math.floor((mark.length - text.length) / 2);
+  return "\n" + mark.map((l, i) => (paint("38;2;11;110;79", l.padEnd(width)) + "    " + (text[i - top] ?? "")).trimEnd()).join("\n") + "\n";
+}
+
 const HELP = `lintsure scan [path] [options]
 lintsure baseline [path]
 lintsure init [path]     Three questions, saved to lintsure.config.yaml
@@ -157,7 +181,8 @@ async function main(argv: string[]) {
     return raw.includes("--undo") ? undo(root, agents) : setup(root, agents, raw.includes("--yes"));
   }
   if (cmd === "init" || cmd === "info") return (cmd === "init" ? init : info)(resolve(raw.find((a) => !a.startsWith("--")) ?? "."));
-  if (cmd !== "scan" && cmd !== "baseline") { console.log(HELP); return cmd ? 2 : 0; }
+  // The start screen is for a person at a terminal. Piped output and CI logs stay exactly as they were.
+  if (cmd !== "scan" && cmd !== "baseline") { if (!cmd && (process.stdout.isTTY || process.env.FORCE_COLOR)) console.log(banner()); console.log(HELP); return cmd ? 2 : 0; }
   const parsed = parseArgs(raw);
   if ("error" in parsed) { console.error(parsed.error); return 2; }
   const { rest } = parsed;
@@ -221,6 +246,7 @@ async function main(argv: string[]) {
   console.log(`${open.length ? "!" : "✓"} ${open.length} open findings${hygiene ? ` (${open.length - hygiene} in the code, ${hygiene} repo hygiene)` : ""} · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
   console.log(`  Read ${report.filesChecked} file${report.filesChecked === 1 ? "" : "s"}${report.filesSkipped ? `, skipped ${report.filesSkipped} (over 1 MB, binary or unreadable)` : ""}`);
   if (report.diffBase) console.log(`  Only lines changed since ${report.diffBase}`);
+  { const far = open.filter((f) => f.reach?.status === "unreachable" && !isHygiene(f)).length; if (far) console.log(`  ${far} of the findings in the code ${far === 1 ? "is" : "are"} in files no route or entry point reaches (ranked lower in the report)`); }
   if (report.held) console.log(`  ${report.held} more at medium confidence: run with --all to see ${report.held === 1 ? "it" : "them"}`);
   if (report.baseline) console.log(`  Since the baseline of ${report.baseline.created}: ${report.baseline.newCount} new, ${report.baseline.fixed.length} fixed, ${report.baseline.unchangedCount} unchanged`);
   // Findings in the code first; repo hygiene under its own label (sort is stable, so file order holds within each group).

@@ -1,6 +1,6 @@
 {
   "name": "lintsure",
-  "version": "0.3.14",
+  "version": "0.3.15",
   "description": "Keep your AI coding agents on track: checks the code Claude Code, Cursor and Codex write for secrets, open databases and unsafe patterns, mapped to OWASP, GDPR and the EU AI Act. Runs locally. Not an audit or legal advice.",
   "license": "Apache-2.0",
   "type": "module",
@@ -13,7 +13,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@lintsure/core": "0.3.14"
+    "@lintsure/core": "0.3.15"
   },
   "author": "Lintsure <hello@lintsure.com>",
   "homepage": "https://lintsure.com/docs",

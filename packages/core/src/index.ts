@@ -25,7 +25,7 @@ export { loadPacks, registerPack, type Pack } from "./packs.js";
 export { checksFor } from "./plan.js";
 import { configPacks, loadPacks, packFrameworks, packsLoaded } from "./packs.js";
 import { buildGraph, declaredEntries, reachOf } from "./reach.js";
-export const RULES_VERSION = "0.3.14";
+export const RULES_VERSION = "0.3.15";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -229,6 +229,37 @@ export function localMaskers(lines: string[]): string[] {
     const m = /^\s*(?:export\s+)?(?:async\s+)?(?:def|function)\s+(\w+)\s*\(|^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?\(/.exec(l);
     return m && lines.slice(i + 1, i + 13).some((x) => MASKED.test(x)) ? [m[1] ?? m[2]] : [];
   });
+}
+/** The names a file imports, with the project file each comes from: JS/TS `import { a as b } from "./x"` and
+ *  `const { a } = require("./x")`, Python `from pkg.mod import a as b`. Packages and unresolved paths are left out. Pure.
+ *  shortcut: relative paths, "@/" as src/ or the root, and Python modules by path ending; tsconfig aliases are not read here. */
+export function importedNames(file: string, text: string, files: Set<string>, byEnding?: (ending: string) => string | undefined): { local: string; name: string; from: string }[] {
+  const dir = file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : "";
+  const norm = (p: string) => { const out: string[] = []; for (const s of p.split("/")) { if (s === "..") out.pop(); else if (s && s !== ".") out.push(s); } return out.join("/"); };
+  const names = (list: string, sep: RegExp) => list.split(",").map((x) => x.trim().replace(/^type\s+/, "")).filter(Boolean).map((x) => { const [name, local] = x.split(sep).map((y) => y.trim()); return { name, local: local ?? name }; });
+  const out: { local: string; name: string; from: string }[] = [];
+  if (/\.py$/.test(file)) {
+    for (const m of text.matchAll(/^[ \t]*from[ \t]+(\.*)([\w.]*)[ \t]+import[ \t]+(?:\(([^)]*)\)|([^#\n]+))/gm)) {
+      const mod = m[2].split(".").filter(Boolean).join("/");
+      const base = m[1] ? norm(`${dir}/${"../".repeat(m[1].length - 1)}${mod}`) : mod;
+      if (!base) continue;
+      const ends = [`${base}.py`, `${base}/__init__.py`];
+      const find = byEnding ?? ((e: string) => { for (const f of files) if (f === e || f.endsWith("/" + e)) return f; return undefined; });
+      const from = m[1] ? ends.find((e) => files.has(e)) : ends.map(find).find(Boolean);
+      if (from) for (const n of names(m[3] ?? m[4], /\s+as\s+/)) out.push({ ...n, from });
+    }
+    return out;
+  }
+  const resolve = (spec: string) => {
+    const bases = spec.startsWith(".") ? [norm(`${dir}/${spec}`)] : spec.startsWith("@/") ? [`src/${spec.slice(2)}`, spec.slice(2)] : [];
+    for (const b of bases) for (const c of [b, b.replace(/\.js$/, ".ts"), ...[".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].flatMap((e) => [b + e, `${b}/index${e}`])]) if (files.has(c)) return c;
+    return null;
+  };
+  for (const m of text.matchAll(/\bimport\s*(?:type\s*)?\{([^}]*)\}\s*from\s*["']([^"'\n]+)["']|\b(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*["']([^"'\n]+)["']\s*\)/g)) {
+    const from = resolve(m[2] ?? m[4]);
+    if (from) for (const n of names(m[1] ?? m[3], m[1] != null ? /\s+as\s+/ : /\s*:\s*/)) out.push({ ...n, from });
+  }
+  return out;
 }
 const TOOLING_RULES = new Set(["agent.config-runs-remote-code", "agent.instructions-unsafe", "agent.permissions-allow-all"]);
 // Lines a person already reviewed. lintsure-ignore and the secret allowlist pragma count only in a comment and apply
@@ -512,6 +543,25 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       || (r.extensions.includes(ext) && (!r.fileName || r.fileName.test(name)) && (!r.pathMatch || r.pathMatch.test(file)) && !r.unlessPath?.test(file)));
   });
   for (let i = 0; i < needed.length; i += 32) await Promise.all(needed.slice(i, i + 32).map(textOf));
+  // One hop across files for masking helpers: a helper imported from another project file masks if it does so where it
+  // is defined (0.3.14 review: logs through an imported pseudonym helper were false alarms).
+  const absOf = new Map(paths.map((p, k) => [p, all[k]] as const)), pathSet = new Set(paths);
+  const maskersIn = new Map<string, Promise<string[]>>();
+  // Every path ending of every Python file, built on first use, so `from a.b import c` is one lookup, not a search.
+  let endings: Map<string, string> | undefined;
+  const byEnding = (e: string) => {
+    if (!endings) { endings = new Map(); for (const p of paths) if (p.endsWith(".py")) { const s = p.split("/"); for (let i = 0; i < s.length; i++) { const k = s.slice(i).join("/"); if (!endings.has(k)) endings.set(k, p); } } }
+    return endings.get(e);
+  };
+  const importedMaskers = async (file: string, text: string) => {
+    const got: string[] = [];
+    for (const im of importedNames(file, text, pathSet, byEnding)) {
+      let m = maskersIn.get(im.from);
+      if (!m) { m = textOf(absOf.get(im.from)!).then((t) => (t ? localMaskers(t.split(/\r?\n/)) : [])); maskersIn.set(im.from, m); }
+      if ((await m).includes(im.name)) got.push(im.local);
+    }
+    return got;
+  };
   // Say what was not read, so "no findings" is never read as "checked everything".
   let filesSkipped = 0;
   for (const abs of needed) if ((await textOf(abs)) === null) filesSkipped++;
@@ -566,7 +616,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     const comment = commentLines(lines, ext), example = exampleLines(lines, ext);
     let tainted: Map<string, number> | undefined;
     let maskers: string[] | undefined;
-    const viaMasker = (text: string) => (maskers ??= localMaskers(lines)).some((n) => text.includes(n + "("));
+    const fromOtherFiles = relevant.some((r) => r.id === "pii.logged") && /e-?mail|phone|passw|\bssn\b|birth|\bdob\b|card|iban|passport/i.test(whole) && /\b(import|require)\b/.test(whole) ? await importedMaskers(file, whole) : [];
+    const viaMasker = (text: string) => (maskers ??= [...localMaskers(lines), ...fromOtherFiles]).some((n) => text.includes(n + "("));
     // Statements are worked out once per file, on lines with comments blanked.
     const stmts = JOINABLE.has(ext) ? statements(lines.map((l, i) => (comment[i] ? "" : l)), ext === ".py") : [];
     const multi = stmts.filter((s) => s.end > s.start);
@@ -747,7 +798,9 @@ export function toMarkdown(r: Report): string {
   if (r.baseline) lines.splice(lines.length - 2, 0, `Since the baseline of ${r.baseline.created}: ${r.baseline.newCount} new, ${r.baseline.fixed.length} fixed, ${r.baseline.unchangedCount} unchanged.`, "");
   if (r.findings.length === hygiene.length) lines.push(hygiene.length ? "No findings in the code from the current rules. Repo hygiene items follow." : "No issues found by the current rules.", "");
   // Fix first: Gaps before Partials, then by severity; file order within each group.
-  const rank = (f: Finding) => (isHygiene(f) ? 6 : 0) + (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity];
+  // Within the same status and risk level, code that no route, handler or entry point reaches comes after code that is
+  // reached. A tie-break only: reachability misses dynamic imports, so it never hides or demotes a finding across levels.
+  const rank = (f: Finding) => (isHygiene(f) ? 6 : 0) + (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity] + (f.reach?.status === "unreachable" ? 0.5 : 0);
   const sorted = [...r.findings].sort((a, b) => rank(a) - rank(b));
   for (const f of sorted) lines.push(
     ...(f === sorted[r.findings.length - hygiene.length] ? [`## Repo hygiene (${hygiene.length})`, "", "Housekeeping for the repo, not flaws in the code. Findings in the code come first.", ""] : []),
