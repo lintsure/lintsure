@@ -13,6 +13,8 @@ writeFileSync(new URL("rules.md", dir), head(`Lintsure rules (${core.rules.lengt
   `## ${r.id}`, `**${r.title}** · status when found: ${r.status} · risk: ${r.severity}${r.confidence === "medium" ? " · medium confidence (shown with --all)" : ""}`, "",
   `- Controls: ${r.controls.map((c) => `${c.framework} ${c.id} (${c.title})`).join("; ")}`,
   `- Fix: ${r.fix}`, `- Note: ${r.note}`,
+  `- Real only when: ${core.verifyFor(r.id).real.join(" ")}`,
+  `- Not a problem when: ${core.verifyFor(r.id).notReal.join(" ")}`,
   ...(r.unseen ? [`- When Partial, Lintsure can't see: ${r.unseen}`] : []),
   ...(r.seenIn ?? []).map((s) => `- Seen in a real incident: ${s.title} (${s.url})`),
   `- Page: https://lintsure.com/rules/${r.id.replace(/\./g, "-")}`, "",

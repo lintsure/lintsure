@@ -38,6 +38,7 @@ for (const [name, args] of calls) {
   const body = texts.join(" ").split(NOT_A_VERDICT).join("").split(DISCLAIMER).join("");
   if (FORBIDDEN_CLAIMS.some((re) => re.test(body))) fail(`${name} reply reads like a verdict`);
   if ((name === "scan" || name === "explain_rule") && !texts.join(" ").includes(APPROVAL_RULES)) fail(`${name} reply misses the approval rules`);
+  if (name === "explain_rule" && !texts.join(" ").includes("Call it real only when all of these hold:")) fail("explain_rule reply misses the review checklist");
   if (name === "classify" && Object.keys(args).length === 0 && !/Ask the user these questions[\s\S]*- digitalProductEU:/.test(texts.join(" "))) fail("classify with no answers should return every question");
   if (name === "classify" && args.digitalProductEU && !texts.join(" ").includes("Cyber Resilience Act")) fail("classify should suggest the Cyber Resilience Act");
   console.log("ok", name);

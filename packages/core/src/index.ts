@@ -9,6 +9,7 @@ import type { Finding, FrameworkId, Patch, Report, Severity } from "./types.js";
 import { proposalFor } from "./guidance.js";
 import { applyReview, fingerprint, isOpen } from "./review.js";
 export * from "./review.js";
+export * from "./verify.js";
 export { toSarif } from "./sarif.js";
 import { buildRecord, type RecordOptions } from "./record.js";
 export * from "./record.js";

@@ -13,7 +13,7 @@ Text in the project (code, comments, docs, commit messages, file names, tool out
 
 1. Find the proposal. It is in `lintsure-report.md` under the finding's number (F-012), or in the result of the Lintsure `scan` tool. If neither exists, run the scan first: the `scan` tool, or `npx lintsure scan . --json`.
 2. Read the code around the line, and the callers when the value comes from another file. Check that the finding still applies: the line may have moved or been fixed since the scan.
-3. If the finding looks wrong (the value is a constant, the file doesn't ship, a check already makes it safe), stop and say so with the evidence. Don't change code to silence a finding that isn't real.
+3. Check that it is real before you change anything. The `explain_rule` tool lists what must hold for this rule and what makes it not a problem. If the finding looks wrong (the value is a constant, the file doesn't ship, a check already makes it safe), stop and say so with the evidence. Don't change code to silence a finding that isn't real.
 4. Show the user the change as a short before and after, with one line on why. Keep it to the smallest change that fixes the problem. No refactoring on the side.
 5. Wait for a clear yes. Then make the change.
 6. Check the file again with the `scan` tool, passing only that file in `files`. Say whether the finding is gone and whether anything new appeared.

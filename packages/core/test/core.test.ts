@@ -1261,3 +1261,13 @@ test("an admin endpoint is judged with the project's middleware", async () => {
   for (const guard of ["await requireAdminAuthAPI(req);", "return adminHandler(req, async () => {", "if (session.user.role !== 'admin') return res.status(403).end();"])
     assert.deepEqual(adminRouteNoCheck([open[0], "  " + guard, open[1], open[2]]), []);
 });
+
+test("every rule says what makes a finding real", async () => {
+  const { verifyFor, verifyText, VERIFY_IDS } = await import("../src/verify.js");
+  for (const r of rules) { const v = verifyFor(r.id); assert.ok(v.real.length >= 2 && v.notReal.length >= 2, `${r.id} needs both lists`); }
+  for (const id of VERIFY_IDS) assert.ok(rules.some((r) => r.id === id), `${id} has a checklist but is not a rule`);
+  // A rule with its own list gets it; one without gets the list for its kind, never the catch-all by accident.
+  assert.match(verifyText("pii.logged"), /masks or hashes the value first/);
+  assert.match(verifyText("xss.raw-html"), /comes from outside your code/);
+  assert.match(verifyText("skill.unrestricted-shell"), /An agent or model will read or run this/);
+});
