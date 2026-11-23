@@ -63,7 +63,24 @@ assert.ok(d.includes("a b.ts:2"), "finding on the changed line of a path with a 
 const start = (env) => execFileSync(process.execPath, [CLI], { encoding: "utf8", env: { ...process.env, FORCE_COLOR: "", NO_COLOR: "", ...env } });
 assert.ok(start({}).startsWith("lintsure scan"), "piped start screen is the plain command list");
 const shown = start({ FORCE_COLOR: "1" });
-assert.ok(shown.includes("█") && shown.includes("\x1b[38;2;11;110;79m") && shown.includes("lintsure scan [path]"), "terminal start screen has the Prism in brand green, then the command list");
+assert.ok(shown.includes("█") && shown.includes("\x1b[38;2;11;110;79m") && shown.includes("lintsure --help") && !shown.includes("scan options:"), "terminal start screen has the Prism in brand green and the short list, not the manual");
+assert.ok(run("--help").startsWith("lintsure scan") && run("--help").includes("scan options:"), "--help prints the full manual and exits 0");
+// Scan output: grouped and ruled for a terminal, one line per finding when piped (other tools read that form).
+const SAMPLE = fileURLToPath(new URL("../fixtures/sample-app", import.meta.url));
+const scanOut = (env) => execFileSync(process.execPath, [CLI, "scan", SAMPLE], { cwd: T, encoding: "utf8", env: { ...process.env, FORCE_COLOR: "", NO_COLOR: "", ...env } });
+assert.ok(/^gap +\.claude\/settings\.json:4  /m.test(scanOut({})), "piped scan keeps status, file:line and title on one line");
+const term = scanOut({ FORCE_COLOR: "1", NO_COLOR: "1" });
+assert.ok(/── Findings in the code \(\d+\) ─+/.test(term) && /── Repo hygiene: [^\n]+\(\d+\) ─+/.test(term) && /\n  \.claude\/settings\.json\n    GAP +4  /.test(term), "terminal scan groups findings under ruled headings, by file");
+assert.ok(/Run next:\n {4}Also show the \d+ held-back findings +lintsure scan "?[^"\n]+"? --all\n/.test(term) && term.includes("lintsure baseline") && !scanOut({}).includes("Run next"), "terminal scan ends with the commands to run next; piped output does not");
+assert.ok(!term.includes("\x1b[") && term.trimEnd().split("\n").slice(-4).every((l) => l.length <= 100), "NO_COLOR drops colour; the closing note is wrapped at word ends");
+// A command typed with dashes gets a hint, not the manual.
+try { run("--scan"); assert.fail("unknown command should exit 2"); } catch (e) { assert.equal(e.status, 2); assert.ok(String(e.stderr).includes("Did you mean: lintsure scan") && !String(e.stdout).includes("scan options:")); }
+assert.match(run("--version"), /^\d+\.\d+\.\d+\s*$/);
+// The menu's pure parts: arrows wrap, Home and End jump, the chosen row is marked with or without colour.
+const { moved, frame } = await import(new URL("../packages/cli/dist/src/menu.js", import.meta.url).href);
+assert.deepEqual([moved("down", 0, 5), moved("down", 4, 5), moved("up", 0, 5), moved("end", 1, 5), moved("home", 3, 5), moved("x", 2, 5)], [1, 0, 4, 4, 0, 2]);
+assert.deepEqual(frame(["a", "b"], 1, false), ["    a", "  > b"]);
+assert.ok(frame(["a", "b"], 0, true)[0].includes("\x1b[1ma"), "chosen row is bold in colour");
 const plain = start({ FORCE_COLOR: "1", NO_COLOR: "1" });
 assert.ok(plain.includes("█") && !plain.includes("\x1b["), "NO_COLOR keeps the Prism and drops the colour");
 assert.equal(plain.split("\n").slice(1, 16).filter((l) => /[█▀▄]/.test(l)).length, 12, "the Prism has four bands of three lines");

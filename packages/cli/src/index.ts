@@ -10,6 +10,8 @@ import { status, pick, setup, undo } from "./agents.js";
 import { parseActivity, toOtlp } from "./otel.js";
 import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isHygiene, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
+import { choose } from "./menu.js";
+
 /** The Prism in half-block characters, to the proportions of the brand mark: four heavy bands with narrow gaps, a solid
  *  tip, and the bottom band split into a long piece and a square. Each character holds two square pixels; `band` and
  *  `gap` are heights in those pixels. Pure. */
@@ -29,10 +31,22 @@ function banner(env = process.env): string {
   if (process.platform === "win32" && !env.WT_SESSION && !env.TERM_PROGRAM && !env.ConEmuANSI && !env.FORCE_COLOR) return `Lintsure ${RULES_VERSION}\n`;
   const color = !env.NO_COLOR && env.TERM !== "dumb";
   const paint = (code: string, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
-  const text = [`${paint("1", "Lintsure")}${paint("2", `  ${RULES_VERSION}`)}`, "Keep your AI agents on track and in context.", "", paint("2", "lintsure scan      check this project"), paint("2", "lintsure status    is everything set up?"), paint("2", "lintsure setup     connect your coding agent")];
+  const text = [`${paint("1", "Lintsure")}${paint("2", `  ${RULES_VERSION}`)}`, "Keep your AI agents on track and in context.", "", paint("2", "Everything stays on this machine.")];
   const mark = prism(), width = Math.max(...mark.map((l) => l.length)), top = Math.floor((mark.length - text.length) / 2);
   return "\n" + mark.map((l, i) => (paint("38;2;11;110;79", l.padEnd(width)) + "    " + (text[i - top] ?? "")).trimEnd()).join("\n") + "\n";
 }
+
+// What the start menu offers, in the order a new user needs them. `run` is the command line it stands for.
+const START: { label: string; run: string[] | null }[] = [
+  { label: "Check this project", run: ["scan"] },
+  { label: "Is everything set up?", run: ["status"] },
+  { label: "Connect your coding agent", run: ["setup"] },
+  { label: "Every command and option", run: ["--help"] },
+  { label: "Quit", run: null },
+];
+// True once a command was picked from the start menu: that person is using menus, so a scan ends with one too.
+let viaMenu = false;
+const startRows = () => START.map((s) => (s.run ? `${s.label.padEnd(28)}lintsure ${s.run.join(" ")}` : s.label));
 
 const HELP = `lintsure scan [path] [options]
 lintsure baseline [path]
@@ -160,7 +174,7 @@ export function parseArgs(argv: string[]): { rest: string[] } | { error: string 
   return { rest };
 }
 
-async function main(argv: string[]) {
+async function main(argv: string[]): Promise<number> {
   const [cmd, ...raw] = argv;
   if (cmd === "export") {
     if (!raw.includes("--otlp-json")) { console.error("Choose a format: lintsure export --otlp-json [path]"); return 2; }
@@ -182,7 +196,24 @@ async function main(argv: string[]) {
   }
   if (cmd === "init" || cmd === "info") return (cmd === "init" ? init : info)(resolve(raw.find((a) => !a.startsWith("--")) ?? "."));
   // The start screen is for a person at a terminal. Piped output and CI logs stay exactly as they were.
-  if (cmd !== "scan" && cmd !== "baseline") { if (!cmd && (process.stdout.isTTY || process.env.FORCE_COLOR)) console.log(banner()); console.log(HELP); return cmd ? 2 : 0; }
+  // With no command, a person at a terminal gets the start screen: a menu when keys can be read, a short list when
+  // they can't. Piped output and CI logs get the full help text, exactly as before.
+  if (!cmd && (process.stdout.isTTY || process.env.FORCE_COLOR)) {
+    console.log(banner());
+    if (!process.stdin.isTTY || !process.stdout.isTTY) { console.log(startRows().slice(0, -1).map((r) => `    ${r}`).join("\n") + "\n"); return 0; }
+    const pick = await choose(startRows(), "    Up and Down to move, Enter to run, q to quit", !process.env.NO_COLOR && process.env.TERM !== "dumb");
+    const run = pick === null ? null : START[pick].run;
+    if (run) viaMenu = true;
+    return run ? main(run) : 0;
+  }
+  if (cmd === "--version" || cmd === "-v") { console.log(RULES_VERSION); return 0; }
+  if (cmd !== "scan" && cmd !== "baseline") {
+    if (!cmd || ["--help", "-h", "help"].includes(cmd)) { console.log(HELP); return 0; }
+    // A command typed with dashes (lintsure --scan) or misspelt: say what was meant, not the whole manual.
+    const bare = cmd.replace(/^-+/, "");
+    console.error(`Unknown command: ${cmd}${["scan", "baseline", "init", "info", "setup", "status", "export"].includes(bare) ? `\nDid you mean: lintsure ${bare}` : ""}\nRun lintsure --help for every command and option.`);
+    return 2;
+  }
   const parsed = parseArgs(raw);
   if ("error" in parsed) { console.error(parsed.error); return 2; }
   const { rest } = parsed;
@@ -251,7 +282,31 @@ async function main(argv: string[]) {
   if (report.baseline) console.log(`  Since the baseline of ${report.baseline.created}: ${report.baseline.newCount} new, ${report.baseline.fixed.length} fixed, ${report.baseline.unchangedCount} unchanged`);
   // Findings in the code first; repo hygiene under its own label (sort is stable, so file order holds within each group).
   const listed = [...report.findings].sort((a, b) => +isHygiene(a) - +isHygiene(b));
-  for (const f of listed) console.log(`${f === listed.find(isHygiene) ? "Repo hygiene (housekeeping, not flaws in the code):\n" : ""}${(f.accepted && !f.accepted.expired ? "accepted" : f.status).padEnd(8)} ${f.file}:${f.line}  ${f.title}${f.change === "new" ? "  (new)" : ""}`);
+  // For a person at a terminal the findings stand apart from the summary and the notes: a ruled heading per group, each
+  // file on its own line, and the status in colour. Piped output keeps one line per finding, which other tools read.
+  const pretty = (process.stdout.isTTY || !!process.env.FORCE_COLOR) && !rest.includes("--github");
+  const color = pretty && !process.env.NO_COLOR && process.env.TERM !== "dumb";
+  const paint = (code: string, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
+  const width = Math.min(process.stdout.columns || 100, 100);
+  // The old Windows console can't draw line characters reliably, so it gets plain dashes.
+  const dash = process.platform === "win32" && !process.env.WT_SESSION && !process.env.TERM_PROGRAM && !process.env.ConEmuANSI && !process.env.FORCE_COLOR ? "-" : "─";
+  const ruled = (title: string) => `\n${paint("1", `${dash}${dash} ${title} `)}${paint("2", dash.repeat(Math.max(3, width - title.length - 4)))}`;
+  const group = (title: string, items: typeof listed) => {
+    if (!items.length) return;
+    console.log(ruled(`${title} (${items.length})`));
+    let file = "";
+    for (const f of items) {
+      if (f.file !== file) { file = f.file; console.log(`\n  ${paint("1", file)}`); }
+      const status = f.accepted && !f.accepted.expired ? "accepted" : f.status;
+      const badge = status === "gap" ? paint("1;31", "GAP     ") : status === "partial" ? paint("33", "PARTIAL ") : paint("2", "ACCEPTED");
+      console.log(`    ${badge} ${paint("2", String(f.line).padStart(5))}  ${f.title}${f.change === "new" ? paint("36", "  (new)") : ""}`);
+    }
+  };
+  if (pretty) {
+    group("Findings in the code", listed.filter((f) => !isHygiene(f)));
+    group("Repo hygiene: housekeeping, not flaws in the code", listed.filter(isHygiene));
+    console.log(ruled("What next") + "\n");
+  } else for (const f of listed) console.log(`${f === listed.find(isHygiene) ? "Repo hygiene (housekeeping, not flaws in the code):\n" : ""}${(f.accepted && !f.accepted.expired ? "accepted" : f.status).padEnd(8)} ${f.file}:${f.line}  ${f.title}${f.change === "new" ? "  (new)" : ""}`);
   if (rest.includes("--github")) for (const f of open) {
     const msg = `${f.title}. Proposed change, needs your approval: ${f.proposal.what}`.replace(/%/g, "%25").replace(/\r?\n/g, " ");
     console.log(`::${f.status === "gap" ? "error" : "warning"} file=${f.file},line=${f.line},title=Lintsure ${f.ruleId}::${msg}`);
@@ -260,8 +315,29 @@ async function main(argv: string[]) {
   if (rest.includes("--report")) console.log("Assessment saved to lintsure-assessment.html (open it in a browser to read, print or save as PDF). It is a draft until a qualified person reviews and signs it.");
   console.log("\nNext steps:");
   nextSteps(report).forEach((x, i) => console.log(`  ${i + 1}. ${x}`));
-  console.log(`\n${DISCLAIMER}`);
+  // The steps above say what to decide. These are the commands that act on this scan, written out so they can be
+  // copied; only the ones that apply are listed.
+  const given = rest.find((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1]));
+  const here = given ? [given] : [];
+  const follow: { label: string; run: string[] }[] = [
+    ...(report.held ? [{ label: `Also show the ${report.held} held-back finding${report.held === 1 ? "" : "s"}`, run: ["scan", ...here, "--all"] }] : []),
+    ...(open.length && !report.baseline ? [{ label: "Remember these, so later scans show only what is new", run: ["baseline", ...here] }] : []),
+    ...(rest.includes("--report") ? [] : [{ label: "Write a printable assessment", run: ["scan", ...here, "--report"] }]),
+    { label: "Connect your coding agent, then ask it to fix one", run: ["setup", ...here] },
+  ];
+  // A folder with a space in its name is quoted, so the line can be pasted as it is.
+  const followRows = follow.map((f) => `${f.label.padEnd(54)}lintsure ${f.run.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`);
+  const asMenu = viaMenu && !!process.stdin.isTTY && !!process.stdout.isTTY;
+  if (pretty && !asMenu) console.log(`\nRun next:\n${followRows.map((r) => `    ${r}`).join("\n")}`);
+  // In a terminal the closing note is dimmed and wrapped at word ends, so it reads as a footnote and never splits a word.
+  const wrap = (t: string) => t.split("\n").map((p) => p.replace(new RegExp(`(.{1,${width - 2}})(\\s+|$)`, "g"), "$1\n").trimEnd()).join("\n");
+  console.log(`\n${pretty ? paint("2", wrap(DISCLAIMER)) : DISCLAIMER}`);
 
+  if (asMenu) {
+    console.log("\nRun next:");
+    const pick = await choose([...followRows, "Quit"], "    Up and Down to move, Enter to run, q to quit", color);
+    if (pick !== null && pick < follow.length) return main(follow[pick].run);
+  }
   const failOn = flag("--fail-on")?.toLowerCase();
   const counted = rest.includes("--new-only") && report.baseline ? open.filter((f) => f.change === "new") : open;
   if (failOn === "gap" && counted.some((f) => f.status === "gap")) return 1;
