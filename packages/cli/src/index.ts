@@ -8,7 +8,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { status, pick, setup, undo } from "./agents.js";
 import { parseActivity, toOtlp } from "./otel.js";
-import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
+import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isHygiene, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
 const HELP = `lintsure scan [path] [options]
 lintsure baseline [path]
@@ -215,14 +215,17 @@ async function main(argv: string[]) {
   const open = report.findings.filter(isOpen);
   const n = (s: string) => open.filter((f) => f.status === s).length;
   const accepted = report.findings.length - open.length;
+  const hygiene = open.filter(isHygiene).length;
   if (report.record) console.log(`Record ${report.record.id} · ${report.record.createdAt.replace("T", " ").slice(0, 16)} UTC · ${report.record.counts.checkPoints} check points${report.policy ? ` · Policy #${report.policy.fingerprint}` : ""}`);
   // A check mark only when nothing is open: "✓ 3 gaps" read as a pass.
-  console.log(`${open.length ? "!" : "✓"} ${open.length} open findings · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
+  console.log(`${open.length ? "!" : "✓"} ${open.length} open findings${hygiene ? ` (${open.length - hygiene} in the code, ${hygiene} repo hygiene)` : ""} · ${n("gap")} gap · ${n("partial")} partial${accepted ? ` · ${accepted} accepted` : ""} · ${report.met.length} rules met · ${report.outside.length} outside code`);
   console.log(`  Read ${report.filesChecked} file${report.filesChecked === 1 ? "" : "s"}${report.filesSkipped ? `, skipped ${report.filesSkipped} (over 1 MB, binary or unreadable)` : ""}`);
   if (report.diffBase) console.log(`  Only lines changed since ${report.diffBase}`);
   if (report.held) console.log(`  ${report.held} more at medium confidence: run with --all to see ${report.held === 1 ? "it" : "them"}`);
   if (report.baseline) console.log(`  Since the baseline of ${report.baseline.created}: ${report.baseline.newCount} new, ${report.baseline.fixed.length} fixed, ${report.baseline.unchangedCount} unchanged`);
-  for (const f of report.findings) console.log(`${(f.accepted && !f.accepted.expired ? "accepted" : f.status).padEnd(8)} ${f.file}:${f.line}  ${f.title}${f.change === "new" ? "  (new)" : ""}`);
+  // Findings in the code first; repo hygiene under its own label (sort is stable, so file order holds within each group).
+  const listed = [...report.findings].sort((a, b) => +isHygiene(a) - +isHygiene(b));
+  for (const f of listed) console.log(`${f === listed.find(isHygiene) ? "Repo hygiene (housekeeping, not flaws in the code):\n" : ""}${(f.accepted && !f.accepted.expired ? "accepted" : f.status).padEnd(8)} ${f.file}:${f.line}  ${f.title}${f.change === "new" ? "  (new)" : ""}`);
   if (rest.includes("--github")) for (const f of open) {
     const msg = `${f.title}. Proposed change, needs your approval: ${f.proposal.what}`.replace(/%/g, "%25").replace(/\r?\n/g, " ");
     console.log(`::${f.status === "gap" ? "error" : "warning"} file=${f.file},line=${f.line},title=Lintsure ${f.ruleId}::${msg}`);

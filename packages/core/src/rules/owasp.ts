@@ -7,7 +7,7 @@ const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 const MARKUP = [...CODE, ".html", ".vue", ".svelte", ".astro", ".jinja", ".j2"];
 const YAML = [".yml", ".yaml"];
 // Files whose commands an agent or editor runs by itself: Claude Code settings, MCP server lists, Cursor, VS Code, Gemini CLI.
-const AGENT_CONFIG = /(^|\/)(\.claude\/settings(\.local)?\.json|\.mcp\.json|\.cursor\/(mcp|hooks)\.json|\.vscode\/(tasks|mcp)\.json|\.gemini\/settings\.json)$/;
+export const AGENT_CONFIG = /(^|\/)(\.claude\/settings(\.local)?\.json|\.mcp\.json|mcp\.json|claude_desktop_config\.json|\.windsurf\/mcp_config\.json|\.roo\/mcp\.json|\.cursor\/(mcp|hooks)\.json|\.vscode\/(tasks|mcp)\.json|\.gemini\/settings\.json)$/;
 // Download-and-run shapes: piped into a shell, run from $( ), process substitution, base64 into a shell, encoded PowerShell,
 // and download-then-execute chains.
 const RUNS_REMOTE = new RegExp([
@@ -23,12 +23,28 @@ const AGENT_INSTRUCTIONS = /(^|\/)(SKILL\.md|AGENTS\.md|CLAUDE\.md|GEMINI\.md|\.
 const OVERRIDE = /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+)?(of\s+)?(your\s+|the\s+)?(previous|prior|above|earlier|system|original|user'?s?)\s+(instructions|rules|prompts?|messages|guidelines)\b/i;
 const CONCEAL = /\b(do not|don'?t|never)\s+(tell|inform|mention|show|reveal|disclose)\s+(this\s+|it\s+|anything\s+)?(to\s+)?the\s+user\b|\bwithout\s+(telling|informing)\s+the\s+user\b/i;
 // A line that says a download-and-run is blocked or forbidden describes a guard, it doesn't ask for one.
-const FORBIDS = /\b(block(ed|s)?|forbid(den)?|never run|don'?t run|do not run|not allowed|denied)\b/i;
+const FORBIDS = /\b(block(ed|s)?|forbid(den)?|never run|don'?t run|do not run|not allowed|denied|avoid|unsafe|dangerous|executes whatever)\b|\(via\s/i;
 const EXFIL = /\b(curl|wget|Invoke-WebRequest|iwr|fetch)\b.*(\s-d\b|--data|--upload-file|\s-F\b|\s-T\b|-Method\s+Post|method:\s*["']POST).*(\.env\b|\.ssh|id_rsa|\.aws\/credentials|\$\{?[A-Z_]*(KEY|TOKEN|SECRET|PASSWORD)\b)/i;
 // A line that names the attack to warn about it ("if a page says 'ignore previous instructions', don't follow it") is advice.
 const WARNS = /["'`“”]|\b(if|when|e\.g\.|for example|such as|treat .* as data|never follow|don'?t follow|do not follow|watch out|be careful)\b/i;
-/** Agent instruction line: Gap for override, concealment or sending secrets out; Partial for download-and-run. Pure. */
+// Text a person can't see but a model reads: Unicode tag characters, direction overrides, or a run of zero-width characters.
+// One zero-width joiner inside an emoji is normal, and a flag emoji carries tag characters on purpose, so neither counts.
+const HIDDEN = /[\u{E0020}-\u{E007F}]|[\u202A-\u202E\u2066-\u2069]|[\u200B-\u200D\u2060\uFEFF]{3,}/u;
+/** True when a line carries text hidden from a human reader. Pure. */
+export const hiddenText = (l: string) => HIDDEN.test(l.replace(/\u{1F3F4}[\u{E0020}-\u{E007F}]+/gu, ""));
+/** Text inside an MCP server's source that talks to the model instead of describing a tool: an override, an order to keep
+ *  something from the user, an <important> block, an order to read key files, or hidden characters. Pure. */
+// Chat-template markers that only make sense to a model: <important>, <system>, [SYSTEM], [INST], <<SYS>>, <|im_start|>.
+// The bracket forms count in capitals only: items[system] is ordinary code.
+const MODEL_TAG = { test: (l: string) => /<\s*\/?\s*(important|system)\s*>|<\|(im_start|im_end|system)\|>/i.test(l) || /\[\/?(SYSTEM|INST)\]|<<\s*\/?SYS\s*>>/.test(l) };
+// Prose telling the reader to fetch key material. The verb must be a word of its own, so open("~/.ssh/config") in code is not it.
+// .env is left out: a dotenv tool honestly says it reads the .env file.
+const KEY_FILE_ORDER = /\b(read|open|cat|send|pass|include|attach|load)\s+[^.\n]{0,60}(\.ssh\b|\bid_(rsa|ed25519|ecdsa)\b|\.aws\/credentials|\.npmrc\b|\.netrc\b|\.git-credentials|\.kube\/config|\bmcp\.json|claude_desktop_config\.json)/i;
+export const poisonedDescription = (l: string) => hiddenText(l) || OVERRIDE.test(l) || CONCEAL.test(l) || MODEL_TAG.test(l) || KEY_FILE_ORDER.test(l);
+/** Agent instruction line: Gap for override, concealment, hidden text or sending secrets out; Partial for download-and-run. Pure. */
 export function instructionsUnsafe(l: string): boolean | "partial" {
+  if (hiddenText(l)) return true;
+  if (KEY_FILE_ORDER.test(l) && !/\b(never|do not|don'?t|must not|avoid|without)\b/i.test(l) && !WARNS.test(l.replace(/[`'"]/g, ""))) return true;
   if (EXFIL.test(l)) return true;
   if ((OVERRIDE.test(l) || CONCEAL.test(l)) && !WARNS.test(l)) return true;
   return RUNS_REMOTE.test(l) && !FORBIDS.test(l) ? "partial" : false;
@@ -82,6 +98,7 @@ export const owaspRules: Rule[] = [
     fix: "Don't pass request values into file paths. Map the request to a known file name, or use path.basename and check the result stays inside the allowed folder.",
     note: "A path like ../../etc/passwd lets someone read or overwrite files outside the folder you meant (path traversal, CWE-22).", extensions: CODE,
     test: (l) => /\b(fs\.(readFile|readFileSync|createReadStream|writeFile|writeFileSync|unlink|unlinkSync)|res\.(sendFile|download)|send_file|send_from_directory|(?<![.\w])open)\s*\(/.test(l) && USER_INPUT.test(l)
+      && !/\bfs\.writeFile(Sync)?\s*\(\s*(?!(req|request|params|query|body|input|args|form|ctx|event|payload|searchParams|user_input)\b)\w+\s*,/.test(l)
       // An in-memory file isn't a path: send_file(io.BytesIO(...), as_attachment=request...) (field-test review).
       && !/\b(send_file|sendFile|download)\s*\(\s*(io\.)?(BytesIO|StringIO)\s*\(|\b(send_file|sendFile)\s*\(\s*Buffer\./.test(l) ? true
       // Unpacking an archive writes wherever its entry names point (zip slip), unless Python's filter= is set.
@@ -89,7 +106,7 @@ export const owaspRules: Rule[] = [
   rule({ id: "redirect.open", title: "Redirect to a URL taken from the request", status: "gap", severity: "medium", controls: [A01],
     fix: "Redirect only to paths on your own site, or check the target against a list of allowed hosts.",
     note: "Attackers send people a link to your site that bounces them to a phishing page (open redirect, CWE-601).", extensions: CODE,
-    test: (l) => /\b(res\.redirect|redirect|HttpResponseRedirect|RedirectResponse)\s*\(\s*(req\.(query|body|params)|request\.(args|GET|query_params|form))/.test(l) }),
+    test: (l) => /\b(res\.redirect|redirect|HttpResponseRedirect|RedirectResponse)\s*\(\s*(?:\d{3}\s*,\s*)?(req\.(query|body|params)|request\.(args|GET|query_params|form))/.test(l) }),
   rule({ id: "ssrf.user-url", title: "Server fetches a URL taken from the request", status: "gap", severity: "high", controls: [A01],
     fix: "Don't let users choose the full URL your server calls. Allow only known hosts, and block internal addresses such as 169.254.169.254 and localhost.",
     note: "Your server can be made to call internal services or cloud metadata on an attacker's behalf (server-side request forgery, CWE-918).", extensions: CODE,
@@ -100,8 +117,10 @@ export const owaspRules: Rule[] = [
     test: (l) => /@csrf_exempt\b|WTF_CSRF_ENABLED\s*=\s*False|\bcsrf\s*:\s*false\b|csrf_protect\s*=\s*False/.test(l) }),
   rule({ id: "fs.world-writable", title: "File made readable and writable by everyone", status: "gap", severity: "medium", controls: [A01],
     fix: "Use the narrowest permissions that work, for example 0o600 for secrets and 0o644 or 0o755 for public files.",
-    note: "Any user or process on the machine can change the file (incorrect permissions, CWE-732).", extensions: CODE,
-    test: (l) => /\bchmod(Sync)?\s*\([^)]*\b0o?777\b/.test(l) && !/&\s*0o?777\b/.test(l) }),
+    note: "Any user or process on the machine can change the file (incorrect permissions, CWE-732).", extensions: [...CODE, ".sh", ".bash", ""],
+    test: (l) => (/\bchmod(Sync)?\s*\([^)]*\b0o?777\b/.test(l) && !/&\s*0o?777\b/.test(l)) || (/(^|[\s;&|])chmod\s+(-\w+\s+)*(0?777|a\+rwx)\b/.test(l) && !/^\s*#/.test(l)),
+    // Loosening a read-only file so it can be deleted (the rmtree error-handler idiom) leaves nothing behind (0.3.14 review).
+    unlessNear: /\brmtree\b|\bos\.(remove|unlink)\(|\bunlink(Sync)?\(/ }),
 
   // A02 Security Misconfiguration
   rule({ id: "config.allowed-hosts-any", title: "Django accepts any host name", status: "gap", severity: "medium", controls: [A02],
@@ -155,7 +174,7 @@ export const owaspRules: Rule[] = [
   // script is acted on the next time any agent opens the repo (skill collections spread these widely).
   rule({ id: "agent.instructions-unsafe", title: "Agent instructions that override, hide or download and run", status: "gap", severity: "high", controls: [A03, LLM01],
     fix: "Remove the line, or rewrite it so the agent asks the user first. Install tools with a pinned, reviewed command instead of piping a download into a shell, and never tell an agent to keep something from the user.",
-    note: "Agents read these files as instructions and act on them with your permissions. Gap when the line overrides earlier instructions, hides something from the user or sends secrets out. Partial when it downloads and runs a script, which some setup guides do on purpose (CWE-829, OWASP LLM01).",
+    note: "Agents read these files as instructions and act on them with your permissions. Gap when the line overrides earlier instructions, hides something from the user, carries characters a person can't see, or sends secrets out. Partial when it downloads and runs a script, which some setup guides do on purpose (CWE-829, OWASP LLM01).",
     extensions: [".md", ".mdc", ""], pathMatch: AGENT_INSTRUCTIONS,
     unseen: "Lintsure reads the line, not who wrote it or whether the file came from a trusted skill. Check where this file came from before an agent uses it.",
     test: instructionsUnsafe }),
@@ -195,12 +214,15 @@ export const owaspRules: Rule[] = [
     fix: "Verify tokens with jwt.verify (Node) or jwt.decode with a key and an explicit algorithms list (Python). Never allow the 'none' algorithm.",
     note: "Without signature checks anyone can write their own token and claim to be any user (CWE-347).", extensions: CODE,
     test: (l) => {
-      if (/verify_signature["']?\s*:\s*False|\bverify\s*=\s*False|algorithms\s*[:=]\s*\[[^\]]*["']none["']/i.test(l) && /jwt/i.test(l)) return true;
+      if (/verify_signature["']?\s*:\s*False|\bverify\s*=\s*False|algorithms\s*[:=]\s*\[[^\]]*["']none["']/i.test(l) && /jwt/i.test(l)) {
+        // Reading only the expiry straight off the decode is not accepting the token (0.3.14 review).
+        return !/\)\s*(\.get\(\s*|\[\s*)["']exp["']/.test(l);
+      }
       return /\bjwt\.decode\(\s*[\w.]+\s*\)/.test(l) ? "partial" : false; // Node jwt.decode reads a token without verifying it
     },
     // Peeking at a claim before verifying it nearby is fine (field test, 139 repos).
     // Python peek-then-verify: a second decode with a key and an algorithms list nearby (review P21).
-    unlessNear: /\bjwt\.verify\((?![^\n]*["']none["'])|\bjwtVerify\(|\bverify(Token|Jwt|JWT)\(|\bjwt\.decode\([^)]*\balgorithms\s*=/ }),
+    unlessNear: /\bjwt\.verify\((?![^\n]*["']none["'])|\bjwtVerify\(|\bverify(Token|Jwt|JWT)\(|\bjwt\.decode\([^)]*\balgorithms\s*=|\bget_signing_key(_from_jwt)?\(|\bPyJWKClient\(/ }),
 
   // A05 Injection
   rule({ id: "cmd.shell-built", title: "Shell command built from strings", status: "gap", severity: "high", controls: [A05],
@@ -214,7 +236,9 @@ export const owaspRules: Rule[] = [
     // A method named eval is a definition, not a call (also TypeScript class methods, field test); $$eval is Playwright's;
     // "eval" inside a string is text, also a string left open at the line end. A bare `eval(` ending the line is a
     // wrapped call or method head: the joined statement decides (format robustness).
-    test: (l) => /\b(def|function|async)\s+eval\s*\(|^\s*((public|private|protected|static|override)\s+)*eval\s*\([^)]*\)\s*(:[^{=]+)?\{\s*$|^\s*eval\s*\(\s*$/.test(l) ? false
+    // Decoding text and running it straight away is how hidden code ships in a script: a Gap whatever the input is.
+    test: (l) => /\b(eval|exec|Function)\s*\(\s*(atob\s*\(|Buffer\.from\([^)]*base64|base64\.b64decode\(|bytes\.fromhex\(|codecs\.decode\()/.test(l) ? true
+      : /\b(def|function|async)\s+eval\s*\(|^\s*((public|private|protected|static|override)\s+)*eval\s*\([^)]*\)\s*(:[^{=]+)?\{\s*$|^\s*eval\s*\(\s*$/.test(l) ? false
       : /(^|[^.\w$])eval\s*\(|\bnew Function\s*\(/.test(l.replace(/(["'])(?:\\.|(?!\1)[^\\])*\1/g, '""').replace(/(["'])(?:\\.|(?!\1)[^\\])*$/, '""')) ? byInput(l) : false }),
   rule({ id: "xss.raw-html", title: "HTML inserted without escaping", status: "partial", severity: "medium", controls: [A05],
     fix: "Set text with textContent, let your framework escape values, or sanitise with DOMPurify before inserting HTML.",
@@ -227,11 +251,14 @@ export const owaspRules: Rule[] = [
   rule({ id: "template.user-string", title: "Template built from request data", status: "gap", severity: "high", controls: [A05],
     fix: "Render a fixed template file and pass user values as variables, never as part of the template text.",
     note: "Template syntax in user input runs on your server (server-side template injection, CWE-94).", extensions: CODE,
-    test: (l) => /\brender_template_string\(\s*(request\.|f["'])|\bTemplate\(\s*request\./.test(l) }),
+    test: (l) => /\brender_template_string\(\s*(request\.|f["'])|\bTemplate\(\s*request\.|\.from_string\(\s*request\./.test(l)
+      || /\b(ejs\.render|Handlebars\.compile|nunjucks\.renderString|pug\.(render|compile)|_\.template)\(\s*req\.(body|query|params)\b/.test(l) }),
   rule({ id: "nosql.operator-input", title: "Database query object taken straight from the request", status: "partial", severity: "high", controls: [A05],
     fix: "Build the query from the specific fields you expect, and convert them to the expected types, so operators like $ne or $gt can't be injected.",
     note: "A body such as {\"password\": {\"$ne\": null}} can match any record (NoSQL injection, CWE-943).", extensions: CODE,
-    test: (l) => /\.(find|findOne|updateOne|updateMany|deleteOne|deleteMany|countDocuments)\(\s*req\.(body|query)\s*\)|\$where\b/.test(l) }),
+    // Also a lookup that takes a secret field straight from the request: { password: req.body.password } accepts {"$ne": null}.
+    test: (l) => /\.(find|findOne|updateOne|updateMany|deleteOne|deleteMany|countDocuments)\(\s*req\.(body|query)\s*\)|\$where\b/.test(l)
+      || /\.(find|findOne|findOneAndUpdate|countDocuments)\(\s*\{[^}]*\b(password|passwd|token|otp|code|secret|apiKey|api_key)\s*:\s*req\.(body|query)\.\w+\s*[,}]/.test(l) }),
 
   // A06 Insecure Design
   rule({ id: "upload.unrestricted", title: "File upload with no type or size limit", status: "partial", severity: "medium", controls: [A06],
@@ -241,14 +268,22 @@ export const owaspRules: Rule[] = [
   rule({ id: "mass-assignment", title: "Whole request body saved to a model", status: "partial", severity: "medium", controls: [A06, A08],
     fix: "Copy only the fields a user may change, for example with a schema (zod, pydantic) that lists them.",
     note: "Users can set fields you didn't expect, such as role or isAdmin (mass assignment, CWE-915).", extensions: CODE,
-    test: (l) => /\.(create|update|insert|build|insertOne|updateOne)\(\s*req\.body\s*[),]|\bObject\.assign\(\s*\w+\s*,\s*req\.body\s*\)|\(\s*\*\*request\.(json|form|data)\b/.test(l) }),
+    // Also the body as the second argument of an update, as Prisma's `data`, or passed to a model constructor.
+    test: (l) => /\.(create|update|insert|build|insertOne|updateOne)\(\s*req\.body\s*[),]|\bObject\.assign\(\s*\w+\s*,\s*req\.body\s*\)|\(\s*\*\*request\.(json|form|data)\b/.test(l)
+      || /\.(findByIdAndUpdate|findOneAndUpdate|updateOne|updateMany|update)\(\s*[^,()]+,\s*req\.body\s*[),]/.test(l)
+      || (/\.(create|update|upsert|createMany|updateMany)\(/.test(l) && /\bdata\s*:\s*req\.body\s*[,}]/.test(l))
+      || /\bnew\s+(?!URLSearchParams|FormData|Map|Set|Error|Date|URL|Blob|Uint8Array)[A-Z]\w*\(\s*req\.body\s*\)/.test(l) }),
 
   // A07 Authentication Failures
   rule({ id: "auth.hardcoded-password", title: "Password written in the code", status: "partial", severity: "high", controls: [A07],
     fix: "Load passwords from environment variables or a secret manager, and rotate any that were committed.",
     note: "Anyone with the code has the password, and it can't be changed without a release (CWE-259, CWE-798).", extensions: CODE,
     unlessPath: /(^|\/)(locales?|i18n|lang|langs|translations?)\//i, // the word "password" in other languages
-    test: (l) => /\b(password|passwd|pwd|db_pass)\s*[:=]\s*["'][^"'\s]{4,}["']/i.test(l) && !/(example|placeholder|changeme|your[_-]|xxx|\*\*\*|<|process\.env|os\.environ|getenv|type\s*[:=]|label|autocomplete)/i.test(l)
+    // A password used when the environment variable is missing ships with the code just the same. Partial: it may be a
+    // local-only default.
+    test: (l) => (/\b(os\.environ\.get|os\.getenv)\(\s*["'][A-Z_]*(PASSWORD|PASSWD)["']\s*,\s*["'][^"'\s]{4,}["']\s*\)|\bprocess\.env\.[A-Z_]*(PASSWORD|PASSWD)\s*(\|\||\?\?)\s*["'][^"'\s]{4,}["']/.test(l)
+      && !/example|placeholder|changeme|change[_-]me|your[_-]|xxx|\*\*\*|</i.test(l)) ? "partial"
+      : /\b(password|passwd|pwd|db_pass)\s*[:=]\s*["'][^"'\s]{4,}["']/i.test(l) && !/(example|placeholder|changeme|your[_-]|xxx|\*\*\*|<|process\.env|os\.environ|getenv|type\s*[:=]|label|autocomplete)/i.test(l)
       // Translations ("Парола", "Passwort") and obvious stand-ins ("new-password", "hashed-password", "hunter2") are not credentials (field test).
       && !/[:=]\s*["'][^"']*(passw|hash|redact|hidden|\bhunter2\b|[^\x00-\x7F])/i.test(l)
       // Validation messages and schema types ({ password: "Required" }, { password: "string" }) are not credentials (field test).
@@ -258,7 +293,8 @@ export const owaspRules: Rule[] = [
   rule({ id: "jwt.no-expiry", title: "JWT signed without an expiry", status: "partial", severity: "medium", controls: [A07],
     fix: "Add expiresIn (Node) or an exp claim (Python), and keep access tokens short-lived.",
     note: "A stolen token without an expiry works forever (insufficient session expiration, CWE-613). Partial because the expiry may be set in a payload built elsewhere.", extensions: CODE,
-    test: (l) => /\bjwt\.(sign|encode)\(/.test(l) && !/expiresIn|\bexp\b/.test(l), unlessNear: /expiresIn|["']exp["']|\bexp\s*[:=]/ }),
+    // Also a check that is told to ignore the expiry.
+    test: (l) => /\bignoreExpiration\s*:\s*true\b|["']verify_exp["']\s*:\s*False\b/.test(l) || (/\bjwt\.(sign|encode)\(/.test(l) && !/expiresIn|\bexp\b/.test(l)), unlessNear: /expiresIn|["']exp["']|\bexp\s*[:=]/ }),
 
   // A08 Software or Data Integrity Failures
   rule({ id: "deserialize.unsafe", title: "Unsafe deserialisation", status: "gap", severity: "high", controls: [A08],

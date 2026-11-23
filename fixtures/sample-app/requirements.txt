@@ -1,0 +1,3 @@
+# Planted: a second package index.
+--extra-index-url https://pypi.internal.example.invalid/simple
+acme-internal==1.2.0

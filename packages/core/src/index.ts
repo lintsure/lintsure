@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join, relative, sep } from "node:path";
 import { outsideFor } from "./knowledge/index.js";
-import { rules } from "./rules/index.js";
+import { MASKED, rules } from "./rules/index.js";
 import type { Finding, FrameworkId, Patch, Report, Severity } from "./types.js";
 import { proposalFor } from "./guidance.js";
 import { applyReview, fingerprint, isOpen } from "./review.js";
@@ -140,7 +140,7 @@ export const isMinified = (lines: string[]) => lines.filter((l) => l.length > MA
 export function extOf(abs: string): string {
   const name = basename(abs);
   if (/^\.env(\.[\w.-]+)?$/.test(name)) return ".env";
-  if (/^Dockerfile\b/i.test(name)) return ""; // Dockerfile.prod is still a Dockerfile
+  if (/^(Dockerfile|Containerfile)\b|\.Dockerfile$/i.test(name)) return ""; // Dockerfile.prod, api.Dockerfile and Containerfile are Dockerfiles too
   const e = extname(abs);
   return e === ".mts" || e === ".cts" ? ".ts" : e;
 }
@@ -174,28 +174,65 @@ const NS_FOLDER = /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fix
 // Dev scripts at the top of a repo (scripts/test-*.mjs, build and seed helpers) and agent tooling (.agents/, .claude/)
 // don't ship: they were the largest single source of false alarms in the 0.3.9 labelled sample (44 of 242).
 const TEST_FILE = /(^|\/)__tests__\/|(^|\/)test[-_]?(utils?|helpers?|rig)\/|(^|\/)test-[^/]+\.[cm]?[jt]s$|[._-]tests?\/|\.(test|spec|stories)\.[cm]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$|(^|\/)(conftest\.py|pytest\.ini|tox\.ini)$/i;
+// Files named for what they hold: seed.js, seed-users.ts, demo.ts, mock-data.ts, orders.mock.ts, user.fixture.ts.
+const DEV_FILE = /(^|\/)(seeds?|demo|mocks?)([-_.][\w.-]*)?\.([cm]?[jt]sx?|py)$|\.(mock|fixtures?)\.[cm]?[jt]sx?$/i;
+// Test and fixture folders. Agent-tooling rules read .claude/ and .agents/ on purpose, but a hostile SKILL.md kept as a
+// test fixture is a test input, not an instruction anyone's agent loads.
+const TEST_PATH = /(^|\/)(tests?|__tests__|fixtures?|__fixtures__|e2e|testdata|test-data)\//i;
 /** True for code that doesn't ship: tests, fixtures, examples, docs, stories and seed data. A folder name only counts
  *  when it comes before any app or route root in the path: examples/site/app/page.tsx is an example, while
  *  app/api/demo/route.ts and src/samples/handler.ts are live code. Pure. */
 export function isNonShipping(file: string): boolean {
   if (TEST_FILE.test(file)) return true;
   // Shell scripts in scripts/ are often the installer people run (curl ... | sh): those still count.
-  if (/\.(sh|bash|zsh|ps1)$/i.test(file) && !/(^|\/)(tests?|__tests__|e2e|fixtures?|examples?|demos?)\//i.test(file)) return false;
+  if (/\.(sh|bash|zsh|ps1)$/i.test(file) && !/(^|\/)(tests?|__tests__|e2e|fixtures?|examples?|demos?|\.devcontainer)\//i.test(file)) return false;
   const live = LIVE_ROOT.exec(file), ns = NS_FOLDER.exec(file);
   if (!live || (ns && ns.index < live.index)) return NON_SHIPPING.test(file);
   // Under a route root every folder is a URL or function name, so only test files (handled above) are skipped.
   if (/^(app|pages|api|routes|supabase\/functions)$/.test(live[2])) return false;
   // Under src/, lib/ or server/, test folders are still tests; example, demo, docs and sample folders are app code.
-  return /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|seeds?|seeders|factories|stories|storybook)\//i.test(file.slice(live.index));
+  // Dev scripts kept inside the app folder (server/scripts/reset_admin_password.py) and files named for seed, demo
+  // or mock data don't ship either (0.3.14 review: 3 false alarms, no real finding in such a file).
+  const rest = file.slice(live.index);
+  return /(^|\/)(tests?|__tests__|__mocks__|mocks?|spec|fixtures?|__fixtures__|e2e|seeds?|seeders|factories|stories|storybook|scripts?)\//i.test(rest) || DEV_FILE.test(rest);
 }
 // Rules that also read test files. Not auth.hardcoded-password: test logins are fake by design (field test, 50 repos).
 const SECRET_RULES = new Set(["secret.in-source"]); // not config.default-secret-key: a test secret is a test value (review P19)
 // Rules that read agent tooling folders on purpose: an agent hook in .claude/ runs on real machines.
+// Settings that sit in the branch that only runs outside production (`if IS_PRODUCTION: ... else:`, `if (!isProduction) {`)
+// are dev settings (0.3.14 review: 2 of 2). Only for rules about a setting, where the branch decides what ships.
+const DEV_BRANCH_RULES = new Set(["config.allowed-hosts-any", "cors.any-origin"]);
+/** True when line i sits inside a branch taken only outside production. Reads indentation, up to 30 lines back. Pure. */
+export function inDevBranch(lines: string[], i: number): boolean {
+  const indent = (l: string) => l.search(/\S/);
+  const opens = /^\s*(\}\s*else\s+)?(if|elif)\b/;
+  const negated = (l: string) => /!\s*[\w.]*prod|\bnot\s+[\w.]*prod|!==?\s*["']production["']/i.test(l);
+  let level = indent(lines[i]);
+  for (let k = i - 1; k >= Math.max(0, i - 30) && level > 0; k--) {
+    const at = indent(lines[k]);
+    if (at < 0 || at >= level) continue;
+    level = at;
+    if (/^\s*(\}\s*)?else\s*[:{]?\s*$/.test(lines[k])) { // a plain else: its `if` is the nearest opener above at the same indent
+      const open = lines.slice(Math.max(0, k - 30), k).reverse().find((x) => indent(x) === at && opens.test(x));
+      if (open && /\b(is_?prod(uction)?|production)\b/i.test(open) && !negated(open)) return true;
+    } else if (opens.test(lines[k]) && (negated(lines[k]) || /(?<!!\s*)(?<!\bnot\s)\b(is_?dev\w*|DEBUG)\b|===?\s*["']development["']/.test(lines[k]))) return true;
+  }
+  return false;
+}
+/** Names of functions in this file that wrap a masking call: `def _refusal(email): return pseudonym(email)`. A value logged
+ *  through one is masked too (0.3.14 review). Pure.
+ *  shortcut: reads the 12 lines after the definition, not the real function body; parse the body if that misleads. */
+export function localMaskers(lines: string[]): string[] {
+  return lines.flatMap((l, i) => {
+    const m = /^\s*(?:export\s+)?(?:async\s+)?(?:def|function)\s+(\w+)\s*\(|^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?\(/.exec(l);
+    return m && lines.slice(i + 1, i + 13).some((x) => MASKED.test(x)) ? [m[1] ?? m[2]] : [];
+  });
+}
 const TOOLING_RULES = new Set(["agent.config-runs-remote-code", "agent.instructions-unsafe", "agent.permissions-allow-all"]);
 // Lines a person already reviewed. lintsure-ignore and the secret allowlist pragma count only in a comment and apply
 // to every rule. Other linters' markers (noqa, nosec, NOSONAR) don't hide secrets: `# noqa: E501` is about line length.
 const REVIEWED = /(#|\/\/|\/\*|--)\s*(lintsure-ignore|pragma:\s*allowlist secret)\b/;
-const OTHER_LINTER = /#\s*(noqa|nosec)\b|\/\/\s*NOSONAR\b/;
+const OTHER_LINTER = /#\s*(noqa|nosec|nosemgrep|NOSONAR)\b|\/\/\s*(NOSONAR|nosemgrep)\b/i;
 // Also hand-typed fake keys: alphabet or number runs, words where random text should be, a whole key block on one line.
 const PLACEHOLDER =/test|fake|dummy|example|sample|placeholder|sanitized|mock|xxx|changeme|localhost|["'](password|pass|secret|elastic|admin)["']|abcdef|123456|\b(xox[baprs]|gh[pousr])[-_][a-z]+(-[a-z]+)*\b|PRIVATE KEY-----.*-----END/i;
 /** The JSON object key that opens the block a line sits in, e.g. "peerDependencies". Pure. */
@@ -526,6 +563,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
     if (inTests) nonShipping++;
     const comment = commentLines(lines, ext), example = exampleLines(lines, ext);
     let tainted: Map<string, number> | undefined;
+    let maskers: string[] | undefined;
+    const viaMasker = (text: string) => (maskers ??= localMaskers(lines)).some((n) => text.includes(n + "("));
     // Statements are worked out once per file, on lines with comments blanked.
     const stmts = JOINABLE.has(ext) ? statements(lines.map((l, i) => (comment[i] ? "" : l)), ext === ".py") : [];
     const multi = stmts.filter((s) => s.end > s.start);
@@ -535,7 +574,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       // A markdown page that explains the rule quotes the bad prompt; only prompt files hold real prompts.
       if (r.id === "ai.hides-being-ai" && (ext === ".md" || ext === ".mdx") && !PROMPT_DOC.test(file)) continue;
       const secret = SECRET_RULES.has(r.id);
-      if (inTests && !secret && !TOOLING_RULES.has(r.id)) continue;
+      if (inTests && !secret && !(TOOLING_RULES.has(r.id) && !TEST_PATH.test(file) && !TEST_FILE.test(file))) continue;
       // Count only what actually ran: a file skipped as a test is not a check point (review P1).
       ran++; checkPoints++; perRule[r.id] = (perRule[r.id] ?? 0) + 1;
       // Comments describe code, they don't run. A real secret pasted into a comment still counts.
@@ -552,6 +591,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         if (hit && SINK_RULES.has(r.id) && !r.test!(blankStrings(probe))) return;
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
+        if (DEV_BRANCH_RULES.has(r.id) && inDevBranch(lines, i)) return;
+        if (r.id === "pii.logged" && viaMasker(probe)) return;
         if (inTests && secret && PLACEHOLDER.test(text)) return; // password="test_password", token="xoxb-test-..."
         if (inTests && /PRIVATE KEY/.test(text)) return; // test keys and certificates are fixtures by design (review P24)
         if (REVIEWED.test(text) || (!secret && OTHER_LINTER.test(text))) return; // someone already looked at this line and marked it
@@ -565,14 +606,16 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         let already = false; for (let i = s.start; i <= s.end; i++) if (hitLines.has(i)) { already = true; break; }
         if (already) continue;
         const hit = r.test(s.text);
+        if (hit && r.id === "pii.logged" && viaMasker(s.text)) continue;
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, s.start - 8), s.end + 4).some((l) => r.unlessNear!.test(l)))) continue;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, s.start))) continue;
         if (lines.slice(s.start, s.end + 1).some((l) => REVIEWED.test(l) || OTHER_LINTER.test(l))) continue;
         add(r, s.start + 1, hit === "partial" || (inTests && !TOOLING_RULES.has(r.id)) ? "partial" : r.status);
       }
       // File rules see comment lines as blank, so "<img> in a comment" or a commented-out call doesn't count (field test).
-      if (r.fileTest) for (const n of r.fileTest(skip ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id), sharedFiles.get(r.id)))
-        typeof n === "number" ? add(r, n) : add(r, n.line, n.status);
+      // A Python MCP tool's description is its docstring, so this rule reads docstrings too (it drops # and // lines itself).
+      if (r.fileTest) for (const n of r.fileTest(skip && r.id !== "mcp.tool-description-poisoned" ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id), sharedFiles.get(r.id)))
+        if (!(DEV_BRANCH_RULES.has(r.id) && inDevBranch(lines, (typeof n === "number" ? n : n.line) - 1))) typeof n === "number" ? add(r, n) : add(r, n.line, n.status);
     }
     if (ran) filesChecked++;
   }
@@ -683,19 +726,29 @@ function recordLines(r: Report): string[] {
   ];
 }
 
+// Housekeeping for the repo, not a flaw in the code. These four were 74% of what the 0.3.14 field test showed, so every
+// output lists them after the findings in the code. Presentation only: the report data, SARIF and exit code don't change.
+// The two Dockerfile hardening basics joined the group after their first field scan: 138 findings in 304 projects, true
+// but routine, and they would bury findings in the code.
+const HYGIENE_RULES = new Set(["ci.action-unpinned", "repo.no-sbom", "repo.no-security-policy", "repo.no-dependency-updates", "docker.runs-as-root", "docker.image-unpinned"]);
+export const isHygiene = (f: { ruleId: string }) => HYGIENE_RULES.has(f.ruleId);
+
 export function toMarkdown(r: Report): string {
+  const hygiene = r.findings.filter(isHygiene);
   const lines = [
     "# Lintsure report", "",
     `Frameworks: ${r.frameworks.join(", ")} · Rules v${r.rulesVersion}${r.policy ? ` · Policy #${r.policy.fingerprint} (${r.policy.rulesActive} rules active${r.policy.repoRules ? " + .lintsure/rules.yml" : ""}${r.policy.workspaceRules ? " + workspace rules" : ""})` : ""}`, "",
     `> ${DISCLAIMER}`, "",
     ...recordLines(r),
-    `## Findings (${r.findings.length})`, "",
+    `## Findings (${r.findings.length - hygiene.length})`, "",
   ];
   if (r.baseline) lines.splice(lines.length - 2, 0, `Since the baseline of ${r.baseline.created}: ${r.baseline.newCount} new, ${r.baseline.fixed.length} fixed, ${r.baseline.unchangedCount} unchanged.`, "");
-  if (!r.findings.length) lines.push("No issues found by the current rules.", "");
+  if (r.findings.length === hygiene.length) lines.push(hygiene.length ? "No findings in the code from the current rules. Repo hygiene items follow." : "No issues found by the current rules.", "");
   // Fix first: Gaps before Partials, then by severity; file order within each group.
-  const rank = (f: Finding) => (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity];
-  for (const f of [...r.findings].sort((a, b) => rank(a) - rank(b))) lines.push(
+  const rank = (f: Finding) => (isHygiene(f) ? 6 : 0) + (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity];
+  const sorted = [...r.findings].sort((a, b) => rank(a) - rank(b));
+  for (const f of sorted) lines.push(
+    ...(f === sorted[r.findings.length - hygiene.length] ? [`## Repo hygiene (${hygiene.length})`, "", "Housekeeping for the repo, not flaws in the code. Findings in the code come first.", ""] : []),
     `### ${f.id} · ${f.status === "gap" ? "Finding" : "Observation"} (${LABEL[f.status]}) · \`${f.file}:${f.line}\`${f.change === "new" ? " · New since baseline" : ""}`, `**${f.title}** · Risk level: ${f.severity}`, "",
     ...(f.accepted ? [acceptedLine(f.accepted), ""] : []),
     `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, ...(f.unseen ? [`- What Lintsure couldn't see: ${f.unseen}`] : []),

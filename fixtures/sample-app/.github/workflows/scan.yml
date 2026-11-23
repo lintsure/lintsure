@@ -1,0 +1,10 @@
+# Planted: a scan whose result is thrown away.
+name: scan
+on: push
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - run: trivy fs . || true

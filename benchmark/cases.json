@@ -37,7 +37,11 @@
       "NPM_TOKEN=npm_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2",
       "webhook: https://hooks.slack{{}}.com/services/T0ABC1234/B0DEF5678/Qw8Er7Ty6Ui5Op4As3Df2Gh1",
       "-----BEGIN PGP PRIVATE KEY BLOCK-----",
-      "AWS_ACCESS_KEY_ID=AKIA2E3RT5YU7IO9PQ4L"
+      "AWS_ACCESS_KEY_ID=AKIA2E3RT5YU7IO9PQ4L",
+      {
+        "line": "{ \"private_key\": \"-----BEGIN PRIVATE KEY-----\\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgq7Zt9bQ2x4m1nR8sVw3yLk0uPfJ5cHd6eXoTgNqA2ZKhRANCAAR\\n-----END PRIVATE KEY-----\\n\" }",
+        "status": "gap"
+      }
     ],
     "pass": [
       "const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);",
@@ -53,20 +57,26 @@
       "const hasBeginMarker = key.includes('-----BEGIN PRIVATE KEY-----')",
       "EC_KEY: '-----BEGIN EC PRIVATE KEY-----...',",
       "\"SLACK_BOT_TOKEN\": \"xoxb-your-bot-token\"",
-      "key: \"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n\","
+      "key: \"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n\",",
+      "{ \"text\": \"a=1&private_key=-----BEGIN PRIVATE KEY-----\\nCanaryLineOne\\nCanaryLineTwo\\n-----END PRIVATE KEY-----\\n\" }",
+      "{ \"text\": \"before\\n-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAg\" }",
+      "# HOOK_SECRETS: \"v1,whsec_VGhpcyBpcyBhbiBleGFtcGxlIG9mIGEgc2hvcnRlciBCYXNlNjQgc3RyaW5n\"",
+      "eq('redacts key', scrub('token=sk-proj-abc123def456ghi789jkl012mno345'), 'token=sk-***');"
     ]
   },
   "transport.plain-http": {
     "flag": [
       "return fetch(\"http://payments.example.com/charge\", { method: \"POST\", body });",
       "await axios.post('http://api.partner.io/v1/users', data);",
-      "r = requests.get(\"http://internal.example.org/export\")"
+      "r = requests.get(\"http://internal.example.org/export\")",
+      "await fetch('http://api.testing-site.com/collect', { method: 'POST' });"
     ],
     "pass": [
       "fetch(\"https://api.example.com/charge\")",
       "fetch(\"http://localhost:3000/health\")",
       "axios.get('http://127.0.0.1:8080/debug')",
-      "const docs = \"http://example.com/docs\";"
+      "const docs = \"http://example.com/docs\";",
+      "await fetch('http://tracker.test/collect', { method: 'POST' });"
     ]
   },
   "pii.to-analytics": {
@@ -75,7 +85,8 @@
       "analytics.track('Signup', { email });",
       "mixpanel.people.set({ $email: user.email, phone: user.phone });",
       "Sentry.setUser({ email: user.email });",
-      "track(\"signup\", { email: user.email, plan });"
+      "track(\"signup\", { email: user.email, plan });",
+      "track('sign_in_submitted', { method: 'email', email: form.email })"
     ],
     "pass": [
       "posthog.identify(user.id);",
@@ -83,7 +94,8 @@
       "mixpanel.track('Page viewed');",
       "track(\"signup\", { plan: \"pro\" });",
       "router.track(\"email\");",
-      "this.track(\"x\", { email: user.email });"
+      "this.track(\"x\", { email: user.email });",
+      "track('sign_in_submitted', { category: 'account', method: 'email' })"
     ]
   },
   "pii.in-url": {
@@ -120,14 +132,18 @@
       "process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';",
       "r = requests.get(url, verify=False)",
       "client = httpx.Client(verify=False)",
-      "ssl_context.verify_mode = ssl.CERT_NONE"
+      "ssl_context.verify_mode = ssl.CERT_NONE",
+      "curl -k https://internal.example.com/api -d @payload.json",
+      "curl -sSk https://internal.example.com/health"
     ],
     "pass": [
       "result = await find_email(\"Jane\", \"Doe\", \"acme.com\", verify=False)",
       "const agent = new https.Agent({ rejectUnauthorized: true });",
       "r = requests.get(url, timeout=10)",
       "    \"CERT_NONE\": ssl.CERT_NONE,",
-      "description=\"SSL certificate requirements (CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED)\","
+      "description=\"SSL certificate requirements (CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED)\",",
+      "curl -fsSL https://example.com/file -o file",
+      "curl -k https://localhost:8443/health"
     ]
   },
   "sql.string-built": {
@@ -178,18 +194,21 @@
       "app.use(cors({ origin: \"*\" }));",
       "'Access-Control-Allow-Origin': '*',",
       "app.use(cors({ origin: \"*\", credentials: false }));",
-      "CORS_ALLOW_ALL_ORIGINS = True"
+      "CORS_ALLOW_ALL_ORIGINS = True",
+      "return cors({\n  origin: '*',\n  allowMethods: ['GET'],\n  credentials: false,\n})\n\n\n\napp.use(cors({ origin: list, credentials: true }));"
     ]
   },
   "session.cookie-insecure": {
     "flag": [
       "res.cookie(\"session\", user.token, { httpOnly: false });",
       "res.cookie('sid', id, { secure: false, httpOnly: true });",
-      "SESSION_COOKIE_SECURE = False"
+      "SESSION_COOKIE_SECURE = False",
+      "res.cookie(\"session\", token);"
     ],
     "pass": [
       "res.cookie('sid', id, { secure: true, httpOnly: true, sameSite: 'lax' });",
-      "SESSION_COOKIE_SECURE = True"
+      "SESSION_COOKIE_SECURE = True",
+      "res.cookie(\"theme\", value);"
     ]
   },
   "config.debug-on": {
@@ -206,11 +225,14 @@
   "ai.automated-decision": {
     "flag": [
       "const decision = model.predict(features) > 0.7 ? \"approved\" : \"rejected\";",
-      "if clf.predict_proba(applicant)[0][1] > 0.5: status = 'loan_denied'"
+      "if clf.predict_proba(applicant)[0][1] > 0.5: status = 'loan_denied'",
+      "const outcome = classifyApplicant(profile) === \"low\" ? \"approved\" : \"rejected\";"
     ],
     "pass": [
       "const label = model.predict(image);",
-      "const summary = await generateText({ model, prompt });"
+      "const summary = await generateText({ model, prompt });",
+      "def classify_denial(tool: str, text: str, deny_rules,",
+      "const effect = classify(name) === \"read\" ? \"allow\" : access === \"all\" ? \"allow\" : \"deny\";"
     ]
   },
   "ai.hides-being-ai": {
@@ -252,17 +274,21 @@
     "flag": [
       "fs.readFile(req.query.file, cb);",
       "return send_file(request.args[\"path\"])",
-      "res.sendFile(req.params.name);"
+      "res.sendFile(req.params.name);",
+      "await fs.writeFile(req.body.path, data, 'utf-8');",
+      "fs.writeFileSync(path.join(DIR, req.params.name), req.body);"
     ],
     "pass": [
       "fs.readFile(path.join(BASE, \"readme.md\"), cb);",
-      "res.sendFile(\"index.html\", { root: PUBLIC });"
+      "res.sendFile(\"index.html\", { root: PUBLIC });",
+      "await fs.writeFile(absPath, req.body, 'utf-8');"
     ]
   },
   "redirect.open": {
     "flag": [
       "res.redirect(req.query.next);",
-      "return redirect(request.args.get(\"next\"))"
+      "return redirect(request.args.get(\"next\"))",
+      "res.redirect(302, req.query.next);"
     ],
     "pass": [
       "res.redirect(\"/dashboard\");",
@@ -402,11 +428,24 @@
       {
         "line": "const claims = jwt.decode(token);",
         "status": "partial"
+      },
+      {
+        "line": "unverified = jwt.decode(id_token, options={\"verify_signature\": False})",
+        "status": "gap"
+      },
+      {
+        "line": "user_id = jwt.decode(token, options={\"verify_signature\": False})[\"sub\"]",
+        "status": "gap"
+      },
+      {
+        "line": "issuer = jwt.decode(token, options={\"verify_signature\": False}).get(\"iss\")",
+        "status": "gap"
       }
     ],
     "pass": [
       "const claims = jwt.verify(token, key, { algorithms: [\"RS256\"] });",
-      "payload = jwt.decode(token, key, algorithms=[\"RS256\"])"
+      "payload = jwt.decode(token, key, algorithms=[\"RS256\"])",
+      "exp = jwt.decode(id_token, options={'verify_signature': False}).get('exp')"
     ]
   },
   "cmd.shell-built": {
@@ -480,20 +519,24 @@
   "template.user-string": {
     "flag": [
       "return render_template_string(request.args.get(\"t\"))",
-      "render_template_string(f\"<h1>{name}</h1>\")"
+      "render_template_string(f\"<h1>{name}</h1>\")",
+      "res.send(ejs.render(req.query.tpl));"
     ],
     "pass": [
-      "return render_template(\"page.html\", name=name)"
+      "return render_template(\"page.html\", name=name)",
+      "res.send(ejs.render(TEMPLATE, { name: req.query.name }));"
     ]
   },
   "nosql.operator-input": {
     "flag": [
       "User.find(req.body);",
       "db.users.findOne(req.query)",
-      "{ $where: \"this.age > \" + age }"
+      "{ $where: \"this.age > \" + age }",
+      "const u = await User.findOne({ email: req.body.email, password: req.body.password });"
     ],
     "pass": [
-      "User.find({ email: String(req.body.email) });"
+      "User.find({ email: String(req.body.email) });",
+      "const u = await User.findOne({ email: String(req.body.email) });"
     ]
   },
   "upload.unrestricted": {
@@ -510,18 +553,32 @@
     "flag": [
       "await User.create(req.body);",
       "Object.assign(user, req.body);",
-      "user = User(**request.json)"
+      "user = User(**request.json)",
+      "await User.findByIdAndUpdate(req.params.id, req.body);",
+      "await prisma.user.update({ where: { id }, data: req.body });",
+      "const user = new User(req.body);"
     ],
     "pass": [
       "await User.create({ name: req.body.name });",
-      "user = User(name=data[\"name\"])"
+      "user = User(name=data[\"name\"])",
+      "await User.findByIdAndUpdate(req.params.id, { name: req.body.name });",
+      "const params = new URLSearchParams(req.body);",
+      "await axios.post(url, { data: req.body });"
     ]
   },
   "auth.hardcoded-password": {
     "flag": [
       "const dbConfig = { password: \"Hunter2024\" };",
       "DB_PASS = \"s3cretPass\"",
-      "pwd = \"admin123\""
+      "pwd = \"admin123\"",
+      {
+        "line": "DB_PASSWORD = os.environ.get(\"DB_PASSWORD\", \"admin123\")",
+        "status": "partial"
+      },
+      {
+        "line": "const pass = process.env.DB_PASSWORD || \"admin123\";",
+        "status": "partial"
+      }
     ],
     "pass": [
       "const field = { type: \"password\", label: \"Password\" };",
@@ -531,13 +588,21 @@
       "password: 'Парола',",
       "password: 'Password',",
       "const dto = { password: 'old-password', newPassword: 'new-password' };",
-      "[\"password: 'hunter2\", \"password: '[REDACTED]\"],"
+      "[\"password: 'hunter2\", \"password: '[REDACTED]\"],",
+      "DB_PASSWORD = os.environ.get(\"DB_PASSWORD\", \"\")",
+      "DB_PASSWORD = os.environ.get(\"DB_PASSWORD\", \"changeme\")",
+      "ENABLE_PASSWORD_AUTH = os.getenv('ENABLE_PASSWORD_AUTH', 'True').lower() == 'true'",
+      "PASSWORD_RESET_URL_BASE = os.getenv(\"PASSWORD_RESET_URL_BASE\", \"http://localhost:5173\")"
     ]
   },
   "jwt.no-expiry": {
     "flag": [
       "const t = jwt.sign({ id: 1 }, secret);",
-      "token = jwt.encode({\"sub\": uid}, key)"
+      "token = jwt.encode({\"sub\": uid}, key)",
+      {
+        "line": "const claims = jwt.verify(token, key, { algorithms: [\"HS256\"], ignoreExpiration: true });",
+        "status": "partial"
+      }
     ],
     "pass": [
       "const t = jwt.sign({ id: 1 }, secret, { expiresIn: \"15m\" });",
@@ -701,12 +766,20 @@
     "flag": [
       "{ role: \"system\", content: `You help ${req.body.company}` }",
       "const systemPrompt = `Answer as ${userInput}`;",
-      "system_prompt = f\"You are a bot for {user_input}\""
+      "system_prompt = f\"You are a bot for {user_input}\"",
+      "{ role: \"system\", content: `Rules: ${body.instructions}` }",
+      "const systemPrompt = `${getSystemMessage(locale)}\\n\\nThe user says: ${req.body.text}`;",
+      "const systemPrompt = `Follow this: ${getUserMessage(input)}`;",
+      "{ role: \"system\", content: `Rules: ${request.body}` }",
+      "{ role: \"system\", content: `Rules: ${event.body}` }"
     ],
     "pass": [
       "{ role: \"system\", content: \"You are a helpful assistant.\" }",
       "{ role: \"user\", content: req.body.question }",
-      "const systemPrompt = `Today is ${date}`;"
+      "const systemPrompt = `Today is ${date}`;",
+      "system: `${charter}\\n\\n${body}`,",
+      "opts = { ...opts, prompt: `${opts.system}\\n\\n${opts.prompt}`, system: undefined };",
+      "const systemMessage = `${getSystemMessage(input.locale, input.targetDocumentType)}\\n\\n${CONTRACT}`;"
     ]
   },
   "llm.output-to-sink": {
@@ -880,12 +953,14 @@
   "jwt.no-algorithm-pin": {
     "flag": [
       "const claims = jwt.verify(token, publicKey);",
-      "payload = jwt.decode(token, key)"
+      "payload = jwt.decode(token, key)",
+      "const claims = jwt.verify(token, publicKey, { issuer: \"me\" });"
     ],
     "pass": [
       "const claims = jwt.verify(token, key, { algorithms: [\"RS256\"] });",
       "payload = jwt.decode(token, key, algorithms=[\"HS256\"])",
-      "jwt.verify(token, key, (err, d) => done(d));"
+      "jwt.verify(token, key, (err, d) => done(d));",
+      "const claims = jwt.verify(token, publicKey, { issuer: \"me\", algorithms: [\"RS256\"] });"
     ]
   },
   "jwt.weak-secret": {
@@ -925,7 +1000,8 @@
   },
   "ws.no-origin-check": {
     "flag": [
-      "import { WebSocketServer } from \"ws\";\nconst wss = new WebSocketServer({ port: 8080 });\nwss.on(\"connection\", (s) => s.send(\"hi\"));"
+      "import { WebSocketServer } from \"ws\";\nconst wss = new WebSocketServer({ port: 8080 });\nwss.on(\"connection\", (s) => s.send(\"hi\"));",
+      "import { Server } from \"socket.io\";\nconst io = new Server(httpServer, { cors: { origin: \"*\" } });"
     ],
     "pass": [
       "const wss = new WebSocketServer({ port: 8080, verifyClient: ({ origin }) => ALLOWED.has(origin) });",
@@ -937,13 +1013,16 @@
       "            privileged: true",
       "  hostNetwork: true",
       "      allowPrivilegeEscalation: true",
-      "        runAsUser: 0"
+      "        runAsUser: 0",
+      "      securityContext: {privileged: true}",
+      "    network_mode: host"
     ],
     "pass": [
       "            privileged: false",
       "      allowPrivilegeEscalation: false",
       "        runAsUser: 1000",
-      "  hostNetwork: false"
+      "  hostNetwork: false",
+      "    network_mode: bridge"
     ]
   },
   "cloud.public-bucket": {

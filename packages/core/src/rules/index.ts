@@ -18,7 +18,7 @@ const LOG_CALL = /\b(console\.(log|info|warn|error|debug)|logger\.\w+|log\.(info
 // exponentially on text such as an array of regular expressions (found when statements were joined).
 const codeOnly = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
 // Helpers that hide the raw value before it is logged.
-const MASKED = /\b\w*(mask|hash|pseudonym|redact|anonymi[sz]e|obfuscate|scrub)\w*\s*\(/i;
+export const MASKED = /\b\w*(mask|hash|pseudonym|redact|anonymi[sz]e|obfuscate|scrub)\w*\s*\(/i;
 const PII = /\b(e-?mail|phone|ssn|social_?security|passport|date_?of_?birth|dob|password|passwd|credit_?card|card_?number|iban)\b/i;
 // The arguments of the first log call on a line, up to its matching ")". Other code on the same line is ignored.
 function logArgs(l: string): string | null {
@@ -48,7 +48,7 @@ const KEY_FORMATS = new RegExp([
   "-----BEGIN (RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----", "-----BEGIN PGP PRIVATE KEY BLOCK-----",
 ].join("|"));
 // Example values from provider docs (AKIAIOSFODNN7EXAMPLE and the like) and obvious fill-ins.
-const DOC_EXAMPLE = /EXAMPLE|X{6,}|x{6,}|0{12,}|1234567890abcdef/;
+const DOC_EXAMPLE = /EXAMPLE|X{6,}|x{6,}|0{12,}|1234567890abcdef|abc123/;
 /** Shannon entropy in bits per character. Real keys are random (about 4 and up); aaaa... or xxxx... is near 0. Pure. */
 export function entropy(s: string): number {
   const n: Record<string, number> = {};
@@ -57,6 +57,15 @@ export function entropy(s: string): number {
 }
 // A PEM header with no key body after it: in a comment, or text a program builds a key around at runtime (field-test review).
 const PEM_NO_BODY = /^\s*(#|\/\/|\*|<!--|--\s)|PRIVATE KEY( BLOCK)?-----(\\n)?["'`]\s*(\+|\.join|,|\))/;
+// A key written inside one string that ends on the same line, with a body too short or too regular to be a key: a redaction
+// test's "CanaryLineOne", a cut-off sample. The shortest real key (Ed25519) has 64 base64 characters (0.3.14 review: 17 of 17).
+const pemInlineFake = (l: string) => {
+  const after = l.slice(l.indexOf("PRIVATE KEY")).replace(/^PRIVATE KEY( BLOCK)?-----/, "");
+  const body = after.split("-----END")[0].replace(/\\+[nr]|[^A-Za-z0-9+/=]/g, "");
+  return /-----END|["'`]\s*[,;)\]}]*\s*$/.test(after) && (body.length < 64 || /abcdefghijklmnop/.test(body));
+};
+// A "secret" whose base64 reads as a sentence is documentation ("This is an example of a shorter Base64 string").
+const readsAsText = (key: string) => /^(?=.* )[\x20-\x7e]{12,}$/.test(Buffer.from(key.slice(key.lastIndexOf("_") + 1), "base64").toString("latin1"));
 // More fixed-prefix secrets this audience leaks: Stripe webhook secrets, Supabase secret keys, Resend keys (review P13).
 const MORE_KEYS = /\bwhsec_[0-9A-Za-z]{24,}|\bsb_secret_[0-9A-Za-z_-]{20,}|\bre_[0-9A-Za-z]{8,}_[0-9A-Za-z]{16,}/;
 /** A Supabase (or any) JWT whose payload says role: service_role. Decoded exactly, so near-zero false alarms. Pure. */
@@ -94,6 +103,9 @@ export const rules: Rule[] = [
     // A value passed through a masking or hashing helper first (maskEmail(), pseudonym(), hash()) is not the raw value:
     // every false alarm on 56 new repos in the 0.3.9 review was masked this way (12 of 12).
     test: (l) => { const a = logArgs(l); return a !== null && !l.includes("::add-mask::") && PII.test(codeOnly(a)) && !MASKED.test(a); },
+    // A command-line tool prints to the terminal of the person running it, not to a log store: "Logged in as <email>"
+    // after a login is the point of the command (5 of the 12 false alarms still shown in 0.3.14; no real one was in a CLI).
+    unlessPath: /(^|\/)cli\/|(^|\/)(packages|apps)\/[^/]*cli[^/]*\//i,
     ...DRAFT,
   },
   {
@@ -116,12 +128,12 @@ export const rules: Rule[] = [
       const pem = !!m && /-----BEGIN/.test(m[0]);
       // The part after a fixed prefix must look random: ghp_aaaaaaaa... is a fill-in, not a token.
       const tooRegular = !!m && !pem && entropy(m[0].replace(/^[A-Za-z]+[_-]+(?:[a-z]+[_-]+)?/, "")) < 3;
-      if (pem && PEM_NO_BODY.test(l)) return serviceRoleJwt(l) || dbUrlWithPassword(l);
-      return (!!m && !tooRegular && !DOC_EXAMPLE.test(m[0]) && !/your[-_]|fake|dummy|placeholder|changeme|sample/.test(m[0]) /* lowercase words: real keys are random */
+      if (pem && (PEM_NO_BODY.test(l) || pemInlineFake(l))) return serviceRoleJwt(l) || dbUrlWithPassword(l);
+      return (!!m && !tooRegular && !DOC_EXAMPLE.test(m[0]) && (pem || !readsAsText(m[0])) && !/your[-_]|fake|dummy|placeholder|changeme|sample/.test(m[0]) /* lowercase words: real keys are random */
         && !/PRIVATE KEY( BLOCK)?-----(["'`]|\.\.\.|\\n\s*\.\.\.|\s+[a-zA-Z])/.test(l)) || serviceRoleJwt(l) || dbUrlWithPassword(l); },
     // Translation files mention "API key" and "secret" in every language, never a real key. Type definition files
     // carry documentation examples, and secret-scanner configs list known test keys on purpose (0.3.9 review).
-    unlessPath: /(^|\/)(locales?|i18n|translations?|lang)\/|\.d\.ts$|(^|\/)(\.gitleaks\.toml|\.secrets\.baseline|\.trufflehog\.ya?ml)$/i,
+    unlessPath: /(^|\/)(locales?|i18n|translations?|lang)\/|\.d\.ts$|(^|\/)(\.gitleaks\.toml|\.gitleaksignore|\.secrets\.baseline|\.trufflehog\.ya?ml)$/i,
     ...DRAFT,
   },
   {
@@ -135,7 +147,7 @@ export const rules: Rule[] = [
     note: "Marked Partial: the call may carry no sensitive data. Confirm, then switch to HTTPS anyway.",
     extensions: CODE,
     // Loopback, private ranges and single-label service names (http://redis:6379) stay on the machine or network (field test).
-    test: (l) => /\b(fetch|axios\.\w+|requests\.\w+|http\.(get|request))\s*\(\s*["'`]http:\/\/(?!localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\]|host\.docker\.internal)[\w-]+\.[\w.-]+/.test(l),
+    test: (l) => /\b(fetch|axios\.\w+|requests\.\w+|http\.(get|request))\s*\(\s*["'`]http:\/\/(?!localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\]|host\.docker\.internal|[\w.-]+\.(test|example|invalid|localhost)(?![\w.-]))[\w-]+\.[\w.-]+/.test(l),
     ...DRAFT,
   },
   {
@@ -150,7 +162,9 @@ export const rules: Rule[] = [
     extensions: CODE,
     // Also a bare track("event", { ... }), the way @vercel/analytics and similar SDKs are imported and called.
     test: (l) => (/\b(posthog|analytics|mixpanel|amplitude|segment|heap|gtag|ga|intercom|hotjar|sentry)\.(identify|track|capture|people\.set|setUser|setUserProperties|register)\s*\(/i.test(l)
-      || /(^|[^.\w])track\s*\(\s*["'`][^"'`]+["'`]\s*,\s*\{/.test(l)) && PII.test(l),
+      || /(^|[^.\w])track\s*\(\s*["'`][^"'`]+["'`]\s*,\s*\{/.test(l)) && PII.test(l.replace(/:\s*["'][\w -]*["']/g, ": 0")),
+    // Sent only inside a branch that checks the person opted in (0.3.14 review).
+    unlessNear: /\bif\b.*\b(opted_?[iI]n|has_?[cC]onsent|consent(Given|ed)?)\b/,
     ...DRAFT,
   },
   {
@@ -194,8 +208,9 @@ export const rules: Rule[] = [
     ],
     fix: "Remove the override and trust a proper certificate. For self-signed certs in tests, scope it to the test only.",
     note: "With checks off, anyone on the network path can read or change the traffic.",
-    extensions: [...CODE, ".env"],
-    test: (l) => /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|\b(requests|httpx|session|client|Client|AsyncClient|urlopen)\b.*\bverify\s*=\s*False|InsecureSkipVerify\s*:\s*true|verify_mode\s*=\s*ssl\.CERT_NONE|cert_reqs\s*=\s*ssl\.CERT_NONE/.test(l), // naming CERT_NONE in a settings map isn't switching it on
+    // Scripts and Dockerfiles switch the check off too: curl -k, curl --insecure, wget --no-check-certificate.
+    extensions: [...CODE, ".env", ".sh", ".bash", ""],
+    test: (l) => (/\bcurl\b[^|;&\n]*\s(-[A-Za-z]*k[A-Za-z]*|--insecure)(\s|$)|\bwget\b[^|;&\n]*--no-check-certificate\b/.test(l) && !/^\s*#|localhost|127\.0\.0\.1/.test(l)) || /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|\b(requests|httpx|session|client|Client|AsyncClient|urlopen)\b.*\bverify\s*=\s*False|InsecureSkipVerify\s*:\s*true|verify_mode\s*=\s*ssl\.CERT_NONE|cert_reqs\s*=\s*ssl\.CERT_NONE/.test(l), // naming CERT_NONE in a settings map isn't switching it on
     // Only the switches with one safe opposite; env vars and ssl modes need a person.
     patch: (l) => l.replace(/rejectUnauthorized(\s*):(\s*)false/, "rejectUnauthorized$1:$2true").replace(/\bverify(\s*)=(\s*)False\b/, "verify$1=$2True").replace(/InsecureSkipVerify(\s*):(\s*)true/, "InsecureSkipVerify$1:$2false"),
     ...DRAFT,
@@ -243,6 +258,7 @@ export const rules: Rule[] = [
     // open-origin findings without credentials were real, 0.3.9 labels).
     fileTest: (lines) => lines.flatMap((l, i) => {
       if (!/Access-Control-Allow-Origin["']?\s*[,:]\s*(["']\*["']|[\w.]*(req|request)\.headers?(\.get\(|\[|\.)\s*["']?origin)|origin\s*:\s*(["']\*["']|true\b|[\w.]*(req|request)\.headers?\.origin)|CORS_ALLOW_ALL_ORIGINS\s*=\s*True|CORS_ORIGIN_ALLOW_ALL\s*=\s*True|allow_origins\s*=\s*\[\s*["']\*["']|allow_origin_regex\s*=\s*["']\.\*/.test(l)) return [];
+      if (/credentials["']?\s*[:=]\s*["']?false|allow_credentials\s*=\s*False|CORS_ALLOW_CREDENTIALS\s*=\s*False/i.test(lines.slice(Math.max(0, i - 3), i + 9).join("\n"))) return [];
       const near = lines.slice(Math.max(0, i - 12), i + 13).join("\n");
       return /credentials["']?\s*[:=,]\s*["']?true|Allow-Credentials["']?\s*[,:]\s*["']?true|CORS_ALLOW_CREDENTIALS\s*=\s*True|allow_credentials\s*=\s*True|supports_credentials\s*=\s*True/i.test(near) ? [i + 1] : [];
     }),
@@ -261,6 +277,8 @@ export const rules: Rule[] = [
     // A bare `secure: false` is usually a client, proxy or database option: it counts only near a cookie being set
     // (0.3.9 labels: 9 of 14 false alarms had no cookie in sight). CSRF cookies are meant to be readable by scripts.
     fileTest: (lines) => lines.flatMap((l, i) => {
+      // A session cookie set with no options at all gets neither flag.
+      if (/\bres\.cookie\(\s*["'`][\w.-]*(session|sess|sid|token|auth|jwt)[\w.-]*["'`]\s*,\s*[^,()]+\)/i.test(l) && !/csrf|xsrf/i.test(l)) return [i + 1];
       if (!/\b(httpOnly|secure)\s*:\s*false\b|SESSION_COOKIE_(SECURE|HTTPONLY)\s*=\s*False/.test(l)) return [];
       const near = lines.slice(Math.max(0, i - 6), i + 4).join("\n");
       return /\b(res|response|reply|ctx|cookies?)\.(cookie|set|setCookie)\s*\(|Set-Cookie|\bcookie\s*:\s*\{|cookieOptions|serialize\(|SESSION_COOKIE/i.test(near)
@@ -336,7 +354,10 @@ rules.push(
     extensions: CODE,
     // A model's output and a decision word on the same line, e.g. status = model.predict(x) > 0.5 ? "approved" : "rejected".
     // score() and invoke() are too generic: a music score, a memory ranking (field test).
-    test: (l) => /\b(predict|predict_proba|classify|generateText|generateObject)\w*\s*\(|\.chat\.completions\.create\s*\(/.test(l) && DECISION.test(l),
+    test: (l) => /\b(predict|predict_proba|classify|generateText|generateObject)\w*\s*\(|\.chat\.completions\.create\s*\(/.test(l) && DECISION.test(l)
+      // A function being defined decides nothing yet, and allow/deny for a tool, a permission or access is an agent's
+      // permission system, not a decision about a person (0.3.14 review: 0 of 4 shown findings were about people).
+      && !/^\s*(export\s+)?(async\s+)?(def|function)\s/.test(l) && !/\b(tool|permissions?|access)\b/.test(l),
     ...DRAFT,
   },
   {

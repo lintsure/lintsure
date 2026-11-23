@@ -104,7 +104,8 @@ export const stackRules: Rule[] = [
     fileTest: (lines) => lines.flatMap((l, i) => {
       if (!/\b(using|with\s+check)\s*\(\s*true\s*\)/i.test(l)) return [];
       const start = lines.slice(Math.max(0, i - 8), i + 1).join(" ");
-      return /\bfor\s+select\b/i.test(start.slice(start.toLowerCase().lastIndexOf("create policy"))) ? [] : [i + 1];
+      // A policy for service_role alone changes nothing: that role skips row level security anyway (0.3.14 review).
+      return /\bfor\s+select\b|\bto\s+service_role\s*(using|with|;|$)/i.test(start.slice(start.toLowerCase().lastIndexOf("create policy"))) ? [] : [i + 1];
     }) }),
   rule({ id: "supabase.function-no-auth", title: "Supabase Edge Function anyone can call", status: "partial", severity: "high", controls: [GDPR32, A01],
     fix: "Keep verify_jwt on for this function, or check the caller yourself at the top of the handler: supabase.auth.getUser() for users, or the provider's signature for a webhook.",

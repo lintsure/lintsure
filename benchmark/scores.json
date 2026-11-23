@@ -8,20 +8,20 @@
   "secret.in-source": {
     "precision": 100,
     "recall": 100,
-    "cases": 25,
-    "casesHash": "3a8fb11c7d53"
+    "cases": 30,
+    "casesHash": "d94fb94ad3ca"
   },
   "transport.plain-http": {
     "precision": 100,
     "recall": 100,
-    "cases": 7,
-    "casesHash": "a213ca265112"
+    "cases": 9,
+    "casesHash": "76f29f0ab3dc"
   },
   "pii.to-analytics": {
     "precision": 100,
     "recall": 100,
-    "cases": 11,
-    "casesHash": "33589cca0a6c"
+    "cases": 13,
+    "casesHash": "0951deda2643"
   },
   "pii.in-url": {
     "precision": 100,
@@ -38,8 +38,8 @@
   "transport.tls-verify-off": {
     "precision": 100,
     "recall": 100,
-    "cases": 10,
-    "casesHash": "a12e2928aec0"
+    "cases": 14,
+    "casesHash": "c0d6b9c8b56b"
   },
   "sql.string-built": {
     "precision": 100,
@@ -50,14 +50,14 @@
   "cors.any-origin": {
     "precision": 100,
     "recall": 100,
-    "cases": 12,
-    "casesHash": "a54fee8edba1"
+    "cases": 13,
+    "casesHash": "7d63d761a3e7"
   },
   "session.cookie-insecure": {
     "precision": 100,
     "recall": 100,
-    "cases": 5,
-    "casesHash": "66a885eb09be"
+    "cases": 7,
+    "casesHash": "a1c4a1efa955"
   },
   "config.debug-on": {
     "precision": 100,
@@ -68,8 +68,8 @@
   "ai.automated-decision": {
     "precision": 100,
     "recall": 100,
-    "cases": 4,
-    "casesHash": "7edbc1fa1fa6"
+    "cases": 7,
+    "casesHash": "1e233414c100"
   },
   "ai.hides-being-ai": {
     "precision": 100,
@@ -92,14 +92,14 @@
   "path.user-input": {
     "precision": 100,
     "recall": 100,
-    "cases": 5,
-    "casesHash": "00d1fa157c5b"
+    "cases": 8,
+    "casesHash": "0016d08c1634"
   },
   "redirect.open": {
     "precision": 100,
     "recall": 100,
-    "cases": 4,
-    "casesHash": "6b0000788a08"
+    "cases": 5,
+    "casesHash": "b4e64e84c4e1"
   },
   "ssrf.user-url": {
     "precision": 100,
@@ -170,8 +170,8 @@
   "jwt.unverified": {
     "precision": 100,
     "recall": 100,
-    "cases": 5,
-    "casesHash": "3555057bd851"
+    "cases": 9,
+    "casesHash": "225c1e965df0"
   },
   "cmd.shell-built": {
     "precision": 100,
@@ -194,14 +194,14 @@
   "template.user-string": {
     "precision": 100,
     "recall": 100,
-    "cases": 3,
-    "casesHash": "4cc8264014d8"
+    "cases": 5,
+    "casesHash": "3dcd4a5621c0"
   },
   "nosql.operator-input": {
     "precision": 100,
     "recall": 100,
-    "cases": 4,
-    "casesHash": "3b50482a3073"
+    "cases": 6,
+    "casesHash": "9a13d148045f"
   },
   "upload.unrestricted": {
     "precision": 100,
@@ -212,20 +212,20 @@
   "mass-assignment": {
     "precision": 100,
     "recall": 100,
-    "cases": 5,
-    "casesHash": "3027078524cb"
+    "cases": 11,
+    "casesHash": "640a47cc487a"
   },
   "auth.hardcoded-password": {
     "precision": 100,
     "recall": 100,
-    "cases": 11,
-    "casesHash": "a1f1064ff135"
+    "cases": 17,
+    "casesHash": "fffb53a4dad9"
   },
   "jwt.no-expiry": {
     "precision": 100,
     "recall": 100,
-    "cases": 4,
-    "casesHash": "2145a3aa6b36"
+    "cases": 5,
+    "casesHash": "16c461c5c85e"
   },
   "deserialize.unsafe": {
     "precision": 100,
@@ -302,8 +302,8 @@
   "llm.user-input-in-system-prompt": {
     "precision": 100,
     "recall": 100,
-    "cases": 6,
-    "casesHash": "6d7f79d9cf77"
+    "cases": 14,
+    "casesHash": "52fad121d607"
   },
   "llm.output-to-sink": {
     "precision": 100,
@@ -368,8 +368,8 @@
   "jwt.no-algorithm-pin": {
     "precision": 100,
     "recall": 100,
-    "cases": 5,
-    "casesHash": "cd2c4a796cbf"
+    "cases": 7,
+    "casesHash": "7dd2b6d83e0a"
   },
   "jwt.weak-secret": {
     "precision": 100,
@@ -392,14 +392,14 @@
   "ws.no-origin-check": {
     "precision": 100,
     "recall": 100,
-    "cases": 3,
-    "casesHash": "215b59ecf93f"
+    "cases": 4,
+    "casesHash": "5ac48dcd3d92"
   },
   "k8s.privileged": {
     "precision": 100,
     "recall": 100,
-    "cases": 8,
-    "casesHash": "160fe671fae3"
+    "cases": 11,
+    "casesHash": "13b4e907245d"
   },
   "cloud.public-bucket": {
     "precision": 100,

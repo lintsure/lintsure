@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIMER, checksFor, classify, getKnowledge, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
+import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIMER, checksFor, classify, getKnowledge, isHygiene, nextSteps, readConfig, rules, scan, toMarkdown, type FrameworkId } from "@lintsure/core";
 
 const server = new McpServer({ name: "lintsure", version: "0.3.14" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
@@ -45,11 +45,12 @@ server.tool("scan",
     const scope = files?.map(norm);
     const picked = report.findings.filter((f) => (!scope || scope.some((p) => f.file === p || f.file.startsWith(p + "/")))
       && (!only || only.includes(f.ruleId)) && (status === "all" || f.status === status) && !(f.accepted && !f.accepted.expired));
-    const rank = (f: (typeof picked)[number]) => (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity];
+    const rank = (f: (typeof picked)[number]) => (isHygiene(f) ? 6 : 0) + (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity];
     const shown = [...picked].sort((a, b) => rank(a) - rank(b)).slice(0, limit);
     const gaps = picked.filter((f) => f.status === "gap").length;
+    const hygiene = picked.filter(isHygiene).length; // sorted last, so the limit drops these first
     return reply([
-      `Lintsure ${report.rulesVersion}: ${picked.length} open finding${picked.length === 1 ? "" : "s"} (${gaps} gap, ${picked.length - gaps} partial)${scope || only ? " in the files and rules asked for" : ""}, ${report.filesChecked} files read${report.filesSkipped ? `, ${report.filesSkipped} skipped (over 1 MB, binary or unreadable)` : ""}.`,
+      `Lintsure ${report.rulesVersion}: ${picked.length} open finding${picked.length === 1 ? "" : "s"} (${gaps} gap, ${picked.length - gaps} partial${hygiene && hygiene < picked.length ? `; ${hygiene} are repo hygiene, listed last` : ""})${scope || only ? " in the files and rules asked for" : ""}, ${report.filesChecked} files read${report.filesSkipped ? `, ${report.filesSkipped} skipped (over 1 MB, binary or unreadable)` : ""}.`,
       ...(picked.length > shown.length ? [`Showing the first ${shown.length}; raise limit or narrow with files to see more.`] : []),
       "",
       ...shown.map((f) => `- ${f.id} ${f.status === "gap" ? "Gap" : "Partial"} · ${f.severity} · ${f.file}:${f.line} · ${f.ruleId}: ${f.title}. Fix: ${f.fix}`),

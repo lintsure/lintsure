@@ -40,7 +40,7 @@ const MODEL_OUTPUT = /\b(completion|response|result|output|reply|answer|generati
 const SINKS = /\b(eval|exec|execSync|spawn|new Function)\s*\(|\.innerHTML\s*=|dangerouslySetInnerHTML|\.(query|execute|raw)\s*\(|\bsubprocess\.|\bos\.system\(/;
 // User input inside a system prompt: the model can't tell the app's instructions from the user's text.
 // An error's own text (`${error.message}`) is the app's, not the user's (vercel/ai study).
-const USER_TEXT = /\$\{(?![^}]*\b(err|error|e|ex|exception)\.message\b)[^}]*\b(req\.(body|query|params)|request\.(json|form|args)|input|userInput|message|prompt|query|body)\b[^}]*\}|\{(user_input|user_message|query|message)\}/;
+const USER_TEXT = /\$\{(?!\s*body\s*\})(?![^}]*\b(err|error|e|ex|exception)\.message\b)[^}]*\b(req\.(body|query|params)|request\.(json|form|args)|input|userInput|message|prompt|query|body)\b[^}]*\}|\{(user_input|user_message|query|message)\}/;
 
 const rule = (r: Omit<Rule, "mappedBy" | "reviewedAt">): Rule => ({ ...r, ...DRAFT });
 export const standardsRules: Rule[] = [
@@ -49,7 +49,10 @@ export const standardsRules: Rule[] = [
     fix: "Keep the system prompt fixed. Send what the user typed as a separate user message, and never put it inside the system instructions.",
     note: "Text in the system prompt is treated as the app's own instructions. If user text goes there, a user can rewrite the rules the AI follows (prompt injection). Marked Partial: the inserted value may be safe text your app controls.",
     extensions: CODE,
-    test: (l) => /\b(role\s*:\s*["']system["']|system(Prompt|_prompt|Message|_message|Instruction)?\s*[:=]|["']system["']\s*,)/.test(l) && USER_TEXT.test(l) }),
+    test: (l) => /\b(role\s*:\s*["']system["']|system(Prompt|_prompt|Message|_message|Instruction)?\s*[:=]|["']system["']\s*,)/.test(l)
+      // Not user text in the instructions: `system: undefined` next to a prompt, and a helper that picks a fixed system
+      // message from its arguments, getSystemMessage(input.locale) (0.3.14 review: 3 of 3 shown findings).
+      && !/\bsystem\s*:\s*(undefined|null)\b/.test(l) && USER_TEXT.test(l.replace(/\bget\w*System\w*\([^()]*\)/g, "fixed")) }),
   rule({ id: "llm.output-to-sink", title: "AI output run as code, a command, a query or page HTML", status: "gap", severity: "high", controls: [LLM10],
     fix: "Treat model output like input from a stranger: validate it against what you expect, escape it for HTML, and never run it as code, a shell command or SQL.",
     note: "A model's reply can be steered by anyone who can influence its input. Passing it straight to eval, a shell, a database query or innerHTML lets them run code or change data.",
