@@ -6,8 +6,9 @@ import type { Control, Rule } from "../types.js";
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 const MARKUP = [...CODE, ".html", ".vue", ".svelte", ".astro", ".jinja", ".j2"];
 const YAML = [".yml", ".yaml"];
-// Files whose commands an agent or editor runs by itself: Claude Code settings, MCP server lists, Cursor, VS Code, Gemini CLI.
-export const AGENT_CONFIG = /(^|\/)(\.claude\/settings(\.local)?\.json|\.mcp\.json|mcp\.json|claude_desktop_config\.json|\.windsurf\/mcp_config\.json|\.roo\/mcp\.json|\.cursor\/(mcp|hooks)\.json|\.vscode\/(tasks|mcp)\.json|\.gemini\/settings\.json)$/;
+// Files whose commands an agent or editor runs by itself: settings, MCP server lists and hook files for Claude Code, Cursor,
+// VS Code, Gemini CLI, Codex, Copilot, Zed, OpenCode and others. Any mcp.json counts, wherever the agent keeps it.
+export const AGENT_CONFIG = /(^|\/)(\.claude\/settings(\.local)?\.json|\.mcp\.json|mcp\.json|claude_desktop_config\.json|\.windsurf\/mcp_config\.json|\.roo\/mcp\.json|\.cursor\/(mcp|hooks(\.windows)?)\.json|\.codex\/hooks\.json|\.mastracode\/hooks\.json|\.github\/hooks\/[^/]+\.json|\.zed\/settings\.json|opencode\.json|\.vscode\/(tasks|mcp)\.json|\.gemini\/settings\.json)$/;
 // Download-and-run shapes: piped into a shell, run from $( ), process substitution, base64 into a shell, encoded PowerShell,
 // and download-then-execute chains.
 const RUNS_REMOTE = new RegExp([
@@ -19,7 +20,14 @@ const RUNS_REMOTE = new RegExp([
   String.raw`\b(curl|wget)\b[^;&|]*(&&|;)\s*(chmod\s+\+x|\.\/|sh\s|bash\s)`,
 ].join("|"), "i");
 // Files an agent reads as its own instructions.
-const AGENT_INSTRUCTIONS = /(^|\/)(SKILL\.md|AGENTS\.md|CLAUDE\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|copilot-instructions\.md)$|(^|\/)\.cursor\/rules\/[^/]+\.mdc?$|(^|\/)\.(claude|agents|codex|gemini)\/(skills|commands|agents)\/.+\.md$/i;
+// The folder each agent keeps its own files in: .claude, .agents, .cursor, .kiro, .continue, .github (Copilot) and the rest.
+export const AGENT_DIRS = String.raw`\.(claude|agents?|codex|gemini|cursor|continue|kiro|kilocode|factory|codebuddy|opencode|pi|hermes|mastracode|openclaw|adal|autohand|roo|windsurf|cline|junie|rovodev|github)`;
+export const AGENT_INSTRUCTIONS = new RegExp([
+  String.raw`(^|\/)(SKILL\.md|AGENTS\.md|CLAUDE\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|\.clinerules|copilot-instructions\.md)$`,
+  String.raw`(^|\/)\.cursor\/rules\/[^/]+\.mdc?$`,
+  String.raw`(^|\/)\.clinerules\/[^/]+\.md$|(^|\/)\.junie\/guidelines\.md$`,
+  String.raw`(^|\/)${AGENT_DIRS}\/(skills|commands|agents|rules|steering|prompts|instructions)\/.+\.md$`,
+].join("|"), "i");
 const OVERRIDE = /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+)?(of\s+)?(your\s+|the\s+)?(previous|prior|above|earlier|system|original|user'?s?)\s+(instructions|rules|prompts?|messages|guidelines)\b/i;
 const CONCEAL = /\b(do not|don'?t|never)\s+(tell|inform|mention|show|reveal|disclose)\s+(this\s+|it\s+|anything\s+)?(to\s+)?the\s+user\b|\bwithout\s+(telling|informing)\s+the\s+user\b/i;
 // A line that says a download-and-run is blocked or forbidden describes a guard, it doesn't ask for one.
@@ -41,6 +49,18 @@ const MODEL_TAG = { test: (l: string) => /<\s*\/?\s*(important|system)\s*>|<\|(i
 // .env is left out: a dotenv tool honestly says it reads the .env file.
 const KEY_FILE_ORDER = /\b(read|open|cat|send|pass|include|attach|load)\s+[^.\n]{0,60}(\.ssh\b|\bid_(rsa|ed25519|ecdsa)\b|\.aws\/credentials|\.npmrc\b|\.netrc\b|\.git-credentials|\.kube\/config|\bmcp\.json|claude_desktop_config\.json)/i;
 export const poisonedDescription = (l: string) => hiddenText(l) || OVERRIDE.test(l) || CONCEAL.test(l) || MODEL_TAG.test(l) || KEY_FILE_ORDER.test(l);
+const ALLOWS_ALL = /^\s*-\s*["']?(Bash|Bash\(\*\)|\*)["']?\s*(#.*)?$/;
+/** A YAML permissions file whose allow list names the whole shell or every tool (Continue's permissions.yaml). Only items
+ *  under "allow:" count: the same entry under "ask:" or "exclude:" is a limit. Returns line numbers. Pure. */
+export function yamlAllowsAll(lines: string[]): number[] {
+  const out: number[] = []; let section = "";
+  lines.forEach((l, i) => {
+    const top = /^(\w+):/.exec(l);
+    if (top) section = top[1];
+    else if (section === "allow" && ALLOWS_ALL.test(l)) out.push(i + 1);
+  });
+  return out;
+}
 /** Agent instruction line: Gap for override, concealment, hidden text or sending secrets out; Partial for download-and-run. Pure. */
 export function instructionsUnsafe(l: string): boolean | "partial" {
   if (hiddenText(l)) return true;
@@ -186,7 +206,7 @@ export const owaspRules: Rule[] = [
   rule({ id: "agent.permissions-allow-all", title: "Agent settings that skip every permission prompt", status: "gap", severity: "high", controls: [A02, LLM03, AST03],
     fix: "Remove the bypass from the shared project file. Allow the few commands you trust by name (for example Bash(npm test)), and keep wider permissions in your own local settings, not in the repo.",
     note: "Committed agent settings apply to everyone who opens the repo with that agent. Skipping prompts or allowing every shell command lets a bad instruction, a poisoned file or a mistake run without a person seeing it (CWE-250, OWASP LLM03 Excessive Agency).",
-    extensions: [".json", ".toml"], pathMatch: /(^|\/)(\.claude\/settings\.json|\.gemini\/settings\.json|\.codex\/config\.toml|\.continue\/(config|permissions)\.ya?ml|\.vscode\/settings\.json)$/,
+    extensions: [".json", ".toml", ".yaml", ".yml"], fileTest: yamlAllowsAll, pathMatch: /(^|\/)(\.claude\/settings\.json|\.gemini\/settings\.json|\.codex\/config\.toml|\.continue\/(config|permissions)\.ya?ml|\.vscode\/settings\.json)$/,
     test: (l) => /"defaultMode"\s*:\s*"bypassPermissions"|(?:^|[[,])\s*"(Bash|Bash\(\*\)|Bash\(:\*\)|\*)"\s*(?:[,\]]|$)|--dangerously-skip-permissions|"(yolo|autoAccept)"\s*:\s*true|\bapproval_policy\s*=\s*["']never["']|\bsandbox_mode\s*=\s*["']danger-full-access["']|"chat\.tools\.autoApprove"\s*:\s*true/.test(l) }),
   rule({ id: "ci.action-unpinned", title: "Third-party GitHub Action not pinned to a commit", status: "partial", severity: "medium", controls: [A03],
     fix: "Pin third-party actions to a full commit SHA, with the version as a comment, for example uses: owner/action@<40-character sha> # v2.",

@@ -1,0 +1,6 @@
+allow:
+  - Read(*)
+  - Bash(npm test*)
+ask:
+  - Bash
+exclude: []

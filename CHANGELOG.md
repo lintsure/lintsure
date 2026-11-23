@@ -12,6 +12,7 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
   - a skill that is allowed any shell command (`skill.unrestricted-shell`)
   - an MCP server that listens on every network interface (`mcp.server-binds-all-interfaces`)
 - All four are shown as Partial: each names what Lintsure can't see, such as whether writing to those files is the skill's stated job.
+- **The agent checks read more agents.** Hook files for Codex, Copilot, Cursor on Windows and Mastra, Zed's project settings and `opencode.json` are read as agent config. Rules, steering, prompt and instruction folders are read as instructions for Kiro, Continue, Copilot, Cline, Windsurf, Roo, Kilo Code, OpenCode, Junie and others. Continue's `permissions.yaml` is read: the whole shell or every tool on its allow list is a finding.
 - Existing agent checks now map to the new list too: unsafe agent instructions, agent configs that download and run code, agent permissions that allow everything, and MCP servers run from a moving version.
 
 ## 0.3.15 · 2026-11-23 · 17 new checks, fewer false alarms, a start menu, skills for any agent

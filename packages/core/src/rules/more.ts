@@ -1,7 +1,7 @@
 // Rules added from the realistic benchmark (benchmark/corpus.mjs, "gap" cases), 2026-11-20. Same approach as the other
 // rule files: patterns on a line or a file, no data flow across files, our own wording. Beta: awaiting review.
 import type { Control, Rule } from "../types.js";
-import { AGENT_CONFIG, AST, poisonedDescription } from "./owasp.js";
+import { AGENT_CONFIG, AGENT_DIRS, AST, poisonedDescription } from "./owasp.js";
 
 const CODE = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"];
 const JS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
@@ -43,7 +43,7 @@ const LLM01 = { framework: "owasp-llm", id: "LLM01:2026", title: "Prompt Injecti
 
 // Files an agent loads as a skill or a command: a SKILL.md anywhere, or a file in an agent's skills, commands or agents folder.
 // AGENTS.md and CLAUDE.md are left out: a project telling its own agent to keep its notes up to date is ordinary.
-const SKILL_FILE = /(^|\/)SKILL\.md$|(^|\/)\.(claude|agents|codex|gemini|cursor)\/(skills|commands|agents)\/.+\.md$/i;
+const SKILL_FILE = new RegExp(String.raw`(^|\/)SKILL\.md$|(^|\/)${AGENT_DIRS}\/(skills|commands|agents)\/.+\.md$`, "i");
 // A line that forbids the thing describes a guard, it doesn't ask for it.
 const FORBIDDEN = /\b(never|do not|don'?t|must not|avoid|refuse)\b/i;
 // "Follow the instructions at <url>", or "fetch <url> and follow it": what the agent does next is decided by that page.

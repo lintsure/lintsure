@@ -42,6 +42,7 @@ test("known findings stay put", async () => {
     "skill.writes-agent-memory@.claude/skills/deploy/SKILL.md:7",
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:5",
     "agent.instructions-unsafe@.claude/skills/setup/SKILL.md:6",
+    "agent.permissions-allow-all@.continue/permissions.yaml:2",
     "release.env-not-ignored@.gitignore:1",
     "mcp.config-unsafe-server@.mcp.json:3",
     "llm.client-controls-system@app/api/chat/route.ts:4",
@@ -1232,4 +1233,17 @@ test("request data reaching a shell or query is shown by default; a guess from t
   const r = await coreScan(dir);
   const shown = r.findings.map((f) => `${f.ruleId}:${f.line}`).filter((x) => /^(cmd|sql)/.test(x)).sort();
   assert.deepEqual(shown, ["cmd.shell-built:2", "sql.string-built:3"]);
+});
+
+test("agent rules read each agent's own folders", async () => {
+  const { AGENT_CONFIG, AGENT_INSTRUCTIONS, yamlAllowsAll } = await import("../src/rules/owasp.js");
+  for (const f of [".codex/hooks.json", ".github/hooks/guard.json", ".cursor/hooks.windows.json", ".zed/settings.json", ".kiro/settings/mcp.json", "apps/web/opencode.json"])
+    assert.ok(AGENT_CONFIG.test(f), `${f} is an agent config`);
+  for (const f of [".kiro/steering/product.md", ".github/instructions/api.instructions.md", ".continue/rules/style.md", ".clinerules", ".agent/skills/deploy/SKILL.md", ".windsurf/rules/main.md", ".junie/guidelines.md"])
+    assert.ok(AGENT_INSTRUCTIONS.test(f), `${f} is read as instructions`);
+  for (const f of ["src/hooks.json", "docs/rules/style.md", ".github/workflows/ci.yml", "README.md", "packages/kiro/steering/x.md"])
+    assert.ok(!AGENT_CONFIG.test(f) && !AGENT_INSTRUCTIONS.test(f), `${f} is an ordinary file`);
+  // Only the allow list counts: the same entry under ask or exclude is a limit.
+  assert.deepEqual(yamlAllowsAll(["allow:", "  - Read(*)", "  - Bash", '  - "*"', "ask:", "  - Bash", "exclude: []"]), [3, 4]);
+  assert.deepEqual(yamlAllowsAll(["allow:", "  - Bash(npm test*)", "ask:", "  - Bash"]), []);
 });
