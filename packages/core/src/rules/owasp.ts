@@ -206,9 +206,11 @@ export const owaspRules: Rule[] = [
     test: (l) => /\bMath\.random\(\)|\brandom\.(random|randint|choice|choices|getrandbits)\(/.test(l) && /(token|secret|password|passwd|otp|nonce|session|api_?key|reset|invite|verification|code\b)/i.test(l) }),
   rule({ id: "crypto.weak-cipher", title: "Weak or broken encryption", status: "gap", severity: "high", controls: [A04],
     fix: "Use AES-256-GCM or ChaCha20-Poly1305 with a random nonce, through a maintained library. Replace createCipher with createCipheriv.",
-    note: "DES, RC4 and ECB mode can be broken or leak patterns in the data; createCipher derives a weak key and IV (CWE-327).", extensions: CODE,
+    note: "DES, RC4 and ECB mode can be broken or leak patterns in the data; createCipher derives a weak key and IV (CWE-327).", extensions: [...CODE, ".java", ".kt", ".swift", ".go", ".dart"],
     // A quoted cipher name counts only on a line about encryption: "des" is also a German word (field test).
-    test: (l) => /\bcreateCipher\s*\(|\bMODE_ECB\b|\b(DES3?|ARC4|Blowfish)\.new\s*\(/i.test(l)
+    // Java and Kotlin: a bare "AES" means AES/ECB. Go, Swift (CommonCrypto), CryptoJS and Python's cryptography package.
+    test: (l) => /\bCipher\.getInstance\(\s*"(DES|DESede|RC4|ARCFOUR|Blowfish|AES|[A-Za-z0-9]+\/ECB\/[^"]*)"\s*[,)]|\b(des|rc4)\.NewCipher\(|\bdes\.NewTripleDESCipher\(|\bkCCAlgorithm(DES|3DES|RC4)\b|\bkCCOptionECBMode\b|\bCryptoJS\.(DES|RC4|TripleDES)\.|\bCryptoJS\.mode\.ECB\b|\bmodes\.ECB\(/.test(l)
+      || /\bcreateCipher\s*\(|\bMODE_ECB\b|\b(DES3?|ARC4|Blowfish)\.new\s*\(/i.test(l)
       || (/["'](des|des-ede3?|des-ede3-cbc|rc4|aes-\d{3}-ecb)["']/i.test(l) && /cipher|crypt|algorithm/i.test(l)) }),
   rule({ id: "jwt.unverified", title: "JWT accepted without checking its signature", status: "gap", severity: "high", controls: [A04, A07],
     fix: "Verify tokens with jwt.verify (Node) or jwt.decode with a key and an explicit algorithms list (Python). Never allow the 'none' algorithm.",

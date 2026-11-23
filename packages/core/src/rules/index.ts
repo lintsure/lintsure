@@ -18,6 +18,8 @@ const LOG_CALL = /\b(console\.(log|info|warn|error|debug)|logger\.\w+|log\.(info
 // exponentially on text such as an array of regular expressions (found when statements were joined).
 const codeOnly = (l: string) => l.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, (s) => (s.match(/\{[^}]*\}/g) ?? []).join(" "));
 // Helpers that hide the raw value before it is logged.
+// Certificate or host-name checks switched off in Java, Kotlin, Dart and Python.
+const NATIVE_TLS_OFF = /\bALLOW_ALL_HOSTNAME_VERIFIER\b|\b(setHostnameVerifier|hostnameVerifier)\s*[({]\s*\{?\s*\(?\s*\w+\s*,\s*\w+\s*\)?\s*->\s*true\b|\bHostnameVerifier\s*\{\s*\w+\s*,\s*\w+\s*->\s*true\s*\}|\bbadCertificateCallback\s*=\s*\([^)]*\)\s*=>\s*true|\bonReceivedSslError\b[^\n]*\.proceed\(\)|\b_create_unverified_context\(|\bcheck_hostname\s*=\s*False\b/;
 export const MASKED = /\b\w*(mask|hash|pseudonym|redact|anonymi[sz]e|obfuscate|scrub)\w*\s*\(/i;
 const PII = /\b(e-?mail|phone|ssn|social_?security|passport|date_?of_?birth|dob|password|passwd|credit_?card|card_?number|iban)\b/i;
 // The arguments of the first log call on a line, up to its matching ")". Other code on the same line is ignored.
@@ -209,8 +211,8 @@ export const rules: Rule[] = [
     fix: "Remove the override and trust a proper certificate. For self-signed certs in tests, scope it to the test only.",
     note: "With checks off, anyone on the network path can read or change the traffic.",
     // Scripts and Dockerfiles switch the check off too: curl -k, curl --insecure, wget --no-check-certificate.
-    extensions: [...CODE, ".env", ".sh", ".bash", ""],
-    test: (l) => (/\bcurl\b[^|;&\n]*\s(-[A-Za-z]*k[A-Za-z]*|--insecure)(\s|$)|\bwget\b[^|;&\n]*--no-check-certificate\b/.test(l) && !/^\s*#|localhost|127\.0\.0\.1/.test(l)) || /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|\b(requests|httpx|session|client|Client|AsyncClient|urlopen)\b.*\bverify\s*=\s*False|InsecureSkipVerify\s*:\s*true|verify_mode\s*=\s*ssl\.CERT_NONE|cert_reqs\s*=\s*ssl\.CERT_NONE/.test(l), // naming CERT_NONE in a settings map isn't switching it on
+    extensions: [...CODE, ".env", ".sh", ".bash", "", ".java", ".kt", ".swift", ".go", ".dart"],
+    test: (l) => (/\bcurl\b[^|;&\n]*\s(-[A-Za-z]*k[A-Za-z]*|--insecure)(\s|$)|\bwget\b[^|;&\n]*--no-check-certificate\b/.test(l) && !/^\s*#|localhost|127\.0\.0\.1/.test(l)) || NATIVE_TLS_OFF.test(l) || /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*["']?0|\b(requests|httpx|session|client|Client|AsyncClient|urlopen)\b.*\bverify\s*=\s*False|InsecureSkipVerify\s*:\s*true|verify_mode\s*=\s*ssl\.CERT_NONE|cert_reqs\s*=\s*ssl\.CERT_NONE/.test(l), // naming CERT_NONE in a settings map isn't switching it on
     // Only the switches with one safe opposite; env vars and ssl modes need a person.
     patch: (l) => l.replace(/rejectUnauthorized(\s*):(\s*)false/, "rejectUnauthorized$1:$2true").replace(/\bverify(\s*)=(\s*)False\b/, "verify$1=$2True").replace(/InsecureSkipVerify(\s*):(\s*)true/, "InsecureSkipVerify$1:$2false"),
     ...DRAFT,

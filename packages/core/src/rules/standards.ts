@@ -84,8 +84,8 @@ export const standardsRules: Rule[] = [
   rule({ id: "mobile.token-in-plain-storage", title: "Token or password saved in the phone's plain storage", status: "gap", severity: "high", controls: [GDPR32, A04],
     fix: "Store tokens and passwords in the platform's secure storage: expo-secure-store, react-native-keychain, the Android Keystore or the iOS Keychain.",
     note: "AsyncStorage and SharedPreferences aren't encrypted. Other apps on a rooted phone, or a device backup, can read what's saved there.",
-    extensions: [".ts", ".tsx", ".js", ".jsx", ".kt", ".java"],
-    test: (l) => /\b(AsyncStorage\.(setItem|multiSet)|MMKV\(\)\.set|\.putString)\s*\(/.test(l) && /token|password|secret|session|jwt|api_?key/i.test(l) }),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".kt", ".java", ".swift"],
+    test: (l) => /\b(AsyncStorage\.(setItem|multiSet)|MMKV\(\)\.set|\.putString|UserDefaults\.standard\.set(?:Value)?)\s*\(/.test(l) && /token|password|secret|session|jwt|api_?key/i.test(l) }),
   rule({ id: "mobile.cleartext-traffic", title: "App allows unencrypted network traffic", status: "gap", severity: "high", controls: [GDPR32, A04],
     fix: "Turn off cleartext traffic (usesCleartextTraffic false on Android, no NSAllowsArbitraryLoads on iOS) and use HTTPS everywhere. Allow exceptions per domain only if you must.",
     note: "With cleartext allowed, anyone on the same Wi-Fi can read and change what the app sends and receives.",
@@ -101,6 +101,8 @@ export const standardsRules: Rule[] = [
   rule({ id: "mobile.webview-any-origin", title: "In-app browser that loads any website", status: "partial", severity: "medium", controls: [A06],
     fix: "List only the sites the WebView should open in originWhitelist, and open other links in the phone's browser.",
     note: "A WebView that accepts any origin can be sent to a page that abuses the bridge between the web page and your app. Marked Partial: it may only ever load your own content.",
-    extensions: [".tsx", ".jsx", ".ts", ".js"],
-    test: (l) => /originWhitelist\s*=\s*\{\s*\[\s*["']\*["']\s*\]\s*\}/.test(l) }),
+    extensions: [".tsx", ".jsx", ".ts", ".js", ".kt", ".java"],
+    test: (l) => /originWhitelist\s*=\s*\{\s*\[\s*["']\*["']\s*\]\s*\}/.test(l)
+      // Android: a page loaded from a file may read any other local file or any site.
+      || /\bsetAllow(UniversalAccess|FileAccess)FromFileURLs\(\s*true\s*\)|\ballow(UniversalAccess|FileAccess)FromFileURLs\s*=\s*true\b/.test(l) }),
 ];

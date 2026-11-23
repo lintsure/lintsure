@@ -655,7 +655,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "ACDE-264A");
+  assert.equal(r.policy?.fingerprint, "268D-CAF0");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {
@@ -1107,6 +1107,35 @@ test("privacy: pre-ticked consent, stored card security code, sensitive categori
   const card = storedField("cvv2?|cvc2?");
   for (const bad of ["  cvv VARCHAR(4),", "  cvv String", "  cvv: { type: String, required: true },", "    cvv = models.CharField(max_length=4)", "  @Column() cvv: string;"]) assert.equal(card(bad), true, bad);
   for (const ok of ["  cvv: string;", "const cvv = form.cvv.trim();", "-- cvv VARCHAR(4)", "  <input name=\"cvv\" />"]) assert.equal(card(ok), false, ok);
+});
+
+test("native code: weak ciphers, TLS checks off, fixed IVs, weak parameters, debuggable builds", async () => {
+  const { weakCryptoParameter, debuggableBuild } = await import("../src/rules/more.js");
+  for (const bad of ["const k = crypto.pbkdf2Sync(password, salt, 1000, 32, \"sha256\");", "kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=1000)", "const h = await bcrypt.hash(password, 8);", "salt = bcrypt.gensalt(rounds=6)", "crypto.generateKeyPairSync(\"rsa\", { modulusLength: 1024 });", "key, _ := rsa.GenerateKey(rand.Reader, 1024)", "openssl genrsa -out key.pem 1024"])
+    assert.equal(weakCryptoParameter(bad), true, bad);
+  for (const ok of ["const k = crypto.pbkdf2Sync(password, salt, 600000, 32, \"sha256\");", "const h = await bcrypt.hash(password, 12);", "crypto.generateKeyPairSync(\"rsa\", { modulusLength: 4096 });", "openssl genrsa -out key.pem 4096", "list.initialize(1024)"])
+    assert.equal(weakCryptoParameter(ok), false, ok);
+  const gradle = (type: string) => debuggableBuild(`android {\n  buildTypes {\n    ${type} {\n      debuggable true\n    }\n  }\n}`.split("\n"));
+  assert.deepEqual(gradle("release"), [4]); assert.deepEqual(gradle("debug"), []);
+  const { scan: s } = await import("../src/index.js");
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs"); const { tmpdir } = await import("node:os"); const { dirname } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "ls-native-"));
+  try {
+    const files: Record<string, string> = {
+      "app/Enc.java": "Cipher c = Cipher.getInstance(\"AES\");\nCipher ok = Cipher.getInstance(\"AES/GCM/NoPadding\");\nIvParameterSpec iv = new IvParameterSpec(new byte[16]);\n",
+      "app/Net.kt": "val client = OkHttpClient.Builder().hostnameVerifier { _, _ -> true }.build()\n",
+      "app/net.go": "tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}\n",
+      "app/enc.ts": "const iv = Buffer.alloc(16, 0);\nconst c = crypto.createCipheriv(\"aes-256-cbc\", key, iv);\n\n\n\n\n\n\n\n\n\n\n\nconst nonce = Buffer.alloc(12);\ncrypto.randomFillSync(nonce);\n",
+      "app/Store.swift": "UserDefaults.standard.set(authToken, forKey: \"token\")\nUserDefaults.standard.set(true, forKey: \"seenIntro\")\n",
+    };
+    for (const [p, text] of Object.entries(files)) { mkdirSync(dirname(join(dir, p)), { recursive: true }); writeFileSync(join(dir, p), text); }
+    const r = await s(dir, undefined, { all: true });
+    const at = (id: string) => r.findings.filter((f) => f.ruleId === id).map((f) => `${f.file}:${f.line}`);
+    assert.deepEqual(at("crypto.weak-cipher"), ["app/Enc.java:1"]);
+    assert.deepEqual(at("crypto.static-iv"), ["app/Enc.java:3", "app/enc.ts:1"]);
+    assert.deepEqual(at("transport.tls-verify-off").sort(), ["app/Net.kt:1", "app/net.go:1"]);
+    assert.deepEqual(at("mobile.token-in-plain-storage"), ["app/Store.swift:1"]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("dev scripts, seed and demo files inside the app folder don't ship; routes and CLIs still do", async () => {

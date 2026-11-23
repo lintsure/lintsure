@@ -1,0 +1,8 @@
+// Planted: a release build that can be debugged.
+android {
+  buildTypes {
+    release {
+      debuggable true
+    }
+  }
+}

@@ -59,6 +59,30 @@ export function mcpConfigUnsafe(lines: string[]): Array<{ line: number; status: 
 }
 
 const DOCKERFILE = /^(Dockerfile|Containerfile)|\.Dockerfile$/i;
+const NATIVE = [".java", ".kt", ".swift", ".go", ".dart"];
+// An IV or nonce that is the same for every message: zero bytes or fixed text. Reusing one with the same key breaks
+// AES-GCM outright and leaks patterns in CBC. A buffer that is filled with random bytes on the next lines is fine (unlessNear).
+const STATIC_IV = /\b(iv|IV|nonce|initVector|initializationVector)\s*[:=]\s*(Buffer\.alloc\(\s*\d+\s*(,\s*0\s*)?\)|Buffer\.from\(\s*["'][^"']+["'])|\b(iv|nonce)\s*=\s*(b["'][^"']+["']|bytes\(\s*\d+\s*\))|\b(Iv|GCM)ParameterSpec\(\s*(\d+\s*,\s*)?(new\s+byte\[\d+\]|ByteArray\(\d+\)|"[^"]+"\.(getBytes|toByteArray)\()|\b(iv|nonce)\s*:?=\s*\[\]byte\("[^"]+"\)/;
+/** Key sizes and work factors below what current guidance accepts. Pure. */
+export function weakCryptoParameter(l: string): boolean {
+  if (/^\s*(\/\/|#|\*)/.test(l)) return false;
+  // PBKDF2 under 10,000 rounds (OWASP asks for 600,000 with SHA-256; a four-digit count is far off any guidance).
+  if (/\bpbkdf2(Sync)?\(\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*,|\bpbkdf2_hmac\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*[,)]|\bPBEKeySpec\(\s*[^,]+,\s*[^,]+,\s*\d{1,4}\s*,/.test(l)) return true;
+  if (/\bPBKDF2\w*\(/.test(l) && /\biterations\s*=\s*\d{1,4}\s*[,)]/.test(l)) return true;
+  // bcrypt below 10 rounds.
+  if (/\bbcrypt\.(hash|hashSync|genSalt|genSaltSync)\(\s*(?:[^,()]+,\s*)?[1-9]\s*[,)]|\bgensalt\(\s*(?:rounds\s*=\s*)?[1-9]\s*\)/.test(l)) return true;
+  // RSA keys under 2048 bits.
+  return /\bmodulusLength\s*:\s*(512|768|1024)\b|\bkey_size\s*=\s*(512|768|1024)\b|\brsa\.GenerateKey\(\s*[^,]+,\s*(512|768|1024)\s*\)|\b\w*([Kk]eyGen|kpg|[Gg]enerator)\w*\.initialize\(\s*(512|768|1024)\s*[,)]|\bopenssl\s+genrsa\b[^|;\n]*\s(512|768|1024)\b/.test(l);
+}
+/** Android release build that can be debugged: the manifest flag, or `debuggable true` inside the release block of build.gradle. Pure. */
+export function debuggableBuild(lines: string[]): number[] {
+  return lines.flatMap((l, i) => {
+    if (/android:debuggable\s*=\s*"true"/.test(l)) return [i + 1];
+    if (!/\b(isDebuggable\s*=\s*true|debuggable\s+true|debuggable\s*=\s*true)\b/.test(l)) return [];
+    const block = lines.slice(Math.max(0, i - 12), i).reverse().find((x) => /^\s*(release|debug|getByName\("(release|debug)"\)|named\("(release|debug)"\))\s*\{/.test(x)) ?? "";
+    return /release/.test(block) ? [i + 1] : [];
+  });
+}
 const GDPR = (id: string, title: string): Control => ({ framework: "gdpr", id, title });
 /** A line that declares a stored field with one of these names: SQL column, Prisma, Mongoose, Sequelize, TypeORM, Django,
  *  SQLAlchemy. A TypeScript type (`cvv: string`) describes a form value, not storage, so it doesn't count. Pure. */
@@ -149,6 +173,19 @@ export function dockerImageUnpinned(lines: string[]): number[] {
 const BUILD_SECRET = /^\s*(ENV|ARG)\s+\w*(PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_KEY)(=|\s+)["']?(?!changeme|change[_-]me|example|your[_-]|placeholder|dummy|xxx|none\b|null\b|true\b|false\b)[^\s"'$<{]{6,}/i;
 
 export const moreRules: Rule[] = [
+  rule({ id: "crypto.static-iv", title: "Encryption with a fixed IV or nonce", status: "gap", severity: "medium", controls: [A04, GDPR("Art. 32", "Security of processing")],
+    fix: "Make a new random IV for every message (crypto.randomBytes, os.urandom, SecureRandom) and store it next to the ciphertext. It doesn't need to be secret, only never reused.",
+    note: "With the same key and the same IV, two messages can be compared and partly recovered. In AES-GCM a repeated nonce lets an attacker forge messages (CWE-329, CWE-323).",
+    extensions: [...CODE, ...NATIVE], test: (l) => STATIC_IV.test(l) && !/^\s*(\/\/|#|\*)/.test(l),
+    unlessNear: /randomFill|getRandomValues|randomBytes|rand\.Read|SecureRandom|nextBytes|urandom|secrets\.token/ }),
+  rule({ id: "crypto.weak-parameters", title: "Key size or work factor too low", status: "gap", severity: "medium", controls: [A04, GDPR("Art. 32", "Security of processing")],
+    fix: "Use RSA keys of 2048 bits or more, bcrypt with 10 rounds or more, and PBKDF2 with the iteration count current guidance gives (600,000 for SHA-256), or switch to Argon2.",
+    note: "Short keys can be factored and low work factors make stolen password hashes cheap to crack on ordinary hardware (CWE-326, CWE-916).",
+    extensions: [...CODE, ...NATIVE, ".sh", ".bash", ""], test: weakCryptoParameter }),
+  rule({ id: "mobile.debuggable-build", title: "Android release build that can be debugged", status: "gap", severity: "medium", controls: [A02, GDPR("Art. 32", "Security of processing")],
+    fix: "Remove android:debuggable from the manifest and keep debuggable false in the release build type. The build tools set it for debug builds on their own.",
+    note: "A debuggable app lets anyone with the phone attach a debugger, read its private files and change what it does (CWE-489).",
+    extensions: [".xml", ".gradle", ".kts"], fileName: /^(AndroidManifest\.xml|build\.gradle(\.kts)?)$/, fileTest: debuggableBuild }),
   rule({ id: "privacy.consent-preticked", title: "Consent box that starts ticked", status: "gap", severity: "medium", controls: [GDPR("Art. 7", "Conditions for consent")],
     fix: "Start the box empty and let the person tick it. Store when they did and the wording they saw.",
     note: "Consent has to be an active choice. A box that is ticked for the person is not consent under the GDPR, so anything sent on that basis has no legal ground (Art. 7, recital 32).",
