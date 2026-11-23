@@ -113,6 +113,7 @@ Add it to the coding agents this project uses (Claude Code, Cursor, VS Code, Gem
 ```bash
 npx lintsure setup          # preview
 npx lintsure setup --yes    # write it
+npx lintsure skills         # add skills that tell the agent when to use Lintsure
 npx lintsure status         # check Node, config, rules and agents
 ```
 

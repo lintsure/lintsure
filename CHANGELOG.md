@@ -2,7 +2,7 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
-## 0.3.15 · 2026-11-23 · 17 new checks, fewer false alarms, a start screen
+## 0.3.15 · 2026-11-23 · 17 new checks, fewer false alarms, a start menu, skills for any agent
 
 ### New
 - **17 new checks** (106 rules in all):
@@ -20,6 +20,12 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **Findings are easier to read in a terminal.** Ruled headings split findings in the code, repo hygiene and what to do next; each file gets its own block; the status is in colour.
 - **A scan ends with the commands to run next**, such as `lintsure scan --all` for held-back findings or `lintsure baseline` to remember today's. Only the ones that apply are listed.
 - **A mistyped command gets a hint.** `lintsure --scan` answers "Did you mean: lintsure scan" where it used to print the whole manual. `lintsure --version` is new.
+- **Skills for any agent.** `lintsure skills` adds seven short instruction files to a project: setup, check, fix, triage, ship, rules and stay on track. They tell an agent when to use Lintsure and what to do with what it finds. They go into `.agents/skills`, which Codex, Cursor, Gemini CLI and many others read, and into `.claude/skills` when the project uses Claude Code. At a terminal you pick which ones from a list; `--yes`, `--only` and `--undo` work everywhere. Earlier copies are backed up, and a copy you edited is never removed.
+- **Connect asks which agent.** The menu lists Claude Code, Cursor, VS Code, Gemini CLI and Codex, and marks the ones the project already uses. **Codex is new**: its entry goes into `.codex/config.toml`. `lintsure setup --manual` prints the values for agents that are set up in their own settings, such as Devin, Windsurf and Zed.
+- **The fix for a finding, from the menu.** After a scan you can pick a finding and see where it is, what to change, why, and what you gain, with a request to paste into your coding agent. Lintsure still never edits code.
+- **A scan opens with one line that fits the outcome and ends with the first three fixes.** "Nothing found by the current rules" is said in those words.
+- **A folder that is not a project is named as such.** At a terminal Lintsure asks for the project folder; elsewhere it says how to name it. "Check another folder" in the menu and `lintsure scan --pick` ask for one directly, and every screen says whether a project was found.
+- **No dead ends in the menu.** Every command started from the menu ends with what fits next, then "Main menu" and "Quit".
 - Piped output, CI logs and the report files are unchanged by all of the above, and `NO_COLOR` is respected.
 
 ### Changed

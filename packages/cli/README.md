@@ -5,6 +5,7 @@
 ```bash
 npx lintsure scan                                 # check the project in this folder
 npx lintsure setup --yes                          # connect it to the coding agents this project uses
+npx lintsure skills --yes                         # add the skills that tell the agent when to use it
 npx lintsure scan --fail-on gap                   # fail a CI job on clear problems
 npx lintsure baseline                             # then later scans show only what's new
 npx lintsure scan --report --project "My app"     # multi-page assessment to review and sign
