@@ -1,5 +1,5 @@
 ---
 type: tool_used
 tool: Skill
-input_match: '"skill"\s*:\s*"(?:[\w-]+:)?lintsure-ship"'
+input_match: '"skill"\s*:\s*"(?:[\w-]+:)?lintsure-prelaunch"'
 ---

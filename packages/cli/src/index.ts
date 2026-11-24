@@ -3,7 +3,7 @@
 // Writes reports into the current folder. A scan never uses the network. One command does, lintsure deps, and only
 // after it has said what it will send and been given --yes.
 import { execFileSync } from "node:child_process";
-import { constants, existsSync, readdirSync, statSync } from "node:fs";
+import { constants, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { access, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
@@ -127,7 +127,7 @@ async function offer(rows: { text: string; run: string[] | (() => Promise<void>)
     return main(run);
   }
 }
-const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "hook", "fix", "deps", "status", "export"];
+const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "hook", "fix", "deps", "history", "status", "export"];
 /** The command someone most likely meant: the same word without dashes, or one within two typing slips. Pure. */
 function nearest(word: string): string | undefined {
   const slips = (a: string, b: string) => { let row = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -152,10 +152,12 @@ lintsure skills [path]   Add Lintsure's skills to this project: short instructio
 lintsure fix [path] [F-001 ...]  Apply the change for findings whose rule knows the exact one
                          (shows it first; --all includes held-back findings; --yes writes it,
                          backs the file up, scans again,
-                         and puts the file back if the finding is still there)
+                         and puts the file back if the finding is still there; --undo puts back
+                         what the last fix changed)
 lintsure deps [path]     Look up the project's pinned packages for known vulnerabilities.
                          The only command that uses the network: it says what it will send
                          (package names and versions, never code) and sends it with --yes
+lintsure history [path]  List the records saved with scan --save-record, oldest first
 lintsure hook [path]     Check the lines you commit: adds a git pre-commit hook that runs
                          lintsure scan --staged --fail-on gap (shows it first; --yes writes it;
                          --undo removes it; an existing hook of your own is left alone)
@@ -176,6 +178,8 @@ scan options:
   --project <name>    Project name on the assessment cover (default: folder name)
   --fail-on <status>  Exit 1 if any open finding is "gap" or "partial" (for CI). Held-back
                       medium-confidence findings count only with --all
+  --observe           With --fail-on: say when the run would have failed, and pass anyway.
+                      For watching the gate before it blocks anyone
   --new-only          With --fail-on: count only findings that are new since
                       .lintsure/baseline.json
   --github            Print GitHub Actions annotations, so findings show on the lines
@@ -195,7 +199,7 @@ ${DISCLAIMER}
 Lintsure never sends your code anywhere. Only "lintsure deps --yes" uses the network.`;
 
 const VALUE_FLAGS = ["--framework", "--fail-on", "--project", "--diff"];
-const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "--save-record", "--all", "--pick", "--staged"];
+const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "--save-record", "--all", "--pick", "--staged", "--observe"];
 
 /** Changed line numbers per file from `git diff -U0` output. Pure. */
 export function parseDiff(text: string): Record<string, number[]> {
@@ -296,11 +300,25 @@ async function main(argv: string[]): Promise<number> {
   // else needs judgement and stays a proposal. Shown first; --yes writes; each file is backed up; a change that does not
   // make its finding go away is put back.
   if (cmd === "fix") {
-    const bad = raw.find((a) => a.startsWith("--") && a !== "--yes" && a !== "--all");
-    if (bad) { console.error(`Unknown option: ${bad}. Use: lintsure fix [folder] [F-001 ...] [--all] [--yes]`); return 2; }
+    const bad = raw.find((a) => a.startsWith("--") && !["--yes", "--all", "--undo"].includes(a));
+    if (bad) { console.error(`Unknown option: ${bad}. Use: lintsure fix [folder] [F-001 ...] [--all] [--yes], or lintsure fix --undo`); return 2; }
     const words = raw.filter((a) => !a.startsWith("--")), ids = words.filter((a) => /^F-\d+$/i.test(a)).map((a) => a.toUpperCase());
     const root = resolve(words.find((a) => !/^F-\d+$/i.test(a)) ?? ".");
     if (!existsSync(root)) { console.error(`No folder at ${root}.`); return 2; }
+    // --undo puts back the files the last fix changed, from the backups it made.
+    const last = join(root, ".lintsure", "last-fix.json");
+    if (raw.includes("--undo")) {
+      const files: string[] = existsSync(last) ? JSON.parse(readFileSync(last, "utf8")).files ?? [] : [];
+      if (!files.length) { console.log("Nothing to undo: no fix has been applied here, or it was already undone."); return 0; }
+      for (const file of files) {
+        const path = join(root, file);
+        if (!existsSync(path + ".lintsure-backup")) { console.log(`left   ${file}: its backup is gone, so it was not touched`); continue; }
+        await copyFile(path + ".lintsure-backup", path); await rm(path + ".lintsure-backup");
+        console.log(`back   ${file}`);
+      }
+      await rm(last);
+      return 0;
+    }
     const config = await readConfig(root);
     if (config.problems.length) { console.error("Problems in lintsure.config.yaml (fix them first):"); config.problems.forEach((p) => console.error(`  ${p}`)); return 2; }
     const frameworks = config.frameworks ?? ALL_FRAMEWORKS;
@@ -344,11 +362,13 @@ async function main(argv: string[]): Promise<number> {
     let fixed = 0;
     for (const [file, text] of originals) {
       const mine = byFile.get(file)!, worse = mine.some((f) => count(after, f.ruleId, file) >= count(before, f.ruleId, file));
-      if (worse) { await writeFile(join(root, file), text); skipped.push(`${file}: the change did not clear its finding, so the file was put back`); }
+      if (worse) { await writeFile(join(root, file), text); originals.delete(file); skipped.push(`${file}: the change did not clear its finding, so the file was put back`); }
       else { fixed += mine.length; console.log(`fixed  ${file}  (${mine.map((f) => f.id).join(", ")}; your original is in ${file}.lintsure-backup)`); }
     }
+    // What --undo will put back.
+    if (originals.size) { await mkdir(join(root, ".lintsure"), { recursive: true }); await writeFile(last, JSON.stringify({ files: [...originals.keys()] }) + "\n"); }
     skipped.forEach((s) => console.log(`left   ${s}`));
-    console.log(`\n${fixed ? `Done! ${fixed} finding${fixed === 1 ? "" : "s"} fixed and checked again.` : "Nothing was changed."} Look at the change before you commit it: git diff`);
+    console.log(`\n${fixed ? `Done! ${fixed} finding${fixed === 1 ? "" : "s"} fixed and checked again.` : "Nothing was changed."} Look at the change before you commit it: git diff${fixed ? "\nPut it back with: lintsure fix --undo" : ""}`);
     return skipped.length && !fixed ? 1 : 0;
   }
   // lintsure deps: the one command that uses the network, and only after saying what it sends and being told to.
@@ -369,6 +389,17 @@ async function main(argv: string[]): Promise<number> {
     for (const [p, ids] of [...hits].sort((a, b) => b[1].length - a[1].length || a[0].name.localeCompare(b[0].name)))
       console.log(`${`${p.name}@${p.version}`.padEnd(44)} ${ids.length} known  ${ids.slice(0, 3).join(", ")}${ids.length > 3 ? ", ..." : ""}`);
     console.log(`\n${hits.size} of ${found.length} packages have a known advisory. Look one up at https://osv.dev/vulnerability/<id>, then update to a version that fixes it.\nA listed advisory may not affect how you use the package: read it before you decide.`);
+    return 0;
+  }
+  // lintsure history: the records saved by scan --save-record, oldest first, so a trend is visible without a dashboard.
+  if (cmd === "history") {
+    const root = resolve(raw.find((a) => !a.startsWith("--")) ?? "."), dir = join(root, ".lintsure", "records");
+    const rows = (existsSync(dir) ? readdirSync(dir) : []).filter((f) => f.endsWith(".json")).flatMap((f) => { try { const r = JSON.parse(readFileSync(join(dir, f), "utf8")).record; return r?.createdAt && r.counts ? [r] : []; } catch { return []; } })
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    if (!rows.length) { console.log("No saved records in this project yet. Save one with each scan: lintsure scan --save-record"); return 0; }
+    console.log(`${"When (UTC)".padEnd(18)}${"Findings".padStart(9)}${"High".padStart(6)}${"Medium".padStart(8)}${"Low".padStart(5)}${"Accepted".padStart(10)}${"Fixed".padStart(7)}   Record`);
+    for (const r of rows) console.log(`${String(r.createdAt).replace("T", " ").slice(0, 16).padEnd(18)}${String(r.counts.findings).padStart(9)}${String(r.counts.byRisk?.high ?? 0).padStart(6)}${String(r.counts.byRisk?.medium ?? 0).padStart(8)}${String(r.counts.byRisk?.low ?? 0).padStart(5)}${String(r.counts.accepted ?? 0).padStart(10)}${String(r.counts.fixedSinceBaseline ?? 0).padStart(7)}   ${r.id}`);
+    console.log(`\n${rows.length} record${rows.length === 1 ? "" : "s"}. A drop can come from fixes or from a newer Lintsure that raises fewer false alarms: compare records made with the same version.`);
     return 0;
   }
   if (cmd === "hook") {
@@ -419,6 +450,8 @@ async function main(argv: string[]): Promise<number> {
     if (!apply) { step(`Would install ${chosen.length} skill${chosen.length === 1 ? "" : "s"}`, lines); console.log(`Nothing written yet. To apply, run: lintsure skills ${names ? `--only ${names.join(",")} ` : ""}--yes`); return 0; }
     step(tint("32", `Done! Installed ${chosen.length} skill${chosen.length === 1 ? "" : "s"}`), lines);
     console.log("Restart the agent so it reads them. Take them out any time with: lintsure skills --undo");
+    // Renamed in 0.3.16: an older install still has the folder under its first name.
+    for (const f of folders) if (existsSync(join(root, f, "lintsure-ship"))) console.log(`${f}/lintsure-ship is the old name of lintsure-prelaunch. Delete that folder so the agent does not load both.`);
     return 0;
   }
   if (cmd === "setup" || cmd === "status") {
@@ -604,7 +637,7 @@ async function main(argv: string[]): Promise<number> {
       if (f.file !== file) { file = f.file; console.log(`\n  ${paint("38;2;98;137;254", file)}`); }
       const status = f.accepted && !f.accepted.expired ? "accepted" : f.status;
       const badge = status === "gap" ? paint("1;31", "GAP     ") : status === "partial" ? paint("33", "PARTIAL ") : paint("2", "ACCEPTED");
-      console.log(`    ${badge} ${paint("2", String(f.line).padStart(5))}  ${f.title}${f.change === "new" ? paint("36", "  (new)") : ""}`);
+      console.log(`    ${badge} ${paint("2", String(f.line).padStart(5))}  ${f.title}${f.change === "new" ? paint("36", "  (new)") : ""}${f.confirmed ? paint("32", "  (confirmed real)") : ""}`);
     }
   };
   // The first few to fix: gaps before partials, higher risk first, reached code first.
@@ -684,9 +717,10 @@ async function main(argv: string[]): Promise<number> {
   }
   const failOn = flag("--fail-on")?.toLowerCase();
   const counted = rest.includes("--new-only") && report.baseline ? open.filter((f) => f.change === "new") : open;
-  if (failOn === "gap" && counted.some((f) => f.status === "gap")) return 1;
-  if (failOn === "partial" && counted.length) return 1;
-  return 0;
+  const fails = (failOn === "gap" && counted.some((f) => f.status === "gap")) || (failOn === "partial" && counted.length > 0);
+  // Observe mode: say what the gate would have done and let the run pass, so a team can watch it before it blocks anyone.
+  if (fails && rest.includes("--observe")) { console.log(`\nObserve mode: --fail-on ${failOn} would have failed this run. Nothing was blocked.`); return 0; }
+  return fails ? 1 : 0;
 }
 
 main(process.argv.slice(2)).then((code) => process.exit(code), (e) => { console.error(e instanceof Error ? e.message : e); process.exit(2); });

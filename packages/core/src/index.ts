@@ -26,7 +26,7 @@ export { loadPacks, registerPack, type Pack } from "./packs.js";
 export { checksFor } from "./plan.js";
 import { configPacks, loadPacks, packFrameworks, packsLoaded } from "./packs.js";
 import { buildGraph, declaredEntries, reachOf } from "./reach.js";
-export const RULES_VERSION = "0.3.15";
+export const RULES_VERSION = "0.3.16";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -46,10 +46,15 @@ export function nextSteps(r: Report): string[] {
   const gaps = open.filter((f) => f.status === "gap").length;
   const partial = open.filter((f) => f.status === "partial").length;
   const expired = r.findings.filter((f) => f.accepted?.expired).length;
+  // The same rule accepted again and again is a setting waiting to be written down.
+  const perRule = new Map<string, number>();
+  for (const f of r.findings) if (f.accepted && !f.accepted.expired) perRule.set(f.ruleId, (perRule.get(f.ruleId) ?? 0) + 1);
+  const repeats = [...perRule].filter(([, n]) => n >= 3);
   return [
     gaps ? `Review the ${gaps} gap${gaps === 1 ? "" : "s"} and decide how to fix each one. Approve any change before it is made.` : "No gaps were found by the current rules. Keep checking as the code changes.",
     partial ? `Check the ${partial} partial finding${partial === 1 ? "" : "s"}: each depends on context only you can confirm.` : "",
     `Work through the ${r.outside.length} item${r.outside.length === 1 ? "" : "s"} that live outside code. Code checks alone are not enough for a full review.`,
+    ...repeats.map(([rule, n]) => `You have accepted ${rule} ${n} times. If it never applies to this project, say so once in lintsure.config.yaml (under rules, or an ignore path) and keep the reason there.`),
     expired ? `${expired} accepted finding${expired === 1 ? " is" : "s are"} past the review date. Look again, then renew the acceptance or fix it.` : "",
     "Ask a qualified compliance professional to review the results before you rely on them.",
   ].filter(Boolean);
@@ -826,6 +831,7 @@ export function toMarkdown(r: Report): string {
     ...(f === sorted[r.findings.length - hygiene.length] ? [`## Repo hygiene (${hygiene.length})`, "", "Housekeeping for the repo, not flaws in the code. Findings in the code come first.", ""] : []),
     `### ${f.id} · ${f.status === "gap" ? "Finding" : "Observation"} (${LABEL[f.status]}) · \`${f.file}:${f.line}\`${f.change === "new" ? " · New since baseline" : ""}`, `**${f.title}** · Risk level: ${f.severity}`, "",
     ...(f.accepted ? [acceptedLine(f.accepted), ""] : []),
+    ...(f.confirmed ? [`Confirmed as real by ${f.confirmed.by}${f.confirmed.date ? ` on ${f.confirmed.date}` : ""}, after reading the code.${f.confirmed.note ? ` ${f.confirmed.note}` : ""}`, ""] : []),
     `- Rules: ${ctl(f.controls)}`, `- Auditor note: ${f.note}`, ...(f.unseen ? [`- What Lintsure couldn't see: ${f.unseen}`] : []),
     ...(rules.find((x) => x.id === f.ruleId)?.seenIn ?? []).map((s) => `- Seen in a real incident: ${s.title} (${s.url})`),
     ...(f.reach ? [`- Reached from: ${f.reach.status === "entry" ? "this file is an entry point (route, handler or function)" : f.reach.status === "reachable" ? f.reach.via!.join(" → ") : f.reach.status === "unknown" ? "unknown (an import Lintsure couldn't resolve may lead here)" : "not reached from any entry point Lintsure recognises (it may be loaded some other way, or be unused)"}`] : []), "",

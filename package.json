@@ -1,6 +1,6 @@
 {
   "name": "lintsure-monorepo",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -12,7 +12,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "npm run clean && tsc -b packages/core packages/cli packages/mcp && node scripts/build-docs.mjs && node -e \"require('fs').cpSync('skills','packages/cli/skills',{recursive:true})\"",
+    "build": "npm run clean && tsc -b packages/core packages/cli packages/mcp && node scripts/build-docs.mjs && node -e \"const f=require('fs');f.rmSync('packages/cli/skills',{recursive:true,force:true});f.cpSync('skills','packages/cli/skills',{recursive:true})\"",
     "test": "npm run build && node --test \"packages/core/dist/test/**/*.test.js\" && node scripts/mcp-smoke.mjs && node scripts/cli-smoke.mjs && node scripts/eval-check.mjs && node scripts/benchmark.mjs && node scripts/corpus.mjs && node scripts/robustness.mjs 80",
     "scan:sample": "node packages/cli/dist/src/index.js scan fixtures/sample-app",
     "benchmark": "npm run build && node scripts/benchmark.mjs && node scripts/corpus.mjs && node scripts/robustness.mjs 80",

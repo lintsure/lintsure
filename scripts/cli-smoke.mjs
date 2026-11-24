@@ -126,17 +126,17 @@ rmSync(fresh, { recursive: true, force: true });
 const sk = mkdtempSync(join(tmpdir(), "ls-skills-")), at = (...p) => join(sk, ...p);
 const seen = run("skills", sk);
 assert.ok(seen.includes("No project found here") && seen.includes(".agents/skills/lintsure-check  add") && seen.includes("Would install 7 skills") && seen.includes("lintsure skills --yes") && !existsSync(at(".agents")), "the skills preview lists the files and writes nothing");
-assert.ok(fails("skills", sk, "--only", "nope").includes("Choose from: lintsure-setup, lintsure-check, lintsure-fix, lintsure-triage, lintsure-ship, lintsure-rules, lintsure-stay-on-track"));
+assert.ok(fails("skills", sk, "--only", "nope").includes("Choose from: lintsure-setup, lintsure-check, lintsure-fix, lintsure-triage, lintsure-prelaunch, lintsure-rules, lintsure-stay-on-track"));
 assert.match(run("skills", sk, "--only", "lintsure-check", "--yes"), /Done! Installed 1 skill\n.*✓ \.agents\/skills\/lintsure-check  added/);
-assert.ok(/^---\r?\nname: lintsure-check\r?\n/.test(readFileSync(at(".agents/skills/lintsure-check/SKILL.md"), "utf8")) && !existsSync(at(".claude")) && !existsSync(at(".agents/skills/lintsure-ship")));
+assert.ok(/^---\r?\nname: lintsure-check\r?\n/.test(readFileSync(at(".agents/skills/lintsure-check/SKILL.md"), "utf8")) && !existsSync(at(".claude")) && !existsSync(at(".agents/skills/lintsure-prelaunch")));
 mkdirSync(at(".claude")); writeFileSync(at(".agents/skills/lintsure-check/SKILL.md"), "older");
 const again = run("skills", sk, "--yes");
 assert.ok(again.includes("Project found: it has .agents") === false && again.includes(".claude/skills/lintsure-triage  added") && again.includes("lintsure-check  updated") && readFileSync(at(".agents/skills/lintsure-check/SKILL.md.lintsure-backup"), "utf8") === "older");
 assert.ok(!/  (added|updated)/.test(run("skills", sk, "--yes")), "a second run changes nothing");
-writeFileSync(at(".claude/skills/lintsure-ship/SKILL.md"), "mine");
+writeFileSync(at(".claude/skills/lintsure-prelaunch/SKILL.md"), "mine");
 assert.ok(execFileSync(process.execPath, [at(".agents/skills/lintsure-rules/rules.mjs"), "list"], { cwd: sk, encoding: "utf8" }).includes("No rules file yet"), "the installed rules helper runs on its own");
 const gone = run("skills", sk, "--undo");
-assert.ok(gone.includes(".claude/skills/lintsure-ship: changed since it was installed") && readFileSync(at(".claude/skills/lintsure-ship/SKILL.md"), "utf8") === "mine" && !existsSync(at(".agents/skills/lintsure-triage")) && !existsSync(at(".agents/skills/lintsure-rules")) && existsSync(at(".agents/skills/lintsure-check/SKILL.md.lintsure-backup")), "undo removes Lintsure's copies and keeps an edited one and the backup");
+assert.ok(gone.includes(".claude/skills/lintsure-prelaunch: changed since it was installed") && readFileSync(at(".claude/skills/lintsure-prelaunch/SKILL.md"), "utf8") === "mine" && !existsSync(at(".agents/skills/lintsure-triage")) && !existsSync(at(".agents/skills/lintsure-rules")) && existsSync(at(".agents/skills/lintsure-check/SKILL.md.lintsure-backup")), "undo removes Lintsure's copies and keeps an edited one and the backup");
 rmSync(sk, { recursive: true, force: true });
 // lintsure fix: shows the exact change first, writes it with --yes, keeps the original, and scans again.
 const fx = mkdtempSync(join(tmpdir(), "ls-fix-")), fxFile = join(fx, "src/agent.ts");
@@ -144,12 +144,29 @@ mkdirSync(join(fx, "src")); writeFileSync(join(fx, "package.json"), "{}\n");
 const unsafe = 'import https from "node:https";' + NL + "export const agent = new https.Agent({ rejectUnauthorized: false });" + NL;
 writeFileSync(fxFile, unsafe);
 const inFx = (...a) => spawnSync(process.execPath, [CLI, ...a], { cwd: fx, encoding: "utf8" });
+// Observe mode: the gate says what it would have done and lets the run pass.
+assert.equal(inFx("scan", ".", "--all", "--fail-on", "gap").status, 1);
+const watched = inFx("scan", ".", "--all", "--fail-on", "gap", "--observe");
+assert.ok(watched.status === 0 && watched.stdout.includes("Observe mode: --fail-on gap would have failed this run"), "observe mode reports and passes");
+// A verdict saved in confirmed.yaml comes back on the next scan; history lists saved records.
+assert.ok(inFx("history").stdout.includes("No saved records in this project yet"));
+inFx("scan", ".", "--all", "--json", "--save-record");
+const tls = JSON.parse(readFileSync(join(fx, "lintsure-report.json"), "utf8")).findings.find((f) => f.ruleId === "transport.tls-verify-off");
+mkdirSync(join(fx, ".lintsure"), { recursive: true });
+writeFileSync(join(fx, ".lintsure/confirmed.yaml"), `- rule: ${tls.ruleId}\n  fingerprint: ${tls.fingerprint}\n  confirmed_by: reviewer\n  date: 2026-11-24\n  note: the agent is used for real requests\n`);
+inFx("scan", ".", "--all", "--json");
+assert.deepEqual(JSON.parse(readFileSync(join(fx, "lintsure-report.json"), "utf8")).findings.find((f) => f.ruleId === "transport.tls-verify-off").confirmed, { by: "reviewer", date: "2026-11-24", note: "the agent is used for real requests" });
+assert.ok(readFileSync(join(fx, "lintsure-report.md"), "utf8").includes("Confirmed as real by reviewer on 2026-11-24"));
+assert.match(inFx("history").stdout, /When \(UTC\) +Findings[\s\S]*\n1 record\./);
 const preview = inFx("fix", "--all");
 assert.ok(preview.stdout.includes("- export const agent = new https.Agent({ rejectUnauthorized: false });") && preview.stdout.includes("Nothing changed yet") && readFileSync(fxFile, "utf8") === unsafe, "fix shows the change and writes nothing");
 assert.ok(inFx("fix", "F-999").stderr.includes("No finding F-999 in this scan"));
 const applied = inFx("fix", "--all", "--yes");
 assert.ok(applied.stdout.includes("fixed and checked again") && !readFileSync(fxFile, "utf8").includes("rejectUnauthorized: false") && readFileSync(fxFile + ".lintsure-backup", "utf8") === unsafe, "fix --yes changes the line, keeps the original and confirms with a second scan");
 assert.ok(inFx("fix", "--all").stdout.includes("No finding here has an exact change"), "nothing left to apply afterwards");
+// fix --undo puts the file back as it was and clears the backup.
+const undone = inFx("fix", "--undo");
+assert.ok(undone.stdout.includes("back   src/agent.ts") && readFileSync(fxFile, "utf8") === unsafe && !existsSync(fxFile + ".lintsure-backup") && inFx("fix", "--undo").stdout.includes("Nothing to undo"), "fix --undo restores the original");
 rmSync(fx, { recursive: true, force: true });
 // lintsure deps: reads the lockfile, says what it would send, and sends nothing without --yes.
 const { fromPackageLock, fromRequirements, advisories } = await import(new URL("../packages/cli/dist/src/deps.js", import.meta.url).href);

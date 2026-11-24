@@ -1,5 +1,5 @@
 ---
-name: lintsure-ship
+name: lintsure-prelaunch
 description: Run a full Lintsure pre-launch check when the user says they are about to ship, launch, deploy, go live, open a pull request for release, or answer a security questionnaire. Scans the whole project once, summarises what to fix first, and says what the scan does not cover.
 ---
 

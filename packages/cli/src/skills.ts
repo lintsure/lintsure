@@ -15,7 +15,7 @@ const ABOUT: Record<string, string> = {
   "lintsure-check": "Checks risky code right after your agent writes it",
   "lintsure-fix": "Applies one proposed fix: shows it, waits for your yes, re-checks",
   "lintsure-triage": "Sorts findings into real, not a problem, or needs a person",
-  "lintsure-ship": "Runs a full check before you launch or deploy",
+  "lintsure-prelaunch": "Runs a full check before you launch or deploy",
   "lintsure-rules": "Suggests and saves your project's own rules for every agent",
   "lintsure-stay-on-track": "Re-reads your project rules before big changes in long sessions",
 };

@@ -108,6 +108,8 @@ export interface Finding {
   change?: "new" | "unchanged";
   /** Set when a person accepted this finding in .lintsure/accepted.yaml. */
   accepted?: Acceptance;
+  /** Set when a reviewer read the code and recorded this finding as real in .lintsure/confirmed.yaml. */
+  confirmed?: { by: string; date: string; note?: string };
 }
 
 /** A person's decision to accept a finding, with their reason. Expired acceptances count as open again. */

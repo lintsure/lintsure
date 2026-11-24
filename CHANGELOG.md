@@ -2,7 +2,7 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
-## Unreleased
+## 0.3.16 · 2026-11-24 · Two new frameworks, eight new checks, fixes you can apply
 
 ### Fewer false alarms
 - **Stored lines in JSON data files are not read as running code.** A file of saved findings, review notes or samples keeps other people's lines under keys such as `text`, `context`, `excerpt`, `fix` and `note`. Checks no longer fire on those lines. A key found there is still counted and is shown with `--all`, like a key in a test file.
@@ -19,6 +19,12 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **`lintsure fix`** applies the change for findings whose rule knows the exact one, such as a setting to flip or a line to add. It shows the change first; `--yes` writes it, backs the file up, scans again, and puts the file back if the finding is still there. Findings that need judgement stay proposals.
 - **`lintsure deps`** looks up the project's pinned packages (from `package-lock.json` and `requirements.txt`) in the public OSV database. It is the only command that uses the network. It first says what it will send, package names and versions and never code, and sends it only with `--yes`. A scan stays fully local.
 - **Links to the same weakness in other standards.** Rules that name a CWE number carry a link to a public catalogue that maps it across standards, in `explain_rule` and `docs/rules.md`. A link only: nothing is fetched.
+- **`--observe`** with `--fail-on` says when a run would have failed and lets it pass, so a team can watch the gate before it blocks anyone.
+- **`lintsure fix --undo`** puts back what the last fix changed.
+- **`lintsure history`** lists the records saved with `scan --save-record`, oldest first.
+- **A verdict can be kept.** A finding a reviewer read against the code and found real can be recorded in `.lintsure/confirmed.yaml`. Later scans show it as confirmed, in the terminal, the report and the JSON. The triage skill offers to write it, with your yes.
+- **Repeated accepts are noticed.** When the same rule has been accepted three times or more, the next steps suggest writing that down once as a setting.
+- **The pre-launch skill is now `lintsure-prelaunch`** (it was `lintsure-ship`). It is a check before launch, and other tools use "ship" for a different thing. `lintsure skills` points out an old copy.
 - **A workspace is named as one.** A folder that holds several projects and is not one itself gets a notice, and from the menu a list to pick from, so findings from different projects are not mixed without warning.
 - **`lintsure status` checks the skills.** It says how many are installed and whether any differ from the ones this version ships.
 - **Skills go into more agent folders:** `.kiro/skills`, `.continue/skills` and `.kilocode/skills` when the project uses those agents.

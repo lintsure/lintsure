@@ -86,6 +86,20 @@ If the user agrees a finding is not a problem, offer to add it to `.lintsure/acc
   review_by: 2027-05-13
 ```
 
+## Recording a confirmed finding
+
+A verdict is lost when the conversation ends. If the user agrees, add each confirmed finding to `.lintsure/confirmed.yaml`, so later scans show it as confirmed and nobody has to work it out again:
+
+```yaml
+- rule: pii.logged
+  fingerprint: <the finding's fingerprint, from lintsure-report.json>
+  confirmed_by: <who checked>
+  date: <today, as YYYY-MM-DD>
+  note: <the path in one line, for example: req.query.email reaches console.log with no masking>
+```
+
+Never write this file without the user's yes. The file holds no code.
+
 ## Limits
 
 This is a reading of the code, not a test of the running app. Say so when it matters: "confirmed from the code; not tested at runtime". It is never a pass, a certification or an audit result.

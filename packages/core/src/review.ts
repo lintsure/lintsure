@@ -8,6 +8,9 @@ import type { Acceptance, Finding, Report } from "./types.js";
 
 export const BASELINE_FILE = ".lintsure/baseline.json";
 export const ACCEPTED_FILE = ".lintsure/accepted.yaml";
+// Findings a reviewer read against the code and found real. Same list form as accepted.yaml, so a verdict is not lost
+// when the conversation that reached it ends.
+export const CONFIRMED_FILE = ".lintsure/confirmed.yaml";
 
 /** A short one-way hash of the rule, file and the flagged line with spacing normalised. Moving the line keeps it; editing it changes it. */
 export function fingerprint(ruleId: string, file: string, lineText: string): string {
@@ -36,6 +39,19 @@ export function parseAccepted(text: string): AcceptedEntry[] {
   }
   return out.filter((e) => e.rule && e.fingerprint && e.reason && e.accepted_by) as unknown as AcceptedEntry[];
 }
+/** confirmed.yaml: the same list form as accepted.yaml. Each entry needs rule, fingerprint and confirmed_by; date and
+ *  note are optional. Pure. */
+export function parseConfirmed(text: string): { rule: string; fingerprint: string; confirmed_by: string; date?: string; note?: string }[] {
+  const out: Record<string, string>[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const hash = raw.search(/(^|\s)#/);
+    const m = (hash < 0 ? raw : raw.slice(0, hash)).match(/^([ \t]*)(-[ \t]+)?([a-z_]+)[ \t]*:(.*)$/);
+    if (!m) continue;
+    if (m[2]) out.push({});
+    if (out.length) out[out.length - 1][m[3]] = m[4].trim().replace(/^["']|["']$/g, "");
+  }
+  return out.filter((e) => e.rule && e.fingerprint && e.confirmed_by) as unknown as { rule: string; fingerprint: string; confirmed_by: string; date?: string; note?: string }[];
+}
 
 async function readText(path: string) { try { return await readFile(path, "utf8"); } catch { return null; } }
 
@@ -46,6 +62,11 @@ export async function applyReview(r: Report, root: string, today: string): Promi
   for (const f of r.findings) {
     const a = accepted.find((e) => e.rule === f.ruleId && e.fingerprint === f.fingerprint);
     if (a) f.accepted = { reason: a.reason, by: a.accepted_by, date: a.date, reviewBy: a.review_by, expired: !!a.review_by && a.review_by < today } satisfies Acceptance;
+  }
+  const confirmedText = await readText(join(root, CONFIRMED_FILE));
+  for (const c of confirmedText ? parseConfirmed(confirmedText) : []) {
+    const f = r.findings.find((x) => x.ruleId === c.rule && x.fingerprint === c.fingerprint);
+    if (f) f.confirmed = { by: c.confirmed_by, date: c.date ?? "", ...(c.note ? { note: c.note } : {}) };
   }
   const baseText = await readText(join(root, BASELINE_FILE));
   if (baseText) {
