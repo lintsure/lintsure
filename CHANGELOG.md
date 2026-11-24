@@ -2,7 +2,7 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
-## 0.3.16 · 2026-11-24 · Two new frameworks, eight new checks, fixes you can apply
+## 0.3.16 · 2026-11-25 · Two new frameworks, eight new checks, fixes you can apply
 
 ### Install the plugin from the CLI
 - **`lintsure plugin` installs the guards for your agent.** For Claude Code it runs the full plugin install. For Cursor, Codex and Gemini CLI it downloads the plugin once and writes a hooks file into the project that points at it. It shows the plan first, never changes a hooks file you already have, and `--undo` takes out what it wrote. The guards for Cursor, Codex and Gemini CLI are new, so tell us if one misbehaves.
