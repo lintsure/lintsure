@@ -455,8 +455,8 @@ async function main(argv: string[]): Promise<number> {
     // Before the download there is nothing to read the hooks from, so the preview names the files and the source.
     const fetched = existsSync(join(dir, "hooks"));
     if (!apply) {
-      const lines = fetched ? (await planGuards(root, agents, dir)).map((s) => `${s.agent.name}: ${s.note}`) : agents.map((a) => `${a.name}: ${a.file ? `write the guards' hooks to ${a.file}` : "claude plugin marketplace add lintsure/claude-plugin, then claude plugin install lintsure@lintsure"}`);
-      step(`Would install the guards for ${agents.length} agent${agents.length === 1 ? "" : "s"}`, [...lines, ...(needsFiles && !fetched ? [tint("2", `Downloads the plugin ${PLUGIN_TAG} from github.com/lintsure/claude-plugin into your home folder first.`)] : [])]);
+      const lines = fetched ? (await planGuards(root, agents, dir)).map((s) => `${s.agent.name}: ${s.note}`) : agents.map((a) => `${a.name}: ${a.file ? `write the guards' hooks to ${a.file}` : "claude plugin marketplace add lintsure/plugin, then claude plugin install lintsure@lintsure"}`);
+      step(`Would install the guards for ${agents.length} agent${agents.length === 1 ? "" : "s"}`, [...lines, ...(needsFiles && !fetched ? [tint("2", `Downloads the plugin ${PLUGIN_TAG} from github.com/lintsure/plugin into your home folder first.`)] : [])]);
       console.log(`Nothing installed yet. To apply, run: lintsure plugin${names ? ` --agents ${names.join(",")}` : ""} --yes`);
       return 0;
     }

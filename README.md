@@ -43,7 +43,7 @@ npx lintsure setup --yes
 In Claude Code, the plugin adds guards that work while the agent edits: Drift Guard (your project's rules, made-up imports), Danger Guard (risky shell commands), Secret Guard and Loop Guard.
 
 ```text
-/plugin marketplace add lintsure/claude-plugin
+/plugin marketplace add lintsure/plugin
 /plugin install lintsure@lintsure
 ```
 
@@ -73,7 +73,7 @@ Lintsure sits between your AI coding agent and your codebase. It does three thin
 
 1. **Checks the code your agent writes.** 114 rules look for problems that AI-written code often has: secrets committed to source, databases without row level security, personal data written to logs, AI output used without a human check, agent configs that run remote code, and more. It reads JavaScript, TypeScript and Python, plus config and secret checks for every file.
 2. **Maps each finding to the standards you connect.** Eight frameworks are built in: OWASP Top 10, the OWASP API Security Top 10, OWASP LLM Top 10, the OWASP Agentic Skills Top 10, CWE Top 25, GDPR, the EU AI Act and the EU Cyber Resilience Act. You pick which ones apply in `lintsure.config.yaml`.
-3. **Keeps your agent on your rules.** The MCP server lets the agent ask which checks apply before it writes code (`plan_checks`) and scan its own work before it says it's done. The [Claude Code plugin](https://github.com/lintsure/claude-plugin) adds Drift Guard, which holds the agent to the rules you write in `.lintsure/rules.yml`.
+3. **Keeps your agent on your rules.** The MCP server lets the agent ask which checks apply before it writes code (`plan_checks`) and scan its own work before it says it's done. The [Claude Code plugin](https://github.com/lintsure/plugin) adds Drift Guard, which holds the agent to the rules you write in `.lintsure/rules.yml`.
 
 Every finding shows:
 

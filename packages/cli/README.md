@@ -22,7 +22,7 @@ gap      src/users.ts:5    Personal data written to logs
 
 Every finding shows the file and line, a suggested fix, a plain note on why it matters, and the framework controls it may affect. It also says which files it couldn't read, so "nothing found" never means "checked everything".
 
-In Claude Code, the [plugin](https://github.com/lintsure/claude-plugin) adds guards that work while the agent edits: Drift Guard, Danger Guard, Secret Guard and Loop Guard.
+In Claude Code, the [plugin](https://github.com/lintsure/plugin) adds guards that work while the agent edits: Drift Guard, Danger Guard, Secret Guard and Loop Guard.
 
 With Docker: `docker run --rm -v "$PWD:/work" -w /work node:22-slim npx -y lintsure scan`
 

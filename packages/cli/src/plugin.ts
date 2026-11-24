@@ -14,7 +14,7 @@ import { writeJson } from "./agents.js";
 
 // The plugin release that pairs with this engine. Pinned: a moving branch here would be what the supply-chain rules flag.
 export const PLUGIN_TAG = "v0.3.5";
-const REPO = "https://github.com/lintsure/claude-plugin.git";
+const REPO = "https://github.com/lintsure/plugin.git";
 
 export interface GuardAgent { id: string; name: string; marker: string; file?: string; from?: string }
 export const GUARD_AGENTS: GuardAgent[] = [
@@ -52,7 +52,7 @@ export interface GuardStep { agent: GuardAgent; does: "claude" | "create" | "mer
 export async function planGuards(root: string, agents: GuardAgent[], dir: string): Promise<GuardStep[]> {
   const steps: GuardStep[] = [];
   for (const a of agents) {
-    if (!a.file) { steps.push({ agent: a, does: "claude", note: "claude plugin marketplace add lintsure/claude-plugin, then claude plugin install lintsure@lintsure" }); continue; }
+    if (!a.file) { steps.push({ agent: a, does: "claude", note: "claude plugin marketplace add lintsure/plugin, then claude plugin install lintsure@lintsure" }); continue; }
     const path = join(root, a.file);
     let ours: { hooks?: unknown };
     try { ours = hooksFor(JSON.parse(await readFile(join(dir, a.from!), "utf8")), dir) as { hooks?: unknown }; }
@@ -76,8 +76,8 @@ export async function installGuards(root: string, steps: GuardStep[]): Promise<s
   const said: string[] = [], wrote: { file: string; how: "create" | "merge" }[] = [];
   for (const s of steps) {
     if (s.does === "claude") {
-      try { claudeCli(["plugin", "marketplace", "add", "lintsure/claude-plugin"]); claudeCli(["plugin", "install", "lintsure@lintsure"]); said.push(`${s.agent.name}: installed. Restart Claude Code to load the guards.`); }
-      catch { said.push(`${s.agent.name}: the claude command didn't do it. Type these inside Claude Code:\n    /plugin marketplace add lintsure/claude-plugin\n    /plugin install lintsure@lintsure`); }
+      try { claudeCli(["plugin", "marketplace", "add", "lintsure/plugin"]); claudeCli(["plugin", "install", "lintsure@lintsure"]); said.push(`${s.agent.name}: installed. Restart Claude Code to load the guards.`); }
+      catch { said.push(`${s.agent.name}: the claude command didn't do it. Type these inside Claude Code:\n    /plugin marketplace add lintsure/plugin\n    /plugin install lintsure@lintsure`); }
       continue;
     }
     if (s.does === "skip" || s.does === "same") { said.push(`${s.agent.name}: ${s.note}`); continue; }
