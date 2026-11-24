@@ -1,5 +1,5 @@
 ---
-description: A plain coding task with nothing to check: no Lintsure skill should load.
+description: "A plain coding task with nothing to check: no Lintsure skill should load."
 tags: [trigger]
 plugins: ["../.."]
 model: sonnet

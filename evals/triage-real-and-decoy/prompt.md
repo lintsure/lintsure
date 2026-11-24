@@ -1,5 +1,5 @@
 ---
-description: Two findings from the same rule: one logs a raw email, the other logs it through a masking helper.
+description: "Two findings from the same rule: one logs a raw email, the other logs it through a masking helper."
 tags: [triage]
 plugins: ["../.."]
 model: sonnet

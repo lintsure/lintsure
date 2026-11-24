@@ -15,7 +15,7 @@ const front = (text, file) => {
 const PROMPT_FIELDS = new Set(["schema_version", "name", "description", "tags", "plugins", "runs", "expected_outcome", "model", "max_turns", "timeout_seconds", "allowed_tools", "append_system_prompt", "env"]);
 const GRADER_FIELDS = { regex: ["pattern", "flags", "match", "target"], tool_used: ["tool", "input_match", "min", "max"], llm: ["criteria", "focus"] };
 const skills = readdirSync(new URL("skills/", root));
-const cases = readdirSync(new URL("evals/", root)).filter((d) => statSync(new URL(`evals/${d}`, root)).isDirectory());
+const cases = readdirSync(new URL("evals/", root)).filter((d) => d !== "results" && statSync(new URL(`evals/${d}`, root)).isDirectory()); // results/ holds run reports, not cases
 assert.ok(cases.length >= 8, "expected the eval cases in evals/");
 
 const regexGraders = {}; let graders = 0;
@@ -23,6 +23,8 @@ for (const c of cases) {
   const p = front(read(`evals/${c}/prompt.md`), `${c}/prompt.md`);
   for (const k of Object.keys(p.fields)) assert.ok(PROMPT_FIELDS.has(k), `${c}/prompt.md: unknown field ${k}`);
   assert.ok(p.body.trim().length > 20, `${c}: the prompt is empty`);
+  // A colon followed by a space inside an unquoted value is not valid YAML, and the eval tool then loads no case at all.
+  for (const [k, v] of Object.entries(p.fields)) assert.ok(!/: /.test(v) || /^["[{]/.test(v), `${c}/prompt.md: quote the value of ${k}, it contains a colon`);
   const files = readdirSync(new URL(`evals/${c}/graders/`, root));
   assert.ok(files.length, `${c}: no graders`);
   for (const f of files) {

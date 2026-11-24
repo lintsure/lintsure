@@ -1,5 +1,5 @@
 ---
-description: A new login route that logs the password: the check skill should load.
+description: "A new login route that logs the password: the check skill should load."
 tags: [trigger]
 plugins: ["../.."]
 model: sonnet

@@ -1,5 +1,5 @@
 ---
-description: A rule stated in normal words: the rules skill should turn it into one rule and ask before saving.
+description: "A rule stated in normal words: the rules skill should turn it into one rule and ask before saving."
 tags: [rules]
 plugins: ["../.."]
 model: sonnet

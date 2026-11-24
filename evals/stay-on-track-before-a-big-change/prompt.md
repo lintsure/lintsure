@@ -1,5 +1,5 @@
 ---
-description: The user says the agent is drifting: the stay-on-track skill should load.
+description: "The user says the agent is drifting: the stay-on-track skill should load."
 tags: [trigger]
 plugins: ["../.."]
 model: sonnet

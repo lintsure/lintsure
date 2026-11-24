@@ -1,5 +1,5 @@
 ---
-description: One fact decides the finding and the code doesn't show it: the verdict should be needs a person.
+description: "One fact decides the finding and the code doesn't show it: the verdict should be needs a person."
 tags: [triage]
 plugins: ["../.."]
 model: sonnet

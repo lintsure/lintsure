@@ -1,5 +1,5 @@
 ---
-description: The user asks whether Lintsure is connected: the setup skill should load and change nothing by itself.
+description: "The user asks whether Lintsure is connected: the setup skill should load and change nothing by itself."
 tags: [trigger, setup]
 plugins: ["../.."]
 model: sonnet

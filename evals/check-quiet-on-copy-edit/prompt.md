@@ -1,5 +1,5 @@
 ---
-description: A label change has no security angle: no Lintsure skill should load.
+description: "A label change has no security angle: no Lintsure skill should load."
 tags: [trigger]
 plugins: ["../.."]
 model: sonnet

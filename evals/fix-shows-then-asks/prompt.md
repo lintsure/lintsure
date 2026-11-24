@@ -1,5 +1,5 @@
 ---
-description: A request to fix one finding: the fix skill should show the change and wait for a yes.
+description: "A request to fix one finding: the fix skill should show the change and wait for a yes."
 tags: [fix]
 plugins: ["../.."]
 model: sonnet

@@ -1,5 +1,5 @@
 ---
-description: A launch is announced: the pre-launch skill should load.
+description: "A launch is announced: the pre-launch skill should load."
 tags: [trigger]
 plugins: ["../.."]
 model: sonnet
