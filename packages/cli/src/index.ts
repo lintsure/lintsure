@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // npx lintsure scan [path] [options]      npx lintsure baseline [path]
-// Writes reports into the current folder. Never sends anything over the network.
+// Writes reports into the current folder. A scan never uses the network. One command does, lintsure deps, and only
+// after it has said what it will send and been given --yes.
 import { execFileSync } from "node:child_process";
 import { constants, existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -13,6 +14,7 @@ import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isH
 
 import { choose, chooseMany } from "./menu.js";
 import { installSkills, removeSkills, skillFolders, skills } from "./skills.js";
+import { advisories, pinned } from "./deps.js";
 
 // The old Windows console can't draw block, line or diamond characters reliably, so it gets plain ones.
 const legacy = (env = process.env) => process.platform === "win32" && !env.WT_SESSION && !env.TERM_PROGRAM && !env.ConEmuANSI && !env.FORCE_COLOR;
@@ -125,7 +127,7 @@ async function offer(rows: { text: string; run: string[] | (() => Promise<void>)
     return main(run);
   }
 }
-const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "hook", "fix", "status", "export"];
+const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "hook", "fix", "deps", "status", "export"];
 /** The command someone most likely meant: the same word without dashes, or one within two typing slips. Pure. */
 function nearest(word: string): string | undefined {
   const slips = (a: string, b: string) => { let row = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -151,6 +153,9 @@ lintsure fix [path] [F-001 ...]  Apply the change for findings whose rule knows 
                          (shows it first; --all includes held-back findings; --yes writes it,
                          backs the file up, scans again,
                          and puts the file back if the finding is still there)
+lintsure deps [path]     Look up the project's pinned packages for known vulnerabilities.
+                         The only command that uses the network: it says what it will send
+                         (package names and versions, never code) and sends it with --yes
 lintsure hook [path]     Check the lines you commit: adds a git pre-commit hook that runs
                          lintsure scan --staged --fail-on gap (shows it first; --yes writes it;
                          --undo removes it; an existing hook of your own is left alone)
@@ -187,7 +192,7 @@ Accept a finding after review by adding it to .lintsure/accepted.yaml, with the
 fingerprint from lintsure-report.json, your reason, your name and the date.
 
 ${DISCLAIMER}
-Lintsure never sends your code anywhere.`;
+Lintsure never sends your code anywhere. Only "lintsure deps --yes" uses the network.`;
 
 const VALUE_FLAGS = ["--framework", "--fail-on", "--project", "--diff"];
 const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "--save-record", "--all", "--pick", "--staged"];
@@ -345,6 +350,26 @@ async function main(argv: string[]): Promise<number> {
     skipped.forEach((s) => console.log(`left   ${s}`));
     console.log(`\n${fixed ? `Done! ${fixed} finding${fixed === 1 ? "" : "s"} fixed and checked again.` : "Nothing was changed."} Look at the change before you commit it: git diff`);
     return skipped.length && !fixed ? 1 : 0;
+  }
+  // lintsure deps: the one command that uses the network, and only after saying what it sends and being told to.
+  if (cmd === "deps") {
+    const bad = raw.find((a) => a.startsWith("--") && a !== "--yes");
+    if (bad) { console.error(`Unknown option: ${bad}. Use: lintsure deps [folder] [--yes]`); return 2; }
+    const root = resolve(raw.find((a) => !a.startsWith("--")) ?? ".");
+    if (!existsSync(root)) { console.error(`No folder at ${root}.`); return 2; }
+    const { found, files } = await pinned(root);
+    if (!found.length) { console.log("No package-lock.json or pinned requirements.txt at the top of this folder, so there is nothing to look up."); return 0; }
+    console.log(`This asks the public database at api.osv.dev about ${found.length} package${found.length === 1 ? "" : "s"} from ${files.join(" and ")}.\nIt sends package names and versions. It never sends code, file names or anything else from this project.`);
+    if (!raw.includes("--yes")) { console.log("\nNothing sent yet. To run it: lintsure deps --yes"); return 0; }
+    let hits: Awaited<ReturnType<typeof advisories>>;
+    try { hits = await advisories(found); }
+    catch (e) { console.error(`\nCouldn't reach api.osv.dev (${e instanceof Error ? e.message : e}). Nothing else was tried.`); return 2; }
+    if (!hits.size) { console.log(`\nDone! None of the ${found.length} packages has a known advisory in that database today.`); return 0; }
+    console.log("");
+    for (const [p, ids] of [...hits].sort((a, b) => b[1].length - a[1].length || a[0].name.localeCompare(b[0].name)))
+      console.log(`${`${p.name}@${p.version}`.padEnd(44)} ${ids.length} known  ${ids.slice(0, 3).join(", ")}${ids.length > 3 ? ", ..." : ""}`);
+    console.log(`\n${hits.size} of ${found.length} packages have a known advisory. Look one up at https://osv.dev/vulnerability/<id>, then update to a version that fixes it.\nA listed advisory may not affect how you use the package: read it before you decide.`);
+    return 0;
   }
   if (cmd === "hook") {
     const root = resolve(raw.find((a) => !a.startsWith("--")) ?? "."), file = join(root, ".git", "hooks", "pre-commit"), MARK = "# Added by lintsure hook";

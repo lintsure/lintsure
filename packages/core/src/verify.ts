@@ -118,6 +118,12 @@ export function verifyFor(ruleId: string): Verify {
 }
 /** Ids that have their own list, for the test that checks each one names a real rule. */
 export const VERIFY_IDS = Object.keys(SPECIFIC);
+/** Links to a public catalogue that shows the same weakness in other standards, one per CWE number the rule names
+ *  in its controls or its note. Links only: nothing is fetched. Pure. */
+export function crossStandardLinks(rule: { controls: { id: string }[]; note: string }): string[] {
+  const ids = new Set([...rule.controls.map((c) => c.id), rule.note].flatMap((t) => [...t.matchAll(/CWE-(\d+)/g)].map((m) => m[1])));
+  return [...ids].map((n) => `https://www.opencre.org/node/standard/CWE/sectionid/${n}`);
+}
 /** The lists as text an agent or a person can work through. Pure. */
 export function verifyText(ruleId: string): string {
   const v = verifyFor(ruleId);

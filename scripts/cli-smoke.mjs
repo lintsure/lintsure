@@ -151,6 +151,20 @@ const applied = inFx("fix", "--all", "--yes");
 assert.ok(applied.stdout.includes("fixed and checked again") && !readFileSync(fxFile, "utf8").includes("rejectUnauthorized: false") && readFileSync(fxFile + ".lintsure-backup", "utf8") === unsafe, "fix --yes changes the line, keeps the original and confirms with a second scan");
 assert.ok(inFx("fix", "--all").stdout.includes("No finding here has an exact change"), "nothing left to apply afterwards");
 rmSync(fx, { recursive: true, force: true });
+// lintsure deps: reads the lockfile, says what it would send, and sends nothing without --yes.
+const { fromPackageLock, fromRequirements, advisories } = await import(new URL("../packages/cli/dist/src/deps.js", import.meta.url).href);
+const lock = JSON.stringify({ packages: { "": { name: "app", version: "1.0.0" }, "node_modules/left-pad": { version: "1.3.0" }, "node_modules/a/node_modules/@scope/b": { version: "2.0.0" }, "node_modules/local": { link: true } } });
+assert.deepEqual(fromPackageLock(lock).map((p) => `${p.name}@${p.version}`), ["left-pad@1.3.0", "@scope/b@2.0.0"], "the project itself and linked workspaces are left out");
+assert.deepEqual(fromRequirements("requests==2.33.0\nflask>=2\n# note\nuvicorn[standard]==0.30.1\n").map((p) => `${p.name}@${p.version}`), ["requests@2.33.0", "uvicorn@0.30.1"], "only exact pins can be looked up");
+// The lookup itself, against a stand-in for the service: what is sent holds names and versions and nothing else.
+let sent = null;
+const found = await advisories(fromPackageLock(lock), async (_url, init) => { sent = JSON.parse(init.body); return { ok: true, json: async () => ({ results: [{ vulns: [{ id: "GHSA-test-0001" }] }, {}] }) }; });
+assert.deepEqual(sent, { queries: [{ package: { name: "left-pad", ecosystem: "npm" }, version: "1.3.0" }, { package: { name: "@scope/b", ecosystem: "npm" }, version: "2.0.0" }] });
+assert.deepEqual([...found].map(([p, ids]) => `${p.name}: ${ids.join()}`), ["left-pad: GHSA-test-0001"]);
+const dp = mkdtempSync(join(tmpdir(), "ls-deps-")); writeFileSync(join(dp, "package-lock.json"), lock);
+const asked = spawnSync(process.execPath, [CLI, "deps", dp], { encoding: "utf8" });
+assert.ok(asked.stdout.includes("about 2 packages from package-lock.json") && asked.stdout.includes("never sends code") && asked.stdout.includes("Nothing sent yet"), "deps says what it would send and waits for --yes");
+rmSync(dp, { recursive: true, force: true });
 // A workspace (several projects, no manifest of its own) is named as one, and the scan still runs when piped.
 const ws = mkdtempSync(join(tmpdir(), "ls-ws-"));
 for (const p of ["api", "web"]) { mkdirSync(join(ws, p)); writeFileSync(join(ws, p, "package.json"), "{}\n"); }

@@ -115,6 +115,7 @@ npx lintsure setup          # preview
 npx lintsure setup --yes    # write it
 npx lintsure skills         # add skills that tell the agent when to use Lintsure
 npx lintsure status         # check Node, config, rules and agents
+npx lintsure deps           # look up pinned packages for known vulnerabilities (asks first: this one uses the network)
 ```
 
 Or add it yourself in Claude Code: `claude mcp add lintsure -- npx -y @lintsure/mcp`.

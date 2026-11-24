@@ -15,6 +15,7 @@ writeFileSync(new URL("rules.md", dir), head(`Lintsure rules (${core.rules.lengt
   `- Fix: ${r.fix}`, `- Note: ${r.note}`,
   `- Real only when: ${core.verifyFor(r.id).real.join(" ")}`,
   `- Not a problem when: ${core.verifyFor(r.id).notReal.join(" ")}`,
+  ...(core.crossStandardLinks(r).length ? [`- In other standards: ${core.crossStandardLinks(r).join(" ")}`] : []),
   ...(r.unseen ? [`- When Partial, Lintsure can't see: ${r.unseen}`] : []),
   ...(r.seenIn ?? []).map((s) => `- Seen in a real incident: ${s.title} (${s.url})`),
   `- Page: https://lintsure.com/rules/${r.id.replace(/\./g, "-")}`, "",

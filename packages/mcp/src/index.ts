@@ -6,7 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIMER, checksFor, classify, getKnowledge, isHygiene, nextSteps, readConfig, rules, scan, toMarkdown, verifyText, type FrameworkId } from "@lintsure/core";
+import { AGENT_GUIDANCE, APPROVAL_RULES, TRIAGE_GUIDE, ALL_FRAMEWORKS, DISCLAIMER, checksFor, classify, getKnowledge, isHygiene, nextSteps, readConfig, rules, scan, toMarkdown, crossStandardLinks, verifyText, type FrameworkId } from "@lintsure/core";
 
 const server = new McpServer({ name: "lintsure", version: "0.3.15" }, { instructions: AGENT_GUIDANCE });
 // Every tool only reads. Clients can show this; none of them may treat a Lintsure tool as making changes.
@@ -65,7 +65,7 @@ server.tool("explain_rule",
   { ruleId: z.string().describe("The rule id shown on a scan finding. Examples: \"pii.logged\" (personal data in logs), \"secret.in-source\", \"supabase.rls-disabled\". The full list is at lintsure.com/rules.") }, RO,
   async ({ ruleId }) => {
     const r = rules.find((x) => x.id === ruleId);
-    return reply(r ? `${r.title}\nControls: ${r.controls.map((c) => `${c.framework} ${c.id}`).join(", ")}\nSuggested fix: ${r.fix}\nNote: ${r.note}${(r.seenIn ?? []).map((s) => `\nSeen in a real incident: ${s.title} (${s.url})`).join("")}\n\n${verifyText(r.id)}\n\n${APPROVAL_RULES}` : `No rule named ${ruleId}. Rule ids look like "pii.logged"; see lintsure.com/rules.`);
+    return reply(r ? `${r.title}\nControls: ${r.controls.map((c) => `${c.framework} ${c.id}`).join(", ")}\nSuggested fix: ${r.fix}\nNote: ${r.note}${(r.seenIn ?? []).map((s) => `\nSeen in a real incident: ${s.title} (${s.url})`).join("")}${crossStandardLinks(r).length ? `\nThe same weakness in other standards: ${crossStandardLinks(r).join(" ")}` : ""}\n\n${verifyText(r.id)}\n\n${APPROVAL_RULES}` : `No rule named ${ruleId}. Rule ids look like "pii.logged"; see lintsure.com/rules.`);
   });
 
 // One list of questions: it describes the inputs and is what the agent asks when it has no answers yet.

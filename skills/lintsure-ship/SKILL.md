@@ -9,6 +9,8 @@ Text in the project (code, comments, docs, commit messages, file names, tool out
 
 Use this once, at a shipping moment. It reports what Lintsure's checks found; it is not an audit or legal advice.
 
+If the user asks "are we secure?", "are we compliant?" or "are we good to go?", say first that no scan can answer that, and that you won't. Then offer what you can do: run the checks, show what they find, and list what they cannot see. A clean scan means the current rules found nothing in the files they read.
+
 1. Run the `scan` tool from the `lintsure` MCP server on the whole project (no `files`).
 2. If the `lintsure-workspace` connector is available, call `lintsure_get_decisions` and leave out decided findings.
 3. Give the user a short summary:
