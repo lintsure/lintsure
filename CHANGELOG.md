@@ -4,6 +4,12 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 
 ## Unreleased
 
+### Fewer false alarms
+- **Stored lines in JSON data files are not read as running code.** A file of saved findings, review notes or samples keeps other people's lines under keys such as `text`, `context`, `excerpt`, `fix` and `note`. Checks no longer fire on those lines. A key found there is still counted and is shown with `--all`, like a key in a test file.
+- **Code shown as text is not counted as code.** A log call inside a quoted string, on a page between two tags, or in a template literal with nothing filled in is text: a line drawn into an image, a slide, a code sample. A Python f-string and a template literal with `${...}` still count.
+- A JSON file that quotes code registering an MCP tool is read as data: only its `description` values are checked.
+- On our own workspace these took a scan from 177 findings in the code to 69, most of the rest being test cases planted on purpose.
+
 ### New
 - **Every rule now says what makes a finding real.** Two lists per rule: what must hold before a finding is called real, and what makes it not a problem. Sixteen rules have their own lists, written from findings reviewed against real code; the rest use the lists for their kind. The `explain_rule` tool returns them, `docs/rules.md` carries them, and the triage and fix skills work from them.
 - **Evals for the seven skills.** Eleven test cases in `evals/` check that a skill loads when it should, stays out of the way when it shouldn't, tells a real finding from a look-alike, and shows a change before it applies one. They run with `claude plugin eval`; a free check of the cases themselves runs with the tests.

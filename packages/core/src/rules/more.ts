@@ -269,7 +269,8 @@ export const moreRules: Rule[] = [
     // A scanner that lists these phrases to catch them is not an attack: lines that build a pattern or name an attempt are
     // skipped, and in a JSON manifest only "description" values are read (field test: 6 of 6 new findings were detectors).
     fileTest: (lines) => {
-      const code = lines.some((l) => MCP_TOOL.test(l));
+      // A JSON file is data: only its "description" values are read, even when it quotes code that registers a tool.
+      const code = !/^\s*[\[{]/.test(lines.find((l) => l.trim()) ?? "") && lines.some((l) => MCP_TOOL.test(l));
       if (!code && !lines.some((l) => /"inputSchema"\s*:/.test(l))) return [];
       return lines.flatMap((l, i) => (poisonedDescription(l) && !/^\s*(\/\/|#)/.test(l) && (code || /"description"\s*:/.test(l))
         && !/re\.compile\(|new RegExp\(|\(\?i\)|\b(attempt|detect\w*|patterns?|injection)\b/i.test(l) ? [i + 1] : []));

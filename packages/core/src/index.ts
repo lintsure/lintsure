@@ -291,8 +291,10 @@ export function enclosingKeys(lines: string[]): string[] {
 }
 // Example code that shows a pattern instead of running it (benchmark "fp" cases, self-scan 2026-11-19): a fenced block
 // in a doc, a value under an example-style key in JSON data. Only secret rules still look, and only for a real-looking key.
-const EXAMPLE_KEY = /^(?:examples?|code|snippets?|samples?|bad|good|before|after|demo|patch|diff|dont|do)$/i;
-const EXAMPLE_KEY_ON_LINE = /"(?:examples?|code|snippets?|samples?|bad|good|before|after|demo|patch|diff|dont|do)"\s*:/i;
+// Keys that hold quoted material count too (text, context, excerpt, fix, note): a file of stored findings or review
+// notes keeps other people's lines there (workspace scan 2026-11-23: about 110 of 177 findings came from such files).
+const EXAMPLE_KEY = /^(?:examples?|code|snippets?|samples?|bad|good|before|after|demo|patch|diff|dont|do|text|context|excerpt|evidence|quote|fix|note|hint)$/i;
+const EXAMPLE_KEY_ON_LINE = /"(?:examples?|code|snippets?|samples?|bad|good|before|after|demo|patch|diff|dont|do|text|context|excerpt|evidence|quote|fix|note|hint)"\s*:/i;
 export function exampleLines(lines: string[], ext: string): boolean[] {
   if (ext === ".md" || ext === ".mdx") { let fence = false; return lines.map((l) => { if (/^\s*(```|~~~)/.test(l)) { fence = !fence; return true; } return fence; }); }
   if (ext === ".json") { const keys = enclosingKeys(lines); return lines.map((l, i) => EXAMPLE_KEY_ON_LINE.test(l) || EXAMPLE_KEY.test(keys[i])); }
@@ -362,7 +364,13 @@ export function hopLine(lines: string[], i: number, names: Map<string, number>):
   return changed ? t : null;
 }
 const PROMPT_DOC = /(^|\/)(?:prompts?|personas?|instructions?|system)(?:\/|[._-])|(^|\/)(?:AGENTS|CLAUDE|GEMINI|SKILL|SYSTEM|PROMPT)\.mdx?$|\.prompt\.mdx?$|(^|\/)\.(?:github|cursor|claude)\//i;
-const SINK_RULES = new Set(["path.user-input", "ssrf.user-url", "redirect.open", "code.eval", "cmd.shell-built", "deserialize.unsafe"]);
+// pii.logged is here for the same reason: a log call drawn into an image, a slide or a code sample on a page is text.
+const SINK_RULES = new Set(["path.user-input", "ssrf.user-url", "redirect.open", "code.eval", "cmd.shell-built", "deserialize.unsafe", "pii.logged"]);
+// A Python f-string builds its text from variables, so it is code, not a stored line.
+const BUILDS_TEXT = /\b[fF][rR]?["']/;
+/** A line with its quoted strings and its on-screen text (between a tag and its closing tag) emptied. Pure. */
+// A template literal with no ${...} in it is a plain string as well.
+export const codeOnly = (l: string) => blankStrings(l).replace(/`[^`$]*`/g, "``").replace(/>[^<>{}]*<\//g, "></");
 // One pass, no regex: a line with an unclosed quote and many escapes must not cost more than its length (CodeQL js/polynomial-redos).
 export function blankStrings(l: string): string {
   let out = "", q = "", start = 0;
@@ -515,6 +523,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   const rulesOff = Object.keys(config.rules).filter((id) => config.rules[id] === "off");
   const active = rules.filter((r) => r.controls.some((c) => frameworks.includes(c.framework)) && !rulesOff.includes(r.id));
   const findings: Finding[] = [];
+  // Secrets found in quoted material inside a JSON data file ("file:line"): shown with --all, like secrets in tests.
+  const quoted = new Set<string>();
   let filesChecked = 0, checkPoints = 0, nonShipping = 0;
   const perRule: Record<string, number> = {};
   const all = await listFiles(root, ignore);
@@ -642,7 +652,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         if (example[i] && !(secret && !PLACEHOLDER.test(text))) return;
         let hit = r.test!(text), probe = text;
         if (!hit && HOP_RULES.has(r.id)) { const h = hopLine(lines, i, (tainted ??= taintedNames(lines))); if (h && r.test!(h)) { hit = "partial"; probe = h; } }
-        if (hit && SINK_RULES.has(r.id) && !r.test!(blankStrings(probe))) return;
+        if (hit && SINK_RULES.has(r.id) && !BUILDS_TEXT.test(probe) && !r.test!(codeOnly(probe))) return;
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, i - 8), i + 4).some((l) => r.unlessNear!.test(l)))) return;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, i))) return;
         if (DEV_BRANCH_RULES.has(r.id) && inDevBranch(lines, i)) return;
@@ -651,6 +661,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         if (inTests && /PRIVATE KEY/.test(text)) return; // test keys and certificates are fixtures by design (review P24)
         if (REVIEWED.test(text) || (!secret && OTHER_LINTER.test(text))) return; // someone already looked at this line and marked it
         hitLines.add(i);
+        if (secret && example[i] && ext === ".json") quoted.add(`${file}:${i + 1}`);
         add(r, i + 1, hit === "partial" || (inTests && !TOOLING_RULES.has(r.id)) ? "partial" : r.status);
       });
       // A statement spread over several lines: test it as one, and report it only when no single line already did,
@@ -660,6 +671,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
         let already = false; for (let i = s.start; i <= s.end; i++) if (hitLines.has(i)) { already = true; break; }
         if (already) continue;
         const hit = r.test(s.text);
+        if (hit && SINK_RULES.has(r.id) && !BUILDS_TEXT.test(s.text) && !r.test(codeOnly(s.text))) continue; // text on a page, as above
         if (hit && r.id === "pii.logged" && viaMasker(s.text)) continue;
         if (!hit || (r.unlessNear && lines.slice(Math.max(0, s.start - 8), s.end + 4).some((l) => r.unlessNear!.test(l)))) continue;
         if (r.unlessInKey && r.unlessInKey.test(enclosingKey(lines, s.start))) continue;
@@ -669,7 +681,8 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
       // File rules see comment lines as blank, so "<img> in a comment" or a commented-out call doesn't count (field test).
       // A Python MCP tool's description is its docstring, so this rule reads docstrings too (it drops # and // lines itself).
       if (r.fileTest) for (const n of r.fileTest(skip && r.id !== "mcp.tool-description-poisoned" ? lines.map((l, i) => (skip[i] ? "" : l)) : lines, shared.get(r.id), sharedFiles.get(r.id)))
-        if (!(DEV_BRANCH_RULES.has(r.id) && inDevBranch(lines, (typeof n === "number" ? n : n.line) - 1))) typeof n === "number" ? add(r, n) : add(r, n.line, n.status);
+        // A file rule's hit on a quoted line in a JSON data file is a stored line too, as for line rules above.
+        if (!(DEV_BRANCH_RULES.has(r.id) && inDevBranch(lines, (typeof n === "number" ? n : n.line) - 1)) && !(ext === ".json" && example[(typeof n === "number" ? n : n.line) - 1])) typeof n === "number" ? add(r, n) : add(r, n.line, n.status);
     }
     if (ran) filesChecked++;
   }
@@ -707,7 +720,7 @@ export async function scan(root: string, frameworks: FrameworkId[] = ALL_FRAMEWO
   // Request data reaching a query, a shell, eval or a CI script (status Gap) is shown by default even from a held-back
   // rule: the default run found 61% of the benchmark's real problems, and these were most of the rest (2026-11-20).
   const reachesSink = (f: Finding) => f.status === "gap" && REQUEST_SINK_RULES.has(f.ruleId) && !isNonShipping(f.file);
-  const isMedium = (f: Finding) => (medium.has(f.ruleId) && !reachesSink(f)) || (SECRET_RULES.has(f.ruleId) && isNonShipping(f.file));
+  const isMedium = (f: Finding) => (medium.has(f.ruleId) && !reachesSink(f)) || (SECRET_RULES.has(f.ruleId) && (isNonShipping(f.file) || quoted.has(`${f.file}:${f.line}`)));
   const changed = opts.changed && new Map(Object.entries(opts.changed.lines).map(([k, v]) => [k, new Set(v)]));
   const inDiff = (f: Finding) => !changed || changed.get(f.file)?.has(f.line) === true;
   const held = showAll ? 0 : unique.filter((f) => isMedium(f) && inDiff(f)).length;

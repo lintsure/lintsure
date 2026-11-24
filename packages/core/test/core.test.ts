@@ -1271,3 +1271,32 @@ test("every rule says what makes a finding real", async () => {
   assert.match(verifyText("xss.raw-html"), /comes from outside your code/);
   assert.match(verifyText("skill.unrestricted-shell"), /An agent or model will read or run this/);
 });
+
+test("stored lines and code shown as text are not read as running code", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { isHygiene } = await import("../src/index.js");
+  const dir = await mkdtemp(join(tmpdir(), "ls-text-"));
+  await mkdir(join(dir, "src")); await mkdir(join(dir, "data"));
+  await writeFile(join(dir, "package.json"), "{}\n");
+  // A file of stored findings: other people's lines kept under "text" and "context".
+  await writeFile(join(dir, "data/findings.json"), JSON.stringify([
+    { rule: "docker.socket-mounted", text: "- /var/run/docker.sock:/var/run/docker.sock:ro" },
+    { rule: "cloud.public-bucket", text: "ACL: 'public-read'," },
+    { rule: "secret.in-source", context: "const key = \"sk_" + "live_51Hq8sKd9fJ2mNx7PqRt4VwYz0QmLk83\";" },
+  ], null, 2));
+  // A log call drawn as text, shown on a page, and a real one beside them.
+  await writeFile(join(dir, "src/card.ts"), 'export const svg = text(130, 690, "logger.info(user.email)", 38);\n');
+  await writeFile(join(dir, "src/Slide.tsx"), 'export const Slide = () => <div className="bad">- console.log("new user", user.email);</div>;\n');
+  // The same on a page that spans several lines, as a template literal with nothing filled in.
+  await writeFile(join(dir, "src/Reel.tsx"), ["export const Reel = () => {", "  return (", "    <div>", '      <span>- </span>{`logger.info("signup", { email: user.email });`}', "    </div>", "  );", "};", ""].join("\n"));
+  await writeFile(join(dir, "src/signup.ts"), 'export function signup(user: { email: string }) {\n  console.log("new user", user.email);\n}\n');
+  await writeFile(join(dir, "src/reset.py"), 'def reset(email):\n    logging.info(f"reset sent to {email}")\n');
+  const shown = await coreScan(dir), all = await coreScan(dir, undefined, { all: true });
+  const at = (r: typeof shown) => r.findings.filter((f) => !isHygiene(f)).map((f) => `${f.ruleId}@${f.file}:${f.line}`).sort();
+  assert.deepEqual(at(shown), ["pii.logged@src/reset.py:2", "pii.logged@src/signup.ts:2"]);
+  // The quoted key is still found, and shown when everything is asked for.
+  assert.ok((shown.held ?? 0) >= 1 && at(all).some((x) => x.startsWith("secret.in-source@data/findings.json")));
+  await rm(dir, { recursive: true, force: true });
+});
