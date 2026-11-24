@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { access, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { AGENTS, CONNECT_NOTE, MANUAL, detected, status, pick, plan, setup, undo } from "./agents.js";
+import { AGENTS, CONNECT_NOTE, MANUAL, callingAgent, detected, status, pick, plan, setup, undo } from "./agents.js";
 import { parseActivity, toOtlp } from "./otel.js";
 import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isHygiene, isNonShipping, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
@@ -565,7 +565,10 @@ async function main(argv: string[]): Promise<number> {
       return (await offer(rows, !process.env.NO_COLOR && process.env.TERM !== "dumb")) ?? 0;
     }
     // Typed by hand with no agent named and none found here: say which one this is for, and how to pick another.
-    if (!named && !here.length && !raw.includes("--undo")) console.log(`No agent folder in this project, so this is for Claude Code. For another one: lintsure setup --agents ${AGENTS.slice(1).map((a) => a.id).join(" | ")}\nFor an agent set up in its own settings (Devin, Windsurf, Zed): lintsure setup --manual\n`);
+    const me = callingAgent();
+    if (!named && me && !here.includes(me) && !raw.includes("--undo")) console.log(`This is running inside ${me.name}, so ${me.name} is connected${here.length ? " too" : ""}.
+`);
+    else if (!named && !here.length && !raw.includes("--undo")) console.log(`No agent folder in this project, so this is for Claude Code. For another one: lintsure setup --agents ${AGENTS.slice(1).map((a) => a.id).join(" | ")}\nFor an agent set up in its own settings (Devin, Windsurf, Zed): lintsure setup --manual\n`);
     const i = raw.indexOf("--agents");
     const agents = await pick(root, i >= 0 ? raw[i + 1]?.split(",").map((s) => s.trim()) : undefined);
     if (typeof agents === "string") { console.error(agents); return 2; }

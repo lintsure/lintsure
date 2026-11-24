@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 const CLI = fileURLToPath(new URL("../packages/cli/dist/src/index.js", import.meta.url));
+// The agent running these tests must not change what setup picks.
+for (const k of Object.keys(process.env)) if (/^(CLAUDECODE$|GEMINI_CLI$|CURSOR_|CODEX_)/.test(k)) delete process.env[k];
 const run = (...a) => execFileSync(process.execPath, [CLI, ...a], { encoding: "utf8" });
 const T = mkdtempSync(join(tmpdir(), "ls-setup-"));
 mkdirSync(join(T, ".cursor")); writeFileSync(join(T, ".cursor/mcp.json"), JSON.stringify({ mcpServers: { other: { command: "x" } } }));
@@ -264,6 +266,13 @@ rmSync(st, { recursive: true, force: true });
   at(empty, "setup", "--everywhere", "--undo");
   assert.ok(!existsSync(join(home, ".cursor/mcp.json")) && !readFileSync(join(home, ".codex/config.toml"), "utf8").includes("lintsure"), "--everywhere --undo takes it out");
   rmSync(empty, { recursive: true, force: true }); rmSync(home, { recursive: true, force: true });
+}
+{
+  const { callingAgent } = await import(new URL("../packages/cli/dist/src/agents.js", import.meta.url).href);
+  assert.deepEqual([callingAgent({ CODEX_SANDBOX: "1" })?.id, callingAgent({ CLAUDECODE: "1" })?.id, callingAgent({})], ["codex", "claude", undefined]);
+  const d = mkdtempSync(join(tmpdir(), "ls-caller-")), out = spawnSync(process.execPath, [CLI, "setup", d], { encoding: "utf8", env: { ...process.env, CODEX_SANDBOX: "1" } }).stdout;
+  assert.ok(out.includes("running inside Codex") && out.includes(".codex/config.toml"), "setup connects the agent that ran it");
+  rmSync(d, { recursive: true, force: true });
 }
 const { moved, frame, frameMany } = await import(new URL("../packages/cli/dist/src/menu.js", import.meta.url).href);
 assert.deepEqual([moved("down", 0, 5), moved("down", 4, 5), moved("up", 0, 5), moved("end", 1, 5), moved("home", 3, 5), moved("x", 2, 5)], [1, 0, 4, 4, 0, 2]);

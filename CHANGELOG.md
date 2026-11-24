@@ -12,6 +12,9 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **`lintsure setup` asks which you want: every project on this machine, or only this one.** `--everywhere` writes to your own agent settings (Cursor, Gemini CLI, Codex, and Claude Code through its own command). `--here` keeps it to the folder you are in. An agent running the command for you is told to put the choice to you.
 - **`setup`, `skills` and `plugin` stop when the folder is not a project.** An agent that starts in an empty or temporary folder used to connect Lintsure to nothing. Now the command names the folder, says how to point it at your project, and writes nothing.
 
+- **Setup connects the agent that ran it.** Run from inside Codex, Cursor, Gemini CLI or Claude Code, it adds that agent even when the project has no folder for it yet.
+- **Setup says so when it could not write.** In a locked-down shell it used to end with "Written". Now it reports that nothing changed and exits with an error.
+
 ### Fewer false alarms
 - **Stored lines in JSON data files are not read as running code.** A file of saved findings, review notes or samples keeps other people's lines under keys such as `text`, `context`, `excerpt`, `fix` and `note`. Checks no longer fire on those lines. A key found there is still counted and is shown with `--all`, like a key in a test file.
 - **Code shown as text is not counted as code.** A log call inside a quoted string, on a page between two tags, or in a template literal with nothing filled in is text: a line drawn into an image, a slide, a code sample. A Python f-string and a template literal with `${...}` still count.

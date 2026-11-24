@@ -61,13 +61,20 @@ export async function detected(root: string): Promise<Agent[]> {
 /** What connecting does, in plain words, for the screens that offer it. */
 export const CONNECT_NOTE = "Connecting adds one entry to the agent's config file in this project. It tells the agent how to start\nLintsure, so the agent can check code and explain findings itself. Installing the lintsure command does not\ndo this: an agent only knows Lintsure once it is connected.";
 
+/** The agent running this command, from the environment it sets, so setup connects the one that asked. */
+export function callingAgent(env: Record<string, string | undefined> = process.env): Agent | undefined {
+  const id = env.CLAUDECODE ? "claude" : env.GEMINI_CLI ? "gemini" : env.CURSOR_AGENT || env.CURSOR_TRACE_ID ? "cursor" : Object.keys(env).some((k) => k.startsWith("CODEX_")) ? "codex" : undefined;
+  return AGENTS.find((a) => a.id === id);
+}
+
 /** Agents to set up: the ones named, or the ones whose folder exists, with Claude Code as the default. */
 export async function pick(root: string, names?: string[]): Promise<Agent[] | string> {
   if (names) {
     const bad = names.filter((n) => !AGENTS.some((a) => a.id === n));
     return bad.length ? `Unknown agent: ${bad.join(", ")}. Use ${AGENTS.map((a) => a.id).join(", ")}.` : AGENTS.filter((a) => names.includes(a.id));
   }
-  const found = await detected(root);
+  const found = await detected(root), me = callingAgent();
+  if (me && !found.includes(me)) found.push(me);
   return found.length ? found : [AGENTS[0]];
 }
 
@@ -80,15 +87,20 @@ export async function setup(root: string, agents: Agent[], apply: boolean, scope
   const todo = plans.filter((p) => p.text);
   if (!todo.length) { console.log("\nNothing to write. Check the connection with: lintsure status"); return 0; }
   if (!apply) { console.log(`\nNothing written yet. To apply, run: lintsure setup${scope} --yes\nExisting files are backed up first (<file>.lintsure-backup).`); return 0; }
+  let wrote = 0;
   for (const p of todo) {
+   try {
     await mkdir(dirname(p.path), { recursive: true });
     // The first backup is the user's original: never overwrite it on a later run. Owner-only, it may hold tokens.
     if (p.existed) {
       try { await copyFile(p.path, p.path + ".lintsure-backup", constants.COPYFILE_EXCL); await chmod(p.path + ".lintsure-backup", 0o600).catch(() => {}); }
       catch (e) { if ((e as NodeJS.ErrnoException).code !== "EEXIST") { console.error(`Couldn't back up ${p.agent.file}, so it was left alone.`); continue; } }
     }
-    await writeFile(p.path, p.text!);
+    await writeFile(p.path, p.text!); wrote++;
+   } catch (e) { console.error(`Couldn't write ${p.agent.file} (${(e as NodeJS.ErrnoException).code ?? "error"}), so it was left alone.`); }
   }
+  // A sandboxed agent or a read-only folder: say plainly that nothing changed, so nobody thinks it is connected.
+  if (!wrote) { console.error("\nNothing was written. This program isn't allowed to change files in that folder. Allow it there, or run the same command in your own terminal."); return 1; }
   console.log(`Undo any time with: lintsure setup${scope} --undo`);
   console.log(`\nWritten. Restart the agent so it starts the Lintsure MCP server. Run "lintsure status" to check.`);
   console.log("Then ask the agent, in its own chat: Check this project with Lintsure.");
