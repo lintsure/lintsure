@@ -44,7 +44,13 @@ Run it in your project's folder, the one with your code in it. Somewhere else? N
 
 Asking your agent to install it? Open your project in the agent first. If the agent starts in an empty or temporary folder, Lintsure has nothing to connect to, and it will say so.
 
-In Claude Code, the plugin adds guards that work while the agent edits: Drift Guard (your project's rules, made-up imports), Danger Guard (risky shell commands), Secret Guard and Loop Guard.
+The plugin adds guards that work while the agent edits: Drift Guard (your project's rules, made-up imports), Danger Guard (risky shell commands), Secret Guard and Loop Guard. One command installs it for Claude Code, Cursor, Codex and Gemini CLI, and it shows what it will write first:
+
+```bash
+npx lintsure plugin
+```
+
+In Claude Code you can also add it from inside the agent:
 
 ```text
 /plugin marketplace add lintsure/plugin
@@ -90,6 +96,20 @@ It also lists what code can't prove (access reviews, training records, contracts
 
 **Common questions it answers:** Is there a security scanner for code written by Claude Code or Cursor? How do I stop my AI agent from committing secrets? Is there an MCP server that checks code against OWASP or GDPR? How do I make my coding agent follow project rules?
 
+## How it connects
+
+There are five ways to use Lintsure. They all run the same engine, on your machine or your own CI runner, and none of them sends your code anywhere. Start with the first and add the others when you want the agent to do the checking itself.
+
+| Way | What you run | What you get |
+|---|---|---|
+| **CLI** | `npx lintsure scan` | A report in your terminal and in a file. It runs when you ask. |
+| **MCP server** | `npx lintsure setup` | Your agent can call Lintsure itself: ask which checks apply before it writes code, scan its own work, and explain a finding. |
+| **Skills** | `npx lintsure skills` | Short instructions that tell the agent when to use Lintsure and how to read what it finds. |
+| **Plugin** | `npx lintsure plugin` | Guards that run on every edit and command, without anyone asking. The code lives in [lintsure/plugin](https://github.com/lintsure/plugin). |
+| **GitHub Action** | `uses: lintsure/action@v1` | The same check on every pull request, with findings on the changed lines. The code lives in [lintsure/action](https://github.com/lintsure/action). |
+
+The MCP server gives the agent a tool it can choose to use. The plugin is what makes checking happen every time.
+
 ## Built to inform, not to decide
 
 - **Never uploads your code.** The engine has no network code. A test fails the build if any appears.
@@ -103,7 +123,7 @@ We'd rather say this up front than have you find out later:
 
 - **Not a pentest.** It reads source files. It doesn't run your app, send requests to a live site or test a deployed server.
 - **Not a full code analyzer.** Rules are pattern checks on lines and statements, plus a few checks across files. They don't follow data through your whole program, so some findings are marked Partial for a person to confirm.
-- **Not a dependency scanner.** It flags risky install patterns and unpinned versions, not known vulnerabilities in the packages you use.
+- **Not a dependency scanner.** A scan flags risky install patterns and unpinned versions, not known vulnerabilities in the packages you use. `lintsure deps` looks your pinned packages up on OSV, and only when you ask, because that one uses the network.
 - **Not an audit or legal advice.** A Met control means the rules found no problem in the files they read, nothing more.
 
 **Using it with an AI agent:** Lintsure is a defensive review of code you own. If you ask an agent to run it, say that ("review my own repo against OWASP Top 10 and fix what you find"), which describes the work accurately.
