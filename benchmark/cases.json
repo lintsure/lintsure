@@ -1145,5 +1145,17 @@
       "allowed-tools: Read, Grep, Glob",
       "shell: false"
     ]
+  },
+  "llm.retrieved-text-in-system-prompt": {
+    "flag": [
+      "const system = `Answer from these pages: ${chunks.join(\"\n\")}`;",
+      "{ role: \"system\", content: `Use this context: ${context}` },",
+      "system_prompt = \"Answer using {context} only.\""
+    ],
+    "pass": [
+      "const system = \"Answer only from the reference material in the next message.\";",
+      "{ role: \"user\", content: `Reference material: ${chunks.join(\"\n\")}` },",
+      "const context = await search(query);"
+    ]
   }
 }

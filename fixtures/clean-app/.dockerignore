@@ -1,0 +1,6 @@
+.env
+.env.*
+.git
+.claude
+.cursor
+node_modules

@@ -2,14 +2,14 @@
 // npx lintsure scan [path] [options]      npx lintsure baseline [path]
 // Writes reports into the current folder. Never sends anything over the network.
 import { execFileSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { AGENTS, CONNECT_NOTE, MANUAL, detected, status, pick, plan, setup, undo } from "./agents.js";
 import { parseActivity, toOtlp } from "./otel.js";
-import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isHygiene, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
+import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isHygiene, isNonShipping, isOpen, nextSteps, readConfig, scan, toAssessmentHtml, toBaseline, toMarkdown, toSarif, type FrameworkId } from "@lintsure/core";
 
 import { choose, chooseMany } from "./menu.js";
 import { installSkills, removeSkills, skillFolders, skills } from "./skills.js";
@@ -63,10 +63,18 @@ function projectSign(dir: string): string | null {
   for (let at = dirname(dir); !isWholeDisk(at); at = dirname(at)) if (existsSync(join(at, ".git"))) return `inside the git repository ${basename(at)}`;
   return null;
 }
+// Files that say "a project starts here". A git folder, a Lintsure folder or a Dockerfile can sit above several projects.
+const MANIFESTS = PROJECT_MARKERS.filter((m) => ![".git", ".lintsure", "lintsure.config.yaml", "Dockerfile", "docker-compose.yml", "compose.yaml"].includes(m));
+/** The projects directly inside a folder that is not one itself: a workspace. Empty for a normal project. */
+export function subProjects(dir: string): string[] {
+  if (MANIFESTS.some((m) => existsSync(join(dir, m)))) return [];
+  try { return readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules" && [...MANIFESTS, ".git"].some((m) => existsSync(join(dir, e.name, m)))).map((e) => e.name); }
+  catch { return []; }
+}
 /** The folder and whether a project was found in it, as one step. */
 function showFolder(title: string, dir: string): void {
   const sign = projectSign(dir);
-  step(`${title}  ${tint(BLUE, basename(dir) || dir)}`, [tint("2", dir), sign ? `${tint("32", "Project found")}: ${sign}` : tint(GOLD, "No project found here")]);
+  step(`${title}  ${tint(BLUE, basename(dir) || dir)}`, [tint("2", dir), subProjects(dir).length > 1 ? tint(GOLD, `A workspace: ${subProjects(dir).length} projects inside`) : sign ? `${tint("32", "Project found")}: ${sign}` : tint(GOLD, "No project found here")]);
 }
 /** Asks a person for their project folder. Returns its full path, "" for Enter alone (use this folder), or null to stop.
  *  A pasted path may carry quotes, and ~ stands for the home folder. Only call this at a terminal. */
@@ -117,7 +125,7 @@ async function offer(rows: { text: string; run: string[] | (() => Promise<void>)
     return main(run);
   }
 }
-const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "status", "export"];
+const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "hook", "status", "export"];
 /** The command someone most likely meant: the same word without dashes, or one within two typing slips. Pure. */
 function nearest(word: string): string | undefined {
   const slips = (a: string, b: string) => { let row = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -139,6 +147,9 @@ lintsure skills [path]   Add Lintsure's skills to this project: short instructio
                          tell your agent when to check code and how to handle findings
                          (at a terminal you pick which; --yes adds all; --only a,b;
                          --undo takes them out)
+lintsure hook [path]     Check the lines you commit: adds a git pre-commit hook that runs
+                         lintsure scan --staged --fail-on gap (shows it first; --yes writes it;
+                         --undo removes it; an existing hook of your own is left alone)
 lintsure status [path]   Check that this project is ready: Node, config, rules, agents
 lintsure export --otlp-json [path]  Write .lintsure/activity.jsonl as an OpenTelemetry
                          traces file (lintsure.otlp.json) for your own observability tool
@@ -148,6 +159,7 @@ scan options:
                       (default: lintsure.config.yaml if present, else all)
   --all               Also list medium-confidence findings (held back by default)
   --diff <base>       Only list findings on lines changed since <base>, e.g. origin/main
+  --staged            Only list findings on lines that are staged for the next commit
   --json              Also write lintsure-report.json
   --sarif             Also write lintsure.sarif (for GitHub code scanning and editors)
   --report            Also write lintsure-assessment.html, a multi-page report
@@ -174,7 +186,7 @@ ${DISCLAIMER}
 Lintsure never sends your code anywhere.`;
 
 const VALUE_FLAGS = ["--framework", "--fail-on", "--project", "--diff"];
-const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "--save-record", "--all", "--pick"];
+const BOOL_FLAGS = ["--json", "--sarif", "--report", "--new-only", "--github", "--save-record", "--all", "--pick", "--staged"];
 
 /** Changed line numbers per file from `git diff -U0` output. Pure. */
 export function parseDiff(text: string): Record<string, number[]> {
@@ -269,6 +281,25 @@ async function main(argv: string[]): Promise<number> {
     if (!rows.length) { console.error("No activity yet in .lintsure/activity.jsonl. The Lintsure plugin writes it while your agent works."); return 2; }
     await writeFile("lintsure.otlp.json", JSON.stringify(toOtlp(rows, RULES_VERSION), null, 2));
     console.log(`Wrote lintsure.otlp.json: ${rows.length} events. Nothing was sent; load the file into your collector or tool (OTLP/JSON).`);
+    return 0;
+  }
+  if (cmd === "hook") {
+    const root = resolve(raw.find((a) => !a.startsWith("--")) ?? "."), file = join(root, ".git", "hooks", "pre-commit"), MARK = "# Added by lintsure hook";
+    if (!existsSync(join(root, ".git"))) { console.error(`No git repository at ${root}. Run this in the folder that has .git.`); return 2; }
+    const now = existsSync(file) ? await readFile(file, "utf8") : null;
+    if (raw.includes("--undo")) {
+      if (now?.includes(MARK)) { await rm(file); console.log("Removed the pre-commit hook."); }
+      else console.log(now === null ? "No pre-commit hook here." : "The pre-commit hook here is not Lintsure's, so it was left alone.");
+      return 0;
+    }
+    // Someone else's hook is never overwritten: say what to add to it.
+    if (now !== null && !now.includes(MARK)) { console.error("This repository already has a pre-commit hook of its own. Add this line to it:\n    lintsure scan --staged --fail-on gap"); return 2; }
+    console.log(`- pre-commit hook: ${now === null ? "create" : "update"} .git/hooks/pre-commit\n    lintsure scan --staged --fail-on gap`);
+    if (!raw.includes("--yes")) { console.log("\nNothing written yet. To apply, run: lintsure hook --yes"); return 0; }
+    await mkdir(join(root, ".git", "hooks"), { recursive: true });
+    // Pinned to this version when the command is not installed: a moving version in a hook is what the supply-chain rules warn about.
+    await writeFile(file, `#!/bin/sh\n${MARK}. Remove with: lintsure hook --undo\n# Checks only the lines being committed and stops the commit on a clear problem.\nif command -v lintsure >/dev/null 2>&1; then lintsure scan --staged --fail-on gap; else npx --yes lintsure@${RULES_VERSION} scan --staged --fail-on gap; fi\n`, { mode: 0o755 });
+    console.log("\nWritten. Each commit now checks the lines being committed.\nSkip it once with: git commit --no-verify\nRemove it with: lintsure hook --undo");
     return 0;
   }
   if (cmd === "skills") {
@@ -395,6 +426,17 @@ async function main(argv: string[]): Promise<number> {
     }
   }
 
+  // A folder that holds several projects is a workspace: one scan would mix their findings together.
+  const inside = subProjects(path);
+  if (inside.length > 1) {
+    if (viaMenu && process.stdin.isTTY && process.stdout.isTTY) {
+      console.log("");
+      step(`This folder holds ${inside.length} projects. Which one?`);
+      const pick = await choose([...inside, "All of them together", "Back"], HINT, !process.env.NO_COLOR && process.env.TERM !== "dumb");
+      if (pick === null || pick > inside.length) return 0;
+      if (pick < inside.length) { const named = rest.find((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(rest[i - 1])); return main([cmd, join(path, inside[pick]), ...rest.filter((a) => a !== named)]); }
+    } else console.error(`This folder holds ${inside.length} projects (${inside.slice(0, 5).join(", ")}${inside.length > 5 ? ", ..." : ""}), so their findings are mixed together below.\nTo check one: lintsure ${cmd} <folder>`);
+  }
   const config = await readConfig(path);
   // Checked after the config loads its rule packs, so a pack's framework id is accepted.
   const bad = wanted?.filter((f) => !ALL_FRAMEWORKS.includes(f));
@@ -403,11 +445,11 @@ async function main(argv: string[]): Promise<number> {
   if (!wanted && config.skipped.length) console.log(`Skipping, not checked yet: ${config.skipped.join(", ")}`);
   const why = wanted ? "Chosen with --framework on the command line." : config.frameworks ? "Listed in lintsure.config.yaml." : undefined;
   const source = process.env.GITHUB_ACTIONS || process.env.CI ? "ci" : "cli";
-  const base = flag("--diff");
+  const base = flag("--diff"), staged = rest.includes("--staged");
   let changed: { base: string; lines: Record<string, number[]> } | undefined;
-  if (base) {
-    try { changed = { base, lines: parseDiff(execFileSync("git", ["-c", "core.quotePath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--relative", base, "--"], { cwd: path, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 << 20 })) }; }
-    catch { console.error(`--diff: git could not compare with "${base}".\nCheck that this folder is inside a git repository and that "${base}" exists here (for example: git fetch origin main).`); return 2; }
+  if (base || staged) {
+    try { changed = { base: base ?? "your last commit (staged changes only)", lines: parseDiff(execFileSync("git", ["-c", "core.quotePath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--relative", ...(base ? [base] : ["--cached"]), "--"], { cwd: path, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 << 20 })) }; }
+    catch { if (!base) { console.error("--staged needs a git repository, and this folder is not inside one."); return 2; } console.error(`--diff: git could not compare with "${base}".\nCheck that this folder is inside a git repository and that "${base}" exists here (for example: git fetch origin main).`); return 2; }
   }
   // LINTSURE_WORKSPACE_RULES: path to a JSON file of account rules the caller already has (the plugin writes it).
   // Read only to hash into the policy fingerprint; the CLI never fetches them. A file it can't read is an error, not a silent skip.
@@ -480,7 +522,10 @@ async function main(argv: string[]): Promise<number> {
   // The first few to fix: gaps before partials, higher risk first, reached code first.
   const inCode = open.filter((f) => !isHygiene(f));
   const order = (f: (typeof open)[number]) => (f.status === "gap" ? 0 : 3) + ({ high: 0, medium: 1, low: 2 } as const)[f.severity] + (f.reach?.status === "unreachable" ? 0.5 : 0);
-  const ranked = [...inCode].sort((a, b) => order(a) - order(b)), first = ranked.slice(0, 3);
+  // Findings in test, example and data files come last, and never set the tone: they are rarely what to fix first.
+  // Agent, skill and MCP findings stay where they are: those rules read tooling folders on purpose.
+  const aside = (f: (typeof open)[number]) => !/^(agent|skill|mcp)\./.test(f.ruleId) && (isNonShipping(f.file) || /\.(json|csv)$/i.test(f.file));
+  const ranked = [...inCode].sort((a, b) => order(a) + (aside(a) ? 10 : 0) - order(b) - (aside(b) ? 10 : 0)), first = ranked.slice(0, 3);
   const fold = (t: string, pad: string) => t.replace(new RegExp(`(.{1,${width - pad.length - 2}})(\\s+|$)`, "g"), `$1\n${pad}`).trimEnd();
   const reportFile = resolve("lintsure-report.md");
   // A request a person can paste into any coding agent, connected or not: it names the finding and where the proposal is.
@@ -491,7 +536,7 @@ async function main(argv: string[]): Promise<number> {
     const gaps = inCode.filter((f) => f.status === "gap");
     const headline = !open.length ? paint("1;32", "Done! Nothing found by the current rules.")
       : !inCode.length ? paint("1;32", "Done! Nothing in the code. Only housekeeping is left.")
-      : gaps.some((f) => f.severity === "high") ? `${paint(BLUE, "Lintsure")} ${paint("1;31", "found something that needs your attention.")}`
+      : gaps.some((f) => f.severity === "high" && !aside(f)) ? `${paint(BLUE, "Lintsure")} ${paint("1;31", "found something that needs your attention.")}`
       : gaps.length ? `${paint(BLUE, "Lintsure")} ${paint("1;33", "found something interesting.")}`
       : inCode.every((f) => f.severity === "low") ? paint("1;33", inCode.length === 1 ? "A minor finding, worth a look." : "Minor findings, worth a look.")
       : paint("1;33", "Worth a look.");

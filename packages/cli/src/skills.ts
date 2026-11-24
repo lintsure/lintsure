@@ -27,7 +27,9 @@ export const skills = (): Skill[] => {
 };
 
 /** Where skills go in a project: the shared folder most agents read, and Claude Code's own when the project uses it. */
-export const skillFolders = (root: string): string[] => [".agents/skills", ...(existsSync(join(root, ".claude")) || existsSync(join(root, ".mcp.json")) ? [".claude/skills"] : [])];
+export const skillFolders = (root: string): string[] => [".agents/skills", ...(existsSync(join(root, ".claude")) || existsSync(join(root, ".mcp.json")) ? [".claude/skills"] : []),
+  // Agents that read only their own folder, when the project already uses them.
+  ...[".kiro", ".continue", ".kilocode"].filter((d) => existsSync(join(root, d))).map((d) => `${d}/skills`)];
 
 export type SkillStep = { folder: string; state: "add" | "update" | "same" };
 /** What installing would do, skill by skill. With `apply` it also does it. A file that differs from ours (an older

@@ -250,6 +250,33 @@ export const moreRules: Rule[] = [
     fix: "Name a version, for example `FROM node:22.11-slim`, and update it on purpose. Pin a digest for anything you ship to others.",
     note: "With no tag, or `latest`, every build can pull a different image, so a broken or tampered release reaches you without any change in your repo (CWE-829).",
     extensions: [""], fileName: DOCKERFILE, fileTest: dockerImageUnpinned }),
+  // `COPY . .` takes everything the build can see: .env files, the .git folder, and the folders coding agents keep their
+  // settings and notes in. A firewall rule set we studied blocks requests for those folders because they get deployed
+  // by accident this way. Reported once per Dockerfile, and only when no .dockerignore keeps .env out.
+  rule({ id: "docker.copies-everything", title: "Whole project copied into the image with nothing kept out", status: "partial", severity: "low", controls: [A02, A08],
+    fix: "Add a .dockerignore next to the Dockerfile that lists .env files, .git and agent folders such as .claude and .cursor, or copy only the folders the app needs.",
+    note: "Whatever is copied stays in the image, where anyone who can pull it can read it. Local settings, keys in .env, git history and an agent's notes about the project are not meant to ship (CWE-538).",
+    unseen: "Lintsure looked for a .dockerignore that mentions .env. It can't see what is on the build machine, or a build context that is narrower than the project.",
+    extensions: [""], fileName: DOCKERFILE, sharedFiles: /(^|\/)\.dockerignore$/,
+    fileTest: (lines, _shared, files = {}) => {
+      if (Object.values(files).some((t) => /^\s*(\*\*\/)?\.env\b/m.test(t))) return [];
+      const i = lines.findIndex((l) => /^\s*(COPY|ADD)\s+(--\S+\s+)*\.\/?\s+\S/i.test(l));
+      return i < 0 ? [] : [i + 1];
+    } }),
+  // A memory layer keeps what users tell an agent, across sessions. That is personal data with a long life, and people
+  // have the right to have it removed. A file that only ever adds to memory is where that right usually gets lost.
+  rule({ id: "privacy.memory-no-delete", title: "Agent memory that is written but never deleted", status: "partial", severity: "low", controls: [GDPR("Art. 17", "Right to erasure"), GDPR("Art. 5(1)(e)", "Storage limitation")],
+    fix: "Give users a way to see and delete what the agent remembers about them, and set how long memories are kept. Most memory libraries have a delete call per user: wire it to account deletion.",
+    note: "Memories are built from what people say, so they hold names, contacts, health and other personal details. Kept for good with no delete path, they can't be removed when a user asks or leaves (GDPR Art. 17).",
+    unseen: "Lintsure looked in this file only. A delete call may live in another file, or the memory service may expire entries by itself.",
+    extensions: CODE,
+    fileTest: (lines) => {
+      const text = lines.join("\n");
+      if (!/\b(mem0|mem0ai|zep_cloud|zep_python|langmem|letta)\b|@mem0\/|@getzep\//.test(text) || /\.(delete|delete_all|delete_memory|delete_user|forget|reset)\s*\(|\bttl\b|expir/i.test(text)) return [];
+      // The call must be on the memory object or name whose memory it is: `updated_keys.add(x)` is a set (field check).
+      const i = lines.findIndex((l) => /\b\w*(mem|zep|letta)\w*(\.\w+)*\.(add|add_memory|aadd)\s*\(|\.save_context\s*\(|\.(add|aadd)\s*\([^)]*\b(user_?id|session_?id|agent_?id)\b/i.test(l) && !/^\s*(\/\/|#)/.test(l));
+      return i < 0 ? [] : [i + 1];
+    } }),
   rule({ id: "docker.secret-in-build", title: "Secret given a value in a Dockerfile", status: "gap", severity: "high", controls: [A02, A08],
     fix: "Pass the secret when the container starts (an environment variable or a mounted secret), or use `RUN --mount=type=secret` for build steps. Rotate the value: it is in every image built so far.",
     note: "ENV and ARG values are stored in the image. Anyone who can pull the image, or read its build history, can read the secret (CWE-798).",

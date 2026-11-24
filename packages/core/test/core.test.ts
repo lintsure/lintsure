@@ -63,7 +63,9 @@ test("known findings stay put", async () => {
     "mcp.tool-runs-shell@src/mcp/server.ts:4",
     "mcp.tool-description-poisoned@src/mcp/server.ts:5",
     "mcp.server-binds-all-interfaces@src/mcp/server.ts:6",
+    "privacy.memory-no-delete@src/memory.py:7",
     "ml.unsafe-model-load@src/model.py:3",
+    "llm.retrieved-text-in-system-prompt@src/rag.ts:3",
     "config.debug-on@src/settings.py:2",
     "pii.logged@src/users.ts:5",
   ]);
@@ -661,7 +663,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "B689-93B8");
+  assert.equal(r.policy?.fingerprint, "7C90-011C");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {

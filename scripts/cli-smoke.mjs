@@ -138,6 +138,37 @@ assert.ok(execFileSync(process.execPath, [at(".agents/skills/lintsure-rules/rule
 const gone = run("skills", sk, "--undo");
 assert.ok(gone.includes(".claude/skills/lintsure-ship: changed since it was installed") && readFileSync(at(".claude/skills/lintsure-ship/SKILL.md"), "utf8") === "mine" && !existsSync(at(".agents/skills/lintsure-triage")) && !existsSync(at(".agents/skills/lintsure-rules")) && existsSync(at(".agents/skills/lintsure-check/SKILL.md.lintsure-backup")), "undo removes Lintsure's copies and keeps an edited one and the backup");
 rmSync(sk, { recursive: true, force: true });
+// A workspace (several projects, no manifest of its own) is named as one, and the scan still runs when piped.
+const ws = mkdtempSync(join(tmpdir(), "ls-ws-"));
+for (const p of ["api", "web"]) { mkdirSync(join(ws, p)); writeFileSync(join(ws, p, "package.json"), "{}\n"); }
+const mixed = spawnSync(process.execPath, [CLI, "scan", ws], { cwd: ws, encoding: "utf8" });
+assert.ok(mixed.stderr.includes("This folder holds 2 projects (api, web)") && mixed.stderr.includes("lintsure scan <folder>") && mixed.status === 0, "a workspace is named, with how to check one project");
+assert.ok(!spawnSync(process.execPath, [CLI, "scan", join(ws, "api")], { cwd: ws, encoding: "utf8" }).stderr.includes("This folder holds"), "one project inside it is a normal project");
+rmSync(ws, { recursive: true, force: true });
+// --staged lists only what is staged; the commit hook is shown first, written with --yes, and never replaces someone else's.
+const st = mkdtempSync(join(tmpdir(), "ls-staged-")), gitIn = (...a) => execFileSync("git", a, { cwd: st, stdio: "ignore" });
+const inSt = (...a) => spawnSync(process.execPath, [CLI, ...a], { cwd: st, encoding: "utf8" });
+assert.ok(inSt("scan", ".", "--staged").stderr.includes("--staged needs a git repository"), "--staged outside git says so");
+gitIn("init", "-q"); writeFileSync(join(st, "package.json"), "{}\n"); writeFileSync(join(st, "a.ts"), "export const x = 1;" + NL);
+gitIn("add", "-A"); gitIn("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+writeFileSync(join(st, "a.ts"), "export const x = 1;" + NL + 'const api = fetch("http://api.example.com/data");' + NL);
+assert.ok(!inSt("scan", ".", "--staged").stdout.includes("a.ts:2"), "an unstaged change is not listed");
+gitIn("add", "a.ts");
+const stagedOut = inSt("scan", ".", "--staged", "--fail-on", "gap");
+assert.ok(stagedOut.stdout.includes("a.ts:2") && stagedOut.stdout.includes("staged changes only"), "a staged line is listed");
+const hookFile = join(st, ".git/hooks/pre-commit");
+assert.ok(inSt("hook").stdout.includes("Nothing written yet") && !existsSync(hookFile), "the hook is shown first");
+assert.ok(inSt("hook", "--yes").stdout.includes("Each commit now checks") && readFileSync(hookFile, "utf8").includes("lintsure scan --staged --fail-on gap"));
+assert.ok(inSt("hook", "--undo").stdout.includes("Removed") && !existsSync(hookFile));
+writeFileSync(hookFile, "#!/bin/sh\necho mine\n");
+assert.ok(inSt("hook", "--yes").stderr.includes("already has a pre-commit hook") && readFileSync(hookFile, "utf8").includes("echo mine") && inSt("hook", "--undo").stdout.includes("left alone"), "someone else's hook is never touched");
+// status says whether installed skills still match the shipped ones.
+assert.ok(inSt("status").stdout.includes("No Lintsure skills in this project"));
+inSt("skills", "--yes");
+assert.match(inSt("status").stdout, /ok +Lintsure skills: 7 installed, all current/);
+writeFileSync(join(st, ".agents/skills/lintsure-check/SKILL.md"), "older");
+assert.match(inSt("status").stdout, /todo +Lintsure skills: 7 installed, 1 differ from this version/);
+rmSync(st, { recursive: true, force: true });
 const { moved, frame, frameMany } = await import(new URL("../packages/cli/dist/src/menu.js", import.meta.url).href);
 assert.deepEqual([moved("down", 0, 5), moved("down", 4, 5), moved("up", 0, 5), moved("end", 1, 5), moved("home", 3, 5), moved("x", 2, 5)], [1, 0, 4, 4, 0, 2]);
 assert.deepEqual(frame(["a", "b"], 1, false), ["    a", "  > b"]);

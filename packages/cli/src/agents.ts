@@ -5,6 +5,7 @@ import { access, chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs
 import { constants } from "node:fs";
 import { dirname, join } from "node:path";
 import { RULES_VERSION, readConfig } from "@lintsure/core";
+import { installSkills, skills } from "./skills.js";
 
 export interface Agent { id: string; name: string; file: string; key: "mcpServers" | "servers" | "mcp_servers"; marker: string }
 /** Project-level MCP config files. `marker` is the folder that shows the project uses that agent. */
@@ -115,6 +116,10 @@ export async function status(root: string): Promise<number> {
     const p = await plan(root, a);
     line(p.skip === "already set up", `${a.name}: Lintsure MCP server in ${a.file}`, p.skip && p.skip !== "already set up" ? p.skip : `Run: lintsure setup --agents ${a.id}`);
   }
+  // Skills: are the ones in this project the ones this version ships? An older or edited copy teaches the agent old habits.
+  const steps = await installSkills(root, skills(), false), here = steps.filter((s) => s.state !== "add"), stale = here.filter((s) => s.state === "update");
+  if (!here.length) line(null, "No Lintsure skills in this project: add them with lintsure skills");
+  else line(!stale.length, `Lintsure skills: ${here.length} installed${stale.length ? `, ${stale.length} differ from this version (${stale.map((s) => s.folder).join(", ")})` : ", all current"}`, "Run: lintsure skills --yes (your copies are kept as backups)");
   const mcp = await mcpRoundTrip();
   if (!mcp) line(null, "MCP server not installed next to this CLI: agents start it with npx, which downloads it on first use");
   else line(!mcp.problems.length, mcp.problems.length ? `MCP server: ${mcp.problems.join("; ")}` : `MCP server ${mcp.version} answers: ${mcp.tools} tools, test call ok`);

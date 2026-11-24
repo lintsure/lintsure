@@ -53,6 +53,15 @@ export const standardsRules: Rule[] = [
       // Not user text in the instructions: `system: undefined` next to a prompt, and a helper that picks a fixed system
       // message from its arguments, getSystemMessage(input.locale) (0.3.14 review: 3 of 3 shown findings).
       && !/\bsystem\s*:\s*(undefined|null)\b/.test(l) && USER_TEXT.test(l.replace(/\bget\w*System\w*\([^()]*\)/g, "fixed")) }),
+  // The same risk from the other side: a page, a document or a stored memory can carry instructions too, and text placed
+  // in the system prompt is obeyed as the app's own (indirect prompt injection). Common in retrieval apps.
+  rule({ id: "llm.retrieved-text-in-system-prompt", title: "Retrieved or stored text placed inside the AI's system instructions", status: "partial", severity: "medium", controls: [LLM01],
+    fix: "Keep the system prompt fixed. Pass retrieved documents, search results and memories as a separate message, marked as reference material, and tell the model not to follow instructions found in them.",
+    note: "A web page, an uploaded file or a saved memory can contain a line written for the model. In the system prompt it carries the app's authority, so whoever wrote that text can steer the AI (OWASP LLM01). Marked Partial: the source may be one only your team writes.",
+    unseen: "Lintsure can't see where the text comes from. Content your own team writes is a smaller risk than pages, uploads or anything users can add to.",
+    extensions: CODE,
+    test: (l) => /\b(role\s*:\s*["']system["']|system(Prompt|_prompt|Message|_message|Instruction)?\s*[:=]|["']system["']\s*,)/.test(l)
+      && /\$\{[^}]*\b(context|docs|documents|chunks|retrieved\w*|searchResults|search_results|memories|pageContent|page_content|webpage|scraped\w*|fileContents?)\b[^}]*\}|\{(context|documents|docs|chunks|retrieved_\w+|search_results|memories)\}/.test(l) }),
   rule({ id: "llm.output-to-sink", title: "AI output run as code, a command, a query or page HTML", status: "gap", severity: "high", controls: [LLM10],
     fix: "Treat model output like input from a stranger: validate it against what you expect, escape it for HTML, and never run it as code, a shell command or SQL.",
     note: "A model's reply can be steered by anyone who can influence its input. Passing it straight to eval, a shell, a database query or innerHTML lets them run code or change data.",

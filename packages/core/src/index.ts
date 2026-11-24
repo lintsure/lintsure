@@ -204,12 +204,18 @@ const SECRET_RULES = new Set(["secret.in-source"]); // not config.default-secret
 // Rules that read agent tooling folders on purpose: an agent hook in .claude/ runs on real machines.
 // Settings that sit in the branch that only runs outside production (`if IS_PRODUCTION: ... else:`, `if (!isProduction) {`)
 // are dev settings (0.3.14 review: 2 of 2). Only for rules about a setting, where the branch decides what ships.
-const DEV_BRANCH_RULES = new Set(["config.allowed-hosts-any", "cors.any-origin"]);
+// pii.logged too: a sign-in code or an email printed only when a dev flag is set never reaches production logs
+// (workspace scan 2026-11-23: `if (env.APP_DEV === "1") console.log(...)`).
+const DEV_BRANCH_RULES = new Set(["config.allowed-hosts-any", "cors.any-origin", "pii.logged"]);
+// A condition that is only true in development: isDev, DEBUG, NODE_ENV === "development", or a flag such as APP_DEV === "1".
+const DEV_CONDITION = /(?<!!\s*)(?<!\bnot\s)\b(is_?dev\w*|DEBUG)\b|===?\s*["']development["']|\b\w*_DEV(_MODE)?\s*===?\s*["']?(1|true)\b/;
 /** True when line i sits inside a branch taken only outside production. Reads indentation, up to 30 lines back. Pure. */
 export function inDevBranch(lines: string[], i: number): boolean {
   const indent = (l: string) => l.search(/\S/);
   const opens = /^\s*(\}\s*else\s+)?(if|elif)\b/;
   const negated = (l: string) => /!\s*[\w.]*prod|\bnot\s+[\w.]*prod|!==?\s*["']production["']/i.test(l);
+  // The whole branch on one line: `if (env.APP_DEV === "1") { console.log(...) }`.
+  if (opens.test(lines[i]) && DEV_CONDITION.test(lines[i])) return true;
   let level = indent(lines[i]);
   for (let k = i - 1; k >= Math.max(0, i - 30) && level > 0; k--) {
     const at = indent(lines[k]);
@@ -218,7 +224,7 @@ export function inDevBranch(lines: string[], i: number): boolean {
     if (/^\s*(\}\s*)?else\s*[:{]?\s*$/.test(lines[k])) { // a plain else: its `if` is the nearest opener above at the same indent
       const open = lines.slice(Math.max(0, k - 30), k).reverse().find((x) => indent(x) === at && opens.test(x));
       if (open && /\b(is_?prod(uction)?|production)\b/i.test(open) && !negated(open)) return true;
-    } else if (opens.test(lines[k]) && (negated(lines[k]) || /(?<!!\s*)(?<!\bnot\s)\b(is_?dev\w*|DEBUG)\b|===?\s*["']development["']/.test(lines[k]))) return true;
+    } else if (opens.test(lines[k]) && (negated(lines[k]) || DEV_CONDITION.test(lines[k]))) return true;
   }
   return false;
 }
@@ -797,7 +803,7 @@ function recordLines(r: Report): string[] {
 // output lists them after the findings in the code. Presentation only: the report data, SARIF and exit code don't change.
 // The two Dockerfile hardening basics joined the group after their first field scan: 138 findings in 304 projects, true
 // but routine, and they would bury findings in the code.
-const HYGIENE_RULES = new Set(["ci.action-unpinned", "repo.no-sbom", "repo.no-security-policy", "repo.no-dependency-updates", "docker.runs-as-root", "docker.image-unpinned"]);
+const HYGIENE_RULES = new Set(["ci.action-unpinned", "repo.no-sbom", "repo.no-security-policy", "repo.no-dependency-updates", "docker.runs-as-root", "docker.image-unpinned", "docker.copies-everything"]);
 export const isHygiene = (f: { ruleId: string }) => HYGIENE_RULES.has(f.ruleId);
 
 export function toMarkdown(r: Report): string {

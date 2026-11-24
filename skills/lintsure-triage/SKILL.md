@@ -19,6 +19,19 @@ Every rule has two lists: what must hold for a finding to be real, and what make
 
 They guide you; they don't replace reading the code. If the code shows a reason the lists don't mention, use it and say so.
 
+## How far to trust a value
+
+Most findings turn on where a value comes from. Sort it into one of four levels before you judge the finding.
+
+| Level | Where it comes from | Trust |
+|---|---|---|
+| 1 | The user or the outside world: a request, a form, a header, an upload, a model's answer, another company's API | None. Assume an attacker wrote it. |
+| 2 | Storage: a database row, a cache, a saved file | Only as much as what wrote it. A stored value that started as user input is still level 1. |
+| 3 | Your own code: constants, fixed lists, values computed from them | Trusted. |
+| 4 | The system: environment variables, framework constants, paths the app sets itself | Trusted. |
+
+A query, a command or a page built from a level 3 or 4 value is not a problem. The same line built from a level 1 value, with no check on the way, is.
+
 ## For each finding, find four things
 
 - **Source:** where the value comes from. A request body, URL, form, file upload, model output or third-party API is untrusted. A constant, your own config, or a value your code built from constants is not.

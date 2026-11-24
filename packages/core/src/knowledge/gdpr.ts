@@ -36,7 +36,7 @@ export const gdpr: FrameworkKnowledge = {
     { ref: "Art. 12–15", title: "Transparency and access", inCode: "no",
       plain: "Tell people clearly what you collect and why, and give them a copy of their data when they ask.",
       evidence: "Your privacy notice and how access requests are handled." },
-    { ref: "Art. 17", title: "Right to erasure", inCode: "partly",
+    { ref: "Art. 17", title: "Right to erasure", inCode: "partly", rules: ["privacy.memory-no-delete"],
       plain: "When someone asks, and no exception applies, delete their data everywhere you hold it, including backups on rotation and third-party tools.",
       evidence: "The deletion path and where it reaches." },
     { ref: "Art. 22", title: "Automated decisions", inCode: "partly", rules: ["ai.automated-decision"],

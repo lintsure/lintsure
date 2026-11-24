@@ -8,15 +8,24 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **Stored lines in JSON data files are not read as running code.** A file of saved findings, review notes or samples keeps other people's lines under keys such as `text`, `context`, `excerpt`, `fix` and `note`. Checks no longer fire on those lines. A key found there is still counted and is shown with `--all`, like a key in a test file.
 - **Code shown as text is not counted as code.** A log call inside a quoted string, on a page between two tags, or in a template literal with nothing filled in is text: a line drawn into an image, a slide, a code sample. A Python f-string and a template literal with `${...}` still count.
 - A JSON file that quotes code registering an MCP tool is read as data: only its `description` values are checked.
-- On our own workspace these took a scan from 177 findings in the code to 69, most of the rest being test cases planted on purpose.
+- **A personal-data log line inside a development-only branch is not reported**, including a flag such as `APP_DEV === "1"` on the same line.
+- **"Start here" and the headline leave test, example and data files aside.** They are still listed; they no longer lead.
+- On our own workspace these took a scan from 177 findings in the code to 68, most of the rest being test cases planted on purpose.
 
 ### New
+- **Three more checks:** retrieved or stored text placed in an AI's system instructions (`llm.retrieved-text-in-system-prompt`), an agent memory that is written but never deleted (`privacy.memory-no-delete`), and a Dockerfile that copies the whole project with no `.dockerignore` keeping `.env` out (`docker.copies-everything`, listed with repo hygiene).
+- **More AI calls are recognised:** LiteLLM, Ollama, the Python Gemini SDK, Mistral, Bedrock, and a generator component run on its own. The AI logging and limit checks now see them.
+- **`lintsure scan --staged`** lists only findings on lines staged for the next commit, and **`lintsure hook`** adds a git pre-commit hook that runs it. The hook is shown first, written with `--yes`, removed with `--undo`, and never replaces a hook of your own.
+- **A workspace is named as one.** A folder that holds several projects and is not one itself gets a notice, and from the menu a list to pick from, so findings from different projects are not mixed without warning.
+- **`lintsure status` checks the skills.** It says how many are installed and whether any differ from the ones this version ships.
+- **Skills go into more agent folders:** `.kiro/skills`, `.continue/skills` and `.kilocode/skills` when the project uses those agents.
+- **The triage skill sorts where a value comes from** into four trust levels, and **the ship skill lists what a scan cannot see**: one customer reaching another's data, rules that differ by route, too much in a reply, steps that can be skipped, two requests at once.
 - **Every rule now says what makes a finding real.** Two lists per rule: what must hold before a finding is called real, and what makes it not a problem. Sixteen rules have their own lists, written from findings reviewed against real code; the rest use the lists for their kind. The `explain_rule` tool returns them, `docs/rules.md` carries them, and the triage and fix skills work from them.
 - **Evals for the seven skills.** Eleven test cases in `evals/` check that a skill loads when it should, stays out of the way when it shouldn't, tells a real finding from a look-alike, and shows a change before it applies one. They run with `claude plugin eval`; a free check of the cases themselves runs with the tests.
 - **A seventh framework: the OWASP Agentic Skills Top 10.** It lists ten risks in the skills, instruction files and tool servers that coding agents load. The list is version 1.0 from an OWASP incubator project and was in public review when we mapped it. Seven of its ten risks have checks; the other three (scanning, governance, reuse across platforms) can't be seen in code and are listed as such. Use it with `--framework owasp-ast`.
 - **An eighth framework: the OWASP API Security Top 10 (2023).** Twenty-six existing checks now map to it, covering seven of its ten risks. Three have no check, because they can't be read from code: abuse of business flows, old API versions left running, and how far a third-party API's answers are trusted beyond its transport. Use it with `--framework owasp-api`.
 - **An admin endpoint with no access check in sight** (`authz.admin-route-no-check`). For route files that are their own endpoint (Next.js, Nuxt, SvelteKit) with `admin` in the path: Partial when the file checks no role, session or token, and the project's middleware has no check either or lets API paths through.
-- **Four more new checks** (111 rules in all):
+- **Four more new checks** (114 rules in all, with the three below):
   - a skill that tells the agent to follow a page on the internet (`skill.fetches-remote-instructions`)
   - a skill that changes the agent's own instructions or settings, such as `AGENTS.md` or `.claude/settings.json` (`skill.writes-agent-memory`)
   - a skill that is allowed any shell command (`skill.unrestricted-shell`)

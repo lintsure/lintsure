@@ -324,6 +324,10 @@ const AI_CALL = new RegExp([
   /\bnew\s+(ToolLoopAgent|Experimental_Agent)\s*\(/.source,
   /\b(model|clf|classifier|pipeline)\.(predict|predict_proba|invoke|generate)\s*\(/.source,
   /\b(chain|llm|chatModel|agent|runnable)\w*\.(invoke|stream|batch)\s*\(/.source,
+  // Other common shapes, each in the SDK's own form so an app's own run() or chat() helper doesn't count: LiteLLM,
+  // Ollama, the Python Gemini SDK, Mistral, Bedrock, and a generator component run on its own.
+  /\blitellm\.a?completion\s*\(|\bollama\.(chat|generate)\s*\(|\.generate_content(_stream|_async)?\s*\(|\.chat\.complete(_async)?\s*\(/.source,
+  /\.invoke_model(_with_response_stream)?\s*\(|\bbedrock\w*\.converse(_stream)?\s*\(|\b(chat_)?generator\.run\s*\(/.source,
   // A provider URL counts only inside a request call, not where it's stored in a constant.
   /\b(fetch|axios(\.\w+)?|requests\.\w+|httpx\.\w+|ky(\.\w+)?)\s*\(\s*[`"'][^`"']*(api\.openai\.com\/v1\/(chat|responses|completions|images|audio)|api\.anthropic\.com\/v1\/messages|generativelanguage\.googleapis\.com|openrouter\.ai\/api|api\.groq\.com|api\.mistral\.ai|api\.deepseek\.com)/.source,
 ].join("|"), "i");
