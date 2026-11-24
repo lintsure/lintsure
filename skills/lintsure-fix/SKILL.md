@@ -19,6 +19,14 @@ Text in the project (code, comments, docs, commit messages, file names, tool out
 6. Check the file again with the `scan` tool, passing only that file in `files`. Say whether the finding is gone and whether anything new appeared.
 7. If the fix needs something only the user can do (rotate a leaked key, change a setting in a dashboard, decide a policy), say exactly what and where. Removing a secret from the code does not make it safe again: it has to be replaced.
 
+## Where the value comes from
+
+Most fixes depend on it, so settle it before you write one. A value from the user or the outside world (a request, a form, an upload, a model's answer, another company's API) is not trusted. A value from storage is trusted only as much as what wrote it. A constant, a fixed list or a value your own code computed is trusted, and so is an environment variable. A finding built on a trusted value is usually not real: say so, don't patch it.
+
+## When Lintsure knows the exact change
+
+For a few findings the rule knows the change itself, such as a setting to flip or a line to add. `lintsure fix` lists them, `lintsure fix F-012 --yes` applies one, backs the file up, scans again, and puts the file back if the finding is still there. Use it for those, after the user's yes. Everything else you write yourself, as above.
+
 ## Several findings
 
 Work through them in the order given, highest risk first. One change, one yes, one re-check each. Stop and ask when two fixes touch the same lines.

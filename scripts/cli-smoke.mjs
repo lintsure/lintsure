@@ -138,6 +138,19 @@ assert.ok(execFileSync(process.execPath, [at(".agents/skills/lintsure-rules/rule
 const gone = run("skills", sk, "--undo");
 assert.ok(gone.includes(".claude/skills/lintsure-ship: changed since it was installed") && readFileSync(at(".claude/skills/lintsure-ship/SKILL.md"), "utf8") === "mine" && !existsSync(at(".agents/skills/lintsure-triage")) && !existsSync(at(".agents/skills/lintsure-rules")) && existsSync(at(".agents/skills/lintsure-check/SKILL.md.lintsure-backup")), "undo removes Lintsure's copies and keeps an edited one and the backup");
 rmSync(sk, { recursive: true, force: true });
+// lintsure fix: shows the exact change first, writes it with --yes, keeps the original, and scans again.
+const fx = mkdtempSync(join(tmpdir(), "ls-fix-")), fxFile = join(fx, "src/agent.ts");
+mkdirSync(join(fx, "src")); writeFileSync(join(fx, "package.json"), "{}\n");
+const unsafe = 'import https from "node:https";' + NL + "export const agent = new https.Agent({ rejectUnauthorized: false });" + NL;
+writeFileSync(fxFile, unsafe);
+const inFx = (...a) => spawnSync(process.execPath, [CLI, ...a], { cwd: fx, encoding: "utf8" });
+const preview = inFx("fix", "--all");
+assert.ok(preview.stdout.includes("- export const agent = new https.Agent({ rejectUnauthorized: false });") && preview.stdout.includes("Nothing changed yet") && readFileSync(fxFile, "utf8") === unsafe, "fix shows the change and writes nothing");
+assert.ok(inFx("fix", "F-999").stderr.includes("No finding F-999 in this scan"));
+const applied = inFx("fix", "--all", "--yes");
+assert.ok(applied.stdout.includes("fixed and checked again") && !readFileSync(fxFile, "utf8").includes("rejectUnauthorized: false") && readFileSync(fxFile + ".lintsure-backup", "utf8") === unsafe, "fix --yes changes the line, keeps the original and confirms with a second scan");
+assert.ok(inFx("fix", "--all").stdout.includes("No finding here has an exact change"), "nothing left to apply afterwards");
+rmSync(fx, { recursive: true, force: true });
 // A workspace (several projects, no manifest of its own) is named as one, and the scan still runs when piped.
 const ws = mkdtempSync(join(tmpdir(), "ls-ws-"));
 for (const p of ["api", "web"]) { mkdirSync(join(ws, p)); writeFileSync(join(ws, p, "package.json"), "{}\n"); }

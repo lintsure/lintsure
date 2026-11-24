@@ -2,9 +2,9 @@
 // npx lintsure scan [path] [options]      npx lintsure baseline [path]
 // Writes reports into the current folder. Never sends anything over the network.
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { constants, existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { AGENTS, CONNECT_NOTE, MANUAL, detected, status, pick, plan, setup, undo } from "./agents.js";
@@ -125,7 +125,7 @@ async function offer(rows: { text: string; run: string[] | (() => Promise<void>)
     return main(run);
   }
 }
-const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "hook", "status", "export"];
+const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "hook", "fix", "status", "export"];
 /** The command someone most likely meant: the same word without dashes, or one within two typing slips. Pure. */
 function nearest(word: string): string | undefined {
   const slips = (a: string, b: string) => { let row = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -147,6 +147,10 @@ lintsure skills [path]   Add Lintsure's skills to this project: short instructio
                          tell your agent when to check code and how to handle findings
                          (at a terminal you pick which; --yes adds all; --only a,b;
                          --undo takes them out)
+lintsure fix [path] [F-001 ...]  Apply the change for findings whose rule knows the exact one
+                         (shows it first; --all includes held-back findings; --yes writes it,
+                         backs the file up, scans again,
+                         and puts the file back if the finding is still there)
 lintsure hook [path]     Check the lines you commit: adds a git pre-commit hook that runs
                          lintsure scan --staged --fail-on gap (shows it first; --yes writes it;
                          --undo removes it; an existing hook of your own is left alone)
@@ -282,6 +286,65 @@ async function main(argv: string[]): Promise<number> {
     await writeFile("lintsure.otlp.json", JSON.stringify(toOtlp(rows, RULES_VERSION), null, 2));
     console.log(`Wrote lintsure.otlp.json: ${rows.length} events. Nothing was sent; load the file into your collector or tool (OTLP/JSON).`);
     return 0;
+  }
+  // lintsure fix: applies a change only where the rule knows the exact one (a setting flipped, a line added). Everything
+  // else needs judgement and stays a proposal. Shown first; --yes writes; each file is backed up; a change that does not
+  // make its finding go away is put back.
+  if (cmd === "fix") {
+    const bad = raw.find((a) => a.startsWith("--") && a !== "--yes" && a !== "--all");
+    if (bad) { console.error(`Unknown option: ${bad}. Use: lintsure fix [folder] [F-001 ...] [--all] [--yes]`); return 2; }
+    const words = raw.filter((a) => !a.startsWith("--")), ids = words.filter((a) => /^F-\d+$/i.test(a)).map((a) => a.toUpperCase());
+    const root = resolve(words.find((a) => !/^F-\d+$/i.test(a)) ?? ".");
+    if (!existsSync(root)) { console.error(`No folder at ${root}.`); return 2; }
+    const config = await readConfig(root);
+    if (config.problems.length) { console.error("Problems in lintsure.config.yaml (fix them first):"); config.problems.forEach((p) => console.error(`  ${p}`)); return 2; }
+    const frameworks = config.frameworks ?? ALL_FRAMEWORKS;
+    // The same list the person saw: --all here when the scan was run with --all, so the finding numbers match.
+    const opts = { source: "cli", all: raw.includes("--all") || undefined } as const;
+    const before = await scan(root, frameworks, opts);
+    const unknown = ids.filter((id) => !before.findings.some((f) => f.id === id));
+    if (unknown.length) { console.error(`No finding ${unknown.join(", ")} in this scan. Numbers change when the code does: run lintsure scan again.`); return 2; }
+    const wanted = before.findings.filter((f) => isOpen(f) && (!ids.length || ids.includes(f.id)));
+    const exact = wanted.filter((f) => f.patch), rest = wanted.length - exact.length;
+    for (const f of wanted.filter((x) => !x.patch && ids.includes(x.id))) console.log(`${f.id} has no exact change: its fix needs judgement. The proposal is in the report, or hand it to your coding agent.`);
+    if (!exact.length) { console.log(`No finding here has an exact change Lintsure can apply.${rest ? ` ${rest} need a person or a coding agent: lintsure scan` : ""}`); return 0; }
+    for (const f of exact) console.log(`${f.id}  ${f.title}\n    ${f.file}:${f.patch!.line}\n${f.patch!.old != null ? `    - ${f.patch!.old.trim()}\n` : ""}${f.patch!.text.replace(/\n$/, "").split("\n").map((t) => `    + ${t.trim()}`).join("\n")}\n`);
+    if (!raw.includes("--yes")) {
+      console.log(`Nothing changed yet. To apply ${exact.length === 1 ? "it" : `these ${exact.length}`}, run: lintsure fix${ids.length ? " " + ids.join(" ") : ""}${raw.includes("--all") ? " --all" : ""} --yes\nEach file is backed up first (<file>.lintsure-backup).${rest ? `\n${rest} other finding${rest === 1 ? " needs" : "s need"} a person or a coding agent.` : ""}`);
+      if (viaMenu && process.stdin.isTTY && process.stdout.isTTY) { console.log(""); const ran = await offer([{ text: `${"Apply these changes".padEnd(54)}lintsure fix --yes`, run: ["fix", ...raw, "--yes"] }], !process.env.NO_COLOR && process.env.TERM !== "dumb"); if (ran !== undefined) return ran; }
+      return 0;
+    }
+    const byFile = new Map<string, typeof exact>();
+    for (const f of exact) byFile.set(f.file, [...(byFile.get(f.file) ?? []), f]);
+    const originals = new Map<string, string>(), skipped: string[] = [];
+    for (const [file, list] of byFile) {
+      const path = join(root, file), text = await readFile(path, "utf8"), nl = text.includes("\r\n") ? "\r\n" : "\n", lines = text.split(/\r?\n/);
+      // From the bottom up, so an inserted line does not move the ones still to change.
+      for (const f of [...list].sort((a, b) => b.patch!.line - a.patch!.line)) {
+        const p = f.patch!, at = p.line - 1, add = p.text.replace(/\n$/, "").split("\n");
+        if (p.old == null) lines.splice(at, 0, ...add);
+        else if (lines[at] === p.old) lines.splice(at, 1, ...add);
+        else skipped.push(`${f.id}: ${file}:${p.line} changed since the scan, so it was left alone`);
+      }
+      const next = lines.join(nl);
+      if (next === text) continue;
+      // The first backup is the user's original: never overwritten by a later run.
+      try { await copyFile(path, path + ".lintsure-backup", constants.COPYFILE_EXCL); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "EEXIST") { skipped.push(`${file}: could not be backed up, so it was left alone`); continue; } }
+      originals.set(file, text);
+      await writeFile(path, next);
+    }
+    // Proof: scan again. A file whose findings from these rules did not go down is put back as it was.
+    const after = await scan(root, frameworks, opts);
+    const count = (r: typeof before, ruleId: string, file: string) => r.findings.filter((f) => f.ruleId === ruleId && f.file === file).length;
+    let fixed = 0;
+    for (const [file, text] of originals) {
+      const mine = byFile.get(file)!, worse = mine.some((f) => count(after, f.ruleId, file) >= count(before, f.ruleId, file));
+      if (worse) { await writeFile(join(root, file), text); skipped.push(`${file}: the change did not clear its finding, so the file was put back`); }
+      else { fixed += mine.length; console.log(`fixed  ${file}  (${mine.map((f) => f.id).join(", ")}; your original is in ${file}.lintsure-backup)`); }
+    }
+    skipped.forEach((s) => console.log(`left   ${s}`));
+    console.log(`\n${fixed ? `Done! ${fixed} finding${fixed === 1 ? "" : "s"} fixed and checked again.` : "Nothing was changed."} Look at the change before you commit it: git diff`);
+    return skipped.length && !fixed ? 1 : 0;
   }
   if (cmd === "hook") {
     const root = resolve(raw.find((a) => !a.startsWith("--")) ?? "."), file = join(root, ".git", "hooks", "pre-commit"), MARK = "# Added by lintsure hook";
@@ -566,6 +629,7 @@ async function main(argv: string[]): Promise<number> {
     ...(report.held ? [{ label: `Also show the ${report.held} held-back finding${report.held === 1 ? "" : "s"}`, run: ["scan", ...here, "--all"] }] : []),
     ...(open.length && !report.baseline ? [{ label: "Remember these, so later scans show only what is new", run: ["baseline", ...here] }] : []),
     ...(rest.includes("--report") ? [] : [{ label: "Write a printable assessment", run: ["scan", ...here, "--report"] }]),
+    ...(open.some((f) => f.patch) ? [{ label: `Apply the ${open.filter((f) => f.patch).length === 1 ? "one exact fix" : `${open.filter((f) => f.patch).length} exact fixes`} Lintsure knows`, run: ["fix", ...here, ...(rest.includes("--all") ? ["--all"] : [])] }] : []),
     { label: "Connect your coding agent, then ask it to fix one", run: ["setup", ...here] },
   ];
   // Menu only: the full proposal for one finding, and a request to paste into a coding agent. Lintsure never edits code.

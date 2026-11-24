@@ -62,7 +62,9 @@ export const writesMemory = (l: string) => WRITES_MEMORY.test(l) && !FORBIDDEN.t
 const OPEN_SHELL = /^\s*allowed[-_]tools\s*:.*(?<![\w-])Bash(?!\s*\()(?![\w-])|^\s*allowed[-_]tools\s*:\s*["']?\*["']?\s*$|^\s*shell\s*:\s*true\b/i;
 // A server told to listen on every network interface.
 // A list of allowed values in a type ("127.0.0.1" | "0.0.0.0") names the address without listening on it.
-const ALL_INTERFACES = { test: (l: string) => /["'\x60]0\.0\.0\.0["'\x60]/.test(l) && !/["'\x60]\s*\|\s*["'\x60]/.test(l) } as RegExp;
+// The address must be what the server listens on: a listen call, or a host or bind setting. In a list of address
+// ranges to refuse it is the opposite of a risk (check on the reference MCP servers: 1 of 1 was such a list).
+const ALL_INTERFACES = { test: (l: string) => /(\blisten\s*\(|\bhost(name)?\s*[:=]|\bbind\w*\s*[:=(]|--host\b)[^\n]*["'\x60]0\.0\.0\.0["'\x60]/i.test(l) && !/["'\x60]\s*\|\s*["'\x60]/.test(l) } as RegExp;
 
 /** MCP config: a server run from a version that can change after you approved it (Partial), or reached over plain HTTP (Gap). Pure.
  *  shortcut: reads npx-style args only ("-y", "pkg"); add uvx and docker image tags when a field test shows them. */
