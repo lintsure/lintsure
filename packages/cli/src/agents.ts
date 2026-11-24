@@ -71,7 +71,7 @@ export async function pick(root: string, names?: string[]): Promise<Agent[] | st
   return found.length ? found : [AGENTS[0]];
 }
 
-export async function setup(root: string, agents: Agent[], apply: boolean): Promise<number> {
+export async function setup(root: string, agents: Agent[], apply: boolean, scope = ""): Promise<number> {
   const plans = await Promise.all(agents.map((a) => plan(root, a)));
   for (const p of plans) {
     if (p.skip) { console.log(`- ${p.agent.name}: ${p.skip}`); continue; }
@@ -79,7 +79,7 @@ export async function setup(root: string, agents: Agent[], apply: boolean): Prom
   }
   const todo = plans.filter((p) => p.text);
   if (!todo.length) { console.log("\nNothing to write. Check the connection with: lintsure status"); return 0; }
-  if (!apply) { console.log("\nNothing written yet. To apply, run: lintsure setup --yes\nExisting files are backed up first (<file>.lintsure-backup)."); return 0; }
+  if (!apply) { console.log(`\nNothing written yet. To apply, run: lintsure setup${scope} --yes\nExisting files are backed up first (<file>.lintsure-backup).`); return 0; }
   for (const p of todo) {
     await mkdir(dirname(p.path), { recursive: true });
     // The first backup is the user's original: never overwrite it on a later run. Owner-only, it may hold tokens.
@@ -89,10 +89,10 @@ export async function setup(root: string, agents: Agent[], apply: boolean): Prom
     }
     await writeFile(p.path, p.text!);
   }
-  console.log("Undo any time with: lintsure setup --undo");
+  console.log(`Undo any time with: lintsure setup${scope} --undo`);
   console.log(`\nWritten. Restart the agent so it starts the Lintsure MCP server. Run "lintsure status" to check.`);
   console.log("Then ask the agent, in its own chat: Check this project with Lintsure.");
-  if (agents.some((a) => a.id === "codex")) console.log("Codex reads a project's .codex/config.toml only for projects you have marked as trusted.");
+  if (!scope && agents.some((a) => a.id === "codex")) console.log("Codex reads a project's .codex/config.toml only for projects you have marked as trusted.");
   console.log("For guards that run while the agent works, add the plugin: lintsure plugin");
   return 0;
 }

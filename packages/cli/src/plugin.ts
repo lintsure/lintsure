@@ -69,7 +69,7 @@ export async function planGuards(root: string, agents: GuardAgent[], dir: string
   return steps;
 }
 
-const claudeCli = (args: string[]) => execFileSync("claude", args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: process.platform === "win32" });
+export const claudeCli = (args: string[]) => execFileSync("claude", args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: process.platform === "win32" });
 
 /** Carries out a plan. Returns one line per agent on what happened. */
 export async function installGuards(root: string, steps: GuardStep[]): Promise<string[]> {

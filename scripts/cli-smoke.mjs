@@ -237,6 +237,34 @@ rmSync(st, { recursive: true, force: true });
   assert.ok(!existsSync(join(proj, ".cursor/hooks.json")) && !("hooks" in JSON.parse(readFileSync(join(proj, ".gemini/settings.json"), "utf8"))) && !existsSync(join(proj, ".lintsure/guards.json")), "--undo takes out exactly what was written");
   assert.equal(plug("--agents", "nope").status, 2);
 }
+// Run from a folder that isn't a project, with no folder named: skills and plugin stop and say where to go, and
+// setup asks which of the two ways the user wants. A home folder stands in for the user's own, so nothing real is touched.
+{
+  const empty = mkdtempSync(join(tmpdir(), "ls-nowhere-")), home = mkdtempSync(join(tmpdir(), "ls-home-"));
+  const at = (cwd, ...a) => spawnSync(process.execPath, [CLI, ...a], { cwd, encoding: "utf8", env: { ...process.env, HOME: home, USERPROFILE: home, NO_COLOR: "1" } });
+  for (const c of ["skills", "plugin"]) {
+    const r = at(empty, c, "--yes");
+    assert.ok(r.status === 2 && r.stderr.includes("No project found in") && r.stderr.includes(`lintsure ${c} --here`), `${c} stops outside a project`);
+  }
+  assert.ok(!existsSync(join(empty, ".agents")) && at(empty, "skills", "--here", "--yes").status === 0 && existsSync(join(empty, ".agents/skills/lintsure-check")), "--here uses the folder anyway");
+  const ask = at(empty, "setup", "--yes");
+  assert.ok(ask.status === 0 && ask.stdout.includes("No project found in") && ask.stdout.includes("lintsure setup --everywhere") && ask.stdout.includes("ask them which of the two"), "outside a project, setup asks and writes nothing");
+  assert.ok(!existsSync(join(empty, ".mcp.json")));
+  mkdirSync(join(empty, "proj/.git"), { recursive: true });
+  const inProj = at(join(empty, "proj"), "setup").stdout;
+  assert.ok(inProj.includes("2. Only this project (proj)") && inProj.includes("lintsure setup --here") && !inProj.includes("No project found"), "inside a project, plain setup still asks which way");
+  assert.ok(at(join(empty, "proj"), "setup", "--here").stdout.includes("Nothing written yet. To apply, run: lintsure setup --yes"));
+  // Every project: the entry goes into the user's own agent settings, and --undo takes it out.
+  assert.equal(at(empty, "setup", "--everywhere").status, 2, "no agent in the home folder: say so");
+  mkdirSync(join(home, ".cursor")); mkdirSync(join(home, ".codex"));
+  writeFileSync(join(home, ".codex/config.toml"), 'model = "x"\n');
+  assert.ok(at(empty, "setup", "--everywhere").stdout.includes("To apply, run: lintsure setup --everywhere --yes") && !existsSync(join(home, ".cursor/mcp.json")));
+  at(empty, "setup", "--everywhere", "--yes");
+  assert.ok(JSON.parse(readFileSync(join(home, ".cursor/mcp.json"), "utf8")).mcpServers.lintsure && /model = "x"\n\n\[mcp_servers\.lintsure\]/.test(readFileSync(join(home, ".codex/config.toml"), "utf8")));
+  at(empty, "setup", "--everywhere", "--undo");
+  assert.ok(!existsSync(join(home, ".cursor/mcp.json")) && !readFileSync(join(home, ".codex/config.toml"), "utf8").includes("lintsure"), "--everywhere --undo takes it out");
+  rmSync(empty, { recursive: true, force: true }); rmSync(home, { recursive: true, force: true });
+}
 const { moved, frame, frameMany } = await import(new URL("../packages/cli/dist/src/menu.js", import.meta.url).href);
 assert.deepEqual([moved("down", 0, 5), moved("down", 4, 5), moved("up", 0, 5), moved("end", 1, 5), moved("home", 3, 5), moved("x", 2, 5)], [1, 0, 4, 4, 0, 2]);
 assert.deepEqual(frame(["a", "b"], 1, false), ["    a", "  > b"]);

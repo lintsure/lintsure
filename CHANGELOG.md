@@ -8,6 +8,10 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **`lintsure plugin` installs the guards for your agent.** For Claude Code it runs the full plugin install. For Cursor, Codex and Gemini CLI it downloads the plugin once and writes a hooks file into the project that points at it. It shows the plan first, never changes a hooks file you already have, and `--undo` takes out what it wrote. The guards for Cursor, Codex and Gemini CLI are new, so tell us if one misbehaves.
 - The start menu has a row for it, under the skills row.
 
+### Setup that says where it is working
+- **`lintsure setup` asks which you want: every project on this machine, or only this one.** `--everywhere` writes to your own agent settings (Cursor, Gemini CLI, Codex, and Claude Code through its own command). `--here` keeps it to the folder you are in. An agent running the command for you is told to put the choice to you.
+- **`setup`, `skills` and `plugin` stop when the folder is not a project.** An agent that starts in an empty or temporary folder used to connect Lintsure to nothing. Now the command names the folder, says how to point it at your project, and writes nothing.
+
 ### Fewer false alarms
 - **Stored lines in JSON data files are not read as running code.** A file of saved findings, review notes or samples keeps other people's lines under keys such as `text`, `context`, `excerpt`, `fix` and `note`. Checks no longer fire on those lines. A key found there is still counted and is shown with `--all`, like a key in a test file.
 - **Code shown as text is not counted as code.** A log call inside a quoted string, on a page between two tags, or in a template literal with nothing filled in is text: a line drawn into an image, a slide, a code sample. A Python f-string and a template literal with `${...}` still count.

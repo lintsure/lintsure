@@ -15,7 +15,7 @@ import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isH
 import { choose, chooseMany } from "./menu.js";
 import { installSkills, removeSkills, skillFolders, skills } from "./skills.js";
 import { advisories, pinned } from "./deps.js";
-import { GUARD_AGENTS, PLUGIN_TAG, installGuards, pluginHome, planGuards, removeGuards } from "./plugin.js";
+import { GUARD_AGENTS, PLUGIN_TAG, claudeCli, installGuards, pluginHome, planGuards, removeGuards } from "./plugin.js";
 
 // The old Windows console can't draw block, line or diamond characters reliably, so it gets plain ones.
 const legacy = (env = process.env) => process.platform === "win32" && !env.WT_SESSION && !env.TERM_PROGRAM && !env.ConEmuANSI && !env.FORCE_COLOR;
@@ -110,6 +110,13 @@ const START: { label: string; run: string[] | null; show?: string; badge?: boole
   { label: "Quit", run: null },
 ];
 // True once a command was picked from the start menu: that person is using menus, so every command ends with one too.
+/** skills and plugin write into one project. Run with no folder named, from a folder that isn't a project (an agent's
+ *  scratch folder, a home folder), they stop and say where to go. Returns the message, or null to carry on. */
+function wrongPlace(cmd: string, raw: string[], valueFlag: string): string | null {
+  const named = raw.some((a, i) => !a.startsWith("--") && raw[i - 1] !== valueFlag);
+  if (viaMenu || named || raw.includes("--here") || raw.includes("--undo") || looksLikeProject(resolve("."))) return null;
+  return `No project found in ${resolve(".")}.\nlintsure ${cmd} works on one project. Go to your project's folder and run it again, or name the folder:\n    lintsure ${cmd} path/to/your/project\nTo use this folder anyway: lintsure ${cmd} --here`;
+}
 let viaMenu = false;
 let sawMenu = false;   // the command that just ran ended with its own menu
 let wantsMenu = false; // the person chose "Main menu"
@@ -144,7 +151,9 @@ lintsure baseline [path]
 lintsure init [path]     Three questions, saved to lintsure.config.yaml
 lintsure info [path]     Show the settings a scan would use, and where each comes from
 lintsure setup [path]    Add the Lintsure MCP server to this project's agent configs
-                         (shows the change; --yes writes it; --undo takes it out;
+                         (with no path it asks: --everywhere for every project on this
+                         machine, --here for this folder;
+                         shows the change; --yes writes it; --undo takes it out;
                          --agents claude,cursor,vscode,gemini,codex;
                          --manual for an agent set up in its own settings)
 lintsure skills [path]   Add Lintsure's skills to this project: short instruction files that
@@ -429,10 +438,12 @@ async function main(argv: string[]): Promise<number> {
   }
   // lintsure plugin: the guards, for the agents this project uses. Shown first; nothing is downloaded or written before a yes.
   if (cmd === "plugin") {
-    const bad = raw.find((a) => a.startsWith("--") && !["--yes", "--undo", "--agents"].includes(a));
+    const bad = raw.find((a) => a.startsWith("--") && !["--yes", "--undo", "--agents", "--here"].includes(a));
     if (bad) { console.error(`Unknown option: ${bad}. Use: lintsure plugin [folder] [--agents ${GUARD_AGENTS.map((a) => a.id).join(",")}] [--yes] [--undo]`); return 2; }
     const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents") ?? ".");
     if (!existsSync(root)) { console.error(`No folder at ${root}.`); return 2; }
+    const lost = wrongPlace("plugin", raw, "--agents");
+    if (lost) { console.error(lost); return 2; }
     const i = raw.indexOf("--agents"), names = i >= 0 ? (raw[i + 1] ?? "").split(",").map((s) => s.trim()) : undefined;
     const unknown = names?.filter((n) => !GUARD_AGENTS.some((a) => a.id === n));
     if (unknown?.length) { console.error(`Unknown agent: ${unknown.join(", ")}. Choose from: ${GUARD_AGENTS.map((a) => a.id).join(", ")}`); return 2; }
@@ -467,8 +478,10 @@ async function main(argv: string[]): Promise<number> {
   }
   if (cmd === "skills") {
     const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--only") ?? ".");
-    const bad = raw.find((a) => a.startsWith("--") && !["--yes", "--undo", "--only"].includes(a));
-    if (bad) { console.error(`Unknown option: ${bad}. Use --yes, --only <names> or --undo.`); return 2; }
+    const bad = raw.find((a) => a.startsWith("--") && !["--yes", "--undo", "--only", "--here"].includes(a));
+    if (bad) { console.error(`Unknown option: ${bad}. Use --yes, --only <names>, --here or --undo.`); return 2; }
+    const lost = wrongPlace("skills", raw, "--only");
+    if (lost) { console.error(lost); return 2; }
     if (!existsSync(root)) { console.error(`No folder at ${root}.`); return 2; }
     if (raw.includes("--undo")) { const said = await removeSkills(root); console.log(said.length ? said.join("\n") : "No Lintsure skills in this project."); return 0; }
     const all = skills(), i = raw.indexOf("--only"), names = i >= 0 ? (raw[i + 1] ?? "").split(",").map((s) => s.trim()) : undefined;
@@ -502,6 +515,43 @@ async function main(argv: string[]): Promise<number> {
     const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents") ?? ".");
     if (cmd === "status") return status(root);
     if (raw.includes("--manual")) { console.log(MANUAL()); return 0; }
+    const everywhere = raw.includes("--everywhere"), folderNamed = raw.some((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents");
+    const isProject = looksLikeProject(root), tty = !!process.stdin.isTTY && !!process.stdout.isTTY;
+    // With no scope given, ask: every project, or only this one. Typed with --yes inside a project, it is that project, as before.
+    if (!everywhere && !folderNamed && !raw.includes("--here") && !raw.includes("--undo") && !(isProject && (raw.includes("--yes") || raw.includes("--agents")))) {
+      const one = isProject ? `Only this project (${basename(root)})` : "Only one project";
+      if (tty) {
+        console.log("");
+        step("Where should Lintsure be connected?", isProject ? [] : [`No project found in ${root}.`]);
+        return (await offer([
+          { text: `${"Every project on this machine".padEnd(54)}lintsure setup --everywhere`, run: ["setup", ...raw, "--everywhere"] },
+          isProject ? { text: `${one.padEnd(54)}lintsure setup --here`, run: ["setup", ...raw, "--here"] } : { text: `${one.padEnd(54)}lintsure setup path/to/your/project`, run: async () => console.log("Go to your project's folder and run lintsure setup again, or name the folder: lintsure setup path/to/your/project") },
+        ], !process.env.NO_COLOR && process.env.TERM !== "dumb")) ?? 0;
+      }
+      console.log(`${isProject ? "" : `No project found in ${root}.\n\n`}Lintsure can be connected in two ways. Which one do you want?\n\n  1. Every project on this machine\n     Your agent has Lintsure in any project it opens.\n         lintsure setup --everywhere\n\n  2. ${one}\n     Lintsure is connected in that one folder and nowhere else.\n         ${isProject ? "lintsure setup --here" : "lintsure setup path/to/your/project"}\n\nEach command shows what it will write first. Add --yes to apply.\nIf you are an AI agent running this for someone: ask them which of the two they want and wait for the answer. Don't choose for them.`);
+      return 0;
+    }
+    if (everywhere) {
+      // The user's own agent settings, in their home folder. Cursor, Gemini CLI and Codex keep them at the same path as in a project.
+      const home = homedir(), i = raw.indexOf("--agents"), apply = raw.includes("--yes"), undoIt = raw.includes("--undo");
+      const picked = i >= 0 ? await pick(home, raw[i + 1]?.split(",").map((s) => s.trim())) : AGENTS.filter((a) => existsSync(join(home, a.marker)));
+      if (typeof picked === "string") { console.error(picked); return 2; }
+      if (!picked.length) { console.error(`No agent found in ${home}. Name the ones you use: lintsure setup --everywhere --agents ${AGENTS.map((a) => a.id).join(",")}`); return 2; }
+      console.log(`${undoIt ? "Taking Lintsure out of" : "Connecting Lintsure for every project: this changes"} your own agent settings in ${home}.\n`);
+      const add = ["mcp", "add", "--scope", "user", "lintsure", "--", "npx", "-y", `@lintsure/mcp@${RULES_VERSION}`];
+      for (const a of picked) {
+        if (a.id === "vscode") console.log(`- ${a.name}: its own settings are set from inside VS Code. Run "MCP: Open User Configuration" there and add the entry shown by: lintsure setup --manual`);
+        if (a.id !== "claude") continue;
+        if (!apply && !undoIt) { console.log(`- ${a.name}: claude ${add.join(" ")}`); continue; }
+        try { claudeCli(undoIt ? ["mcp", "remove", "--scope", "user", "lintsure"] : add); console.log(`- ${a.name}: ${undoIt ? "removed" : "connected"} for every project`); }
+        catch { console.log(`- ${a.name}: the claude command didn't do it. Run it yourself:\n    claude ${(undoIt ? ["mcp", "remove", "--scope", "user", "lintsure"] : add).join(" ")}`); }
+      }
+      const files = picked.filter((a) => ["cursor", "gemini", "codex"].includes(a.id));
+      if (undoIt) return undo(home, files);
+      if (files.length) return setup(home, files, apply, " --everywhere");
+      if (!apply) console.log("\nNothing written yet. To apply, run: lintsure setup --everywhere --yes");
+      return 0;
+    }
     const named = raw.includes("--agents"), here = named ? [] : await detected(root);
     // From the menu, ask which agent. Claude Code used to be the silent choice when the project had no agent folder yet.
     if (viaMenu && !named && !raw.includes("--yes") && !raw.includes("--undo") && process.stdin.isTTY && process.stdout.isTTY) {

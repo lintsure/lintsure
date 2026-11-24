@@ -40,6 +40,10 @@ Connect it to the coding agents this project uses, so they check their own work 
 npx lintsure setup --yes
 ```
 
+Run it in your project's folder, the one with your code in it. Somewhere else? Name the folder: `npx lintsure setup path/to/your/project`. To connect Lintsure for every project on this machine, use `npx lintsure setup --everywhere`.
+
+Asking your agent to install it? Open your project in the agent first. If the agent starts in an empty or temporary folder, Lintsure has nothing to connect to, and it will say so.
+
 In Claude Code, the plugin adds guards that work while the agent edits: Drift Guard (your project's rules, made-up imports), Danger Guard (risky shell commands), Secret Guard and Loop Guard.
 
 ```text
@@ -111,8 +115,10 @@ We'd rather say this up front than have you find out later:
 Add it to the coding agents this project uses (Claude Code, Cursor, VS Code, Gemini CLI). It shows the change first and backs up any file it edits:
 
 ```bash
-npx lintsure setup          # preview
+npx lintsure setup          # asks: every project, or only this one
+npx lintsure setup --here   # preview for this folder
 npx lintsure setup --yes    # write it
+npx lintsure setup --everywhere --yes   # your own agent settings, for every project
 npx lintsure skills         # add skills that tell the agent when to use Lintsure
 npx lintsure status         # check Node, config, rules and agents
 npx lintsure deps           # look up pinned packages for known vulnerabilities (asks first: this one uses the network)
