@@ -1,6 +1,6 @@
 ---
 name: lintsure-check
-description: Check code you just wrote or changed with Lintsure when it touches secrets or API keys, authentication, sessions or cookies, database migrations or row-level security, logging of user data, calls to an AI model, file uploads, webhooks, or CI workflows. Also use when the user asks whether something is secure, GDPR-safe or ready for the EU AI Act. Runs locally; quick; silent when nothing is found.
+description: Use when code has just been written, changed or pasted into the chat and the user asks whether it is fine, safe or ready to commit, or when you yourself just wrote or changed such code, and it touches any of these: secrets or API keys, login, passwords, sessions or cookies, database migrations or row-level security, logging of user data, calls to an AI model, file uploads, webhooks, or CI workflows. Also use when the user asks whether something is secure, GDPR-safe or ready for the EU AI Act. Checks the code with Lintsure. Runs locally; quick; silent when nothing is found.
 ---
 
 # Lintsure check
