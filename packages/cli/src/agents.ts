@@ -93,7 +93,7 @@ export async function setup(root: string, agents: Agent[], apply: boolean): Prom
   console.log(`\nWritten. Restart the agent so it starts the Lintsure MCP server. Run "lintsure status" to check.`);
   console.log("Then ask the agent, in its own chat: Check this project with Lintsure.");
   if (agents.some((a) => a.id === "codex")) console.log("Codex reads a project's .codex/config.toml only for projects you have marked as trusted.");
-  if (agents.some((a) => a.id === "claude")) console.log("For the guards (Drift Guard, Danger Guard) in Claude Code, also install the plugin: /plugin marketplace add lintsure/claude-plugin");
+  console.log("For guards that run while the agent works, add the plugin: lintsure plugin");
   return 0;
 }
 

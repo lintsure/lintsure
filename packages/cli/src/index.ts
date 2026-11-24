@@ -15,6 +15,7 @@ import { ALL_FRAMEWORKS, BASELINE_FILE, DISCLAIMER, RULES_VERSION, classify, isH
 import { choose, chooseMany } from "./menu.js";
 import { installSkills, removeSkills, skillFolders, skills } from "./skills.js";
 import { advisories, pinned } from "./deps.js";
+import { GUARD_AGENTS, PLUGIN_TAG, installGuards, pluginHome, planGuards, removeGuards } from "./plugin.js";
 
 // The old Windows console can't draw block, line or diamond characters reliably, so it gets plain ones.
 const legacy = (env = process.env) => process.platform === "win32" && !env.WT_SESSION && !env.TERM_PROGRAM && !env.ConEmuANSI && !env.FORCE_COLOR;
@@ -103,7 +104,8 @@ const START: { label: string; run: string[] | null; show?: string; badge?: boole
   { label: "Check another folder", run: ["scan", "--pick"], show: "scan <folder>" },
   { label: "Is everything set up?", run: ["status"] },
   { label: "Connect your coding agent", run: ["setup"] },
-  { label: "Give your agent skills", run: ["skills"], badge: true },
+  { label: "Give your agent skills", run: ["skills"] },
+  { label: "Add the Lintsure plugin", run: ["plugin"] },
   { label: "Every command and option", run: ["--help"] },
   { label: "Quit", run: null },
 ];
@@ -127,7 +129,7 @@ async function offer(rows: { text: string; run: string[] | (() => Promise<void>)
     return main(run);
   }
 }
-const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "hook", "fix", "deps", "history", "status", "export"];
+const COMMANDS = ["scan", "baseline", "init", "info", "setup", "skills", "plugin", "hook", "fix", "deps", "history", "status", "export"];
 /** The command someone most likely meant: the same word without dashes, or one within two typing slips. Pure. */
 function nearest(word: string): string | undefined {
   const slips = (a: string, b: string) => { let row = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -161,6 +163,10 @@ lintsure history [path]  List the records saved with scan --save-record, oldest 
 lintsure hook [path]     Check the lines you commit: adds a git pre-commit hook that runs
                          lintsure scan --staged --fail-on gap (shows it first; --yes writes it;
                          --undo removes it; an existing hook of your own is left alone)
+lintsure plugin [path]   Install the guards that run while your agent works: the full plugin
+                         for Claude Code, and hooks files for Cursor, Codex and Gemini CLI
+                         (shows the plan first; --agents claude,cursor,codex,gemini;
+                         --yes installs; --undo takes them out)
 lintsure status [path]   Check that this project is ready: Node, config, rules, agents
 lintsure export --otlp-json [path]  Write .lintsure/activity.jsonl as an OpenTelemetry
                          traces file (lintsure.otlp.json) for your own observability tool
@@ -421,6 +427,44 @@ async function main(argv: string[]): Promise<number> {
     console.log("\nWritten. Each commit now checks the lines being committed.\nSkip it once with: git commit --no-verify\nRemove it with: lintsure hook --undo");
     return 0;
   }
+  // lintsure plugin: the guards, for the agents this project uses. Shown first; nothing is downloaded or written before a yes.
+  if (cmd === "plugin") {
+    const bad = raw.find((a) => a.startsWith("--") && !["--yes", "--undo", "--agents"].includes(a));
+    if (bad) { console.error(`Unknown option: ${bad}. Use: lintsure plugin [folder] [--agents ${GUARD_AGENTS.map((a) => a.id).join(",")}] [--yes] [--undo]`); return 2; }
+    const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents") ?? ".");
+    if (!existsSync(root)) { console.error(`No folder at ${root}.`); return 2; }
+    const i = raw.indexOf("--agents"), names = i >= 0 ? (raw[i + 1] ?? "").split(",").map((s) => s.trim()) : undefined;
+    const unknown = names?.filter((n) => !GUARD_AGENTS.some((a) => a.id === n));
+    if (unknown?.length) { console.error(`Unknown agent: ${unknown.join(", ")}. Choose from: ${GUARD_AGENTS.map((a) => a.id).join(", ")}`); return 2; }
+    const used = GUARD_AGENTS.filter((a) => existsSync(join(root, a.marker)));
+    let agents = names ? GUARD_AGENTS.filter((a) => names.includes(a.id)) : used.length ? used : [GUARD_AGENTS[0]];
+    if (raw.includes("--undo")) { const said = await removeGuards(root, names ? agents : GUARD_AGENTS); console.log(said.length ? said.map((s) => `- ${s}`).join("\n") : "No Lintsure guards were installed from here."); return 0; }
+    const yes = raw.includes("--yes"), picking = !yes && !names && !!process.stdin.isTTY && !!process.stdout.isTTY;
+    console.log("");
+    step(tint(BADGE, " Lintsure plugin "), ["The plugin adds guards that run while your agent works. Drift Guard checks each edit against your", "project's rules, Danger Guard asks before a destructive command, and one check runs when a task ends.", "Skills are read when the agent chooses to. Guards run every time."]);
+    showFolder("Project", root);
+    if (picking) {
+      step("Which agents should get the guards?");
+      const picked = await chooseMany(GUARD_AGENTS.map((a) => `${a.name.padEnd(14)}${a.file ? `guards through ${a.file}` : "the full plugin, through Claude Code's own installer"}${used.includes(a) ? "   used in this project" : ""}`), (n) => (n ? `Install for the ${n} selected` : "Install (none selected yet)"), "    Up and Down to move, Enter to select or de-select, a for all, q to quit", !process.env.NO_COLOR && process.env.TERM !== "dumb");
+      if (!picked?.length) { console.log("Nothing installed. Come back any time: lintsure plugin"); return 0; }
+      agents = picked.map((n) => GUARD_AGENTS[n]);
+    }
+    const apply = yes || picking, needsFiles = agents.some((a) => a.file);
+    let dir: string;
+    try { dir = pluginHome(apply && needsFiles); } catch (e) { console.error(e instanceof Error ? e.message : String(e)); return 2; }
+    // Before the download there is nothing to read the hooks from, so the preview names the files and the source.
+    const fetched = existsSync(join(dir, "hooks"));
+    if (!apply) {
+      const lines = fetched ? (await planGuards(root, agents, dir)).map((s) => `${s.agent.name}: ${s.note}`) : agents.map((a) => `${a.name}: ${a.file ? `write the guards' hooks to ${a.file}` : "claude plugin marketplace add lintsure/claude-plugin, then claude plugin install lintsure@lintsure"}`);
+      step(`Would install the guards for ${agents.length} agent${agents.length === 1 ? "" : "s"}`, [...lines, ...(needsFiles && !fetched ? [tint("2", `Downloads the plugin ${PLUGIN_TAG} from github.com/lintsure/claude-plugin into your home folder first.`)] : [])]);
+      console.log(`Nothing installed yet. To apply, run: lintsure plugin${names ? ` --agents ${names.join(",")}` : ""} --yes`);
+      return 0;
+    }
+    const said = await installGuards(root, await planGuards(root, agents, dir));
+    step(tint("32", "Done!"), said.flatMap((s) => s.split("\n")));
+    console.log("The guards for Cursor, Codex and Gemini CLI are new: tell us if one misbehaves. Take them out with: lintsure plugin --undo");
+    return 0;
+  }
   if (cmd === "skills") {
     const root = resolve(raw.find((a, i) => !a.startsWith("--") && raw[i - 1] !== "--only") ?? ".");
     const bad = raw.find((a) => a.startsWith("--") && !["--yes", "--undo", "--only"].includes(a));
@@ -483,7 +527,7 @@ async function main(argv: string[]): Promise<number> {
       const pending = !raw.includes("--yes") && (await Promise.all(agents.map((a) => plan(root, a)))).some((p) => p.text);
       const folder = raw.filter((a, i) => !a.startsWith("--") && raw[i - 1] !== "--agents").slice(0, 1);
       console.log("");
-      const ran = await offer([pending ? { text: `${"Write these changes".padEnd(54)}lintsure setup --yes`, run: ["setup", ...raw, "--yes"] } : { text: `${"Install Lintsure's skills for your agent".padEnd(54)}lintsure skills`, run: ["skills", ...folder] }], !process.env.NO_COLOR && process.env.TERM !== "dumb");
+      const ran = await offer([pending ? { text: `${"Write these changes".padEnd(54)}lintsure setup --yes`, run: ["setup", ...raw, "--yes"] } : { text: `${"Install Lintsure's skills for your agent".padEnd(54)}lintsure skills`, run: ["skills", ...folder] }, { text: `${"Add the guards (the Lintsure plugin)".padEnd(54)}lintsure plugin`, run: ["plugin", ...folder] }], !process.env.NO_COLOR && process.env.TERM !== "dumb");
       if (ran !== undefined) return ran;
     }
     return code;

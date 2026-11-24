@@ -4,6 +4,10 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 
 ## 0.3.16 · 2026-11-24 · Two new frameworks, eight new checks, fixes you can apply
 
+### Install the plugin from the CLI
+- **`lintsure plugin` installs the guards for your agent.** For Claude Code it runs the full plugin install. For Cursor, Codex and Gemini CLI it downloads the plugin once and writes a hooks file into the project that points at it. It shows the plan first, never changes a hooks file you already have, and `--undo` takes out what it wrote. The guards for Cursor, Codex and Gemini CLI are new, so tell us if one misbehaves.
+- The start menu has a row for it, under the skills row.
+
 ### Fewer false alarms
 - **Stored lines in JSON data files are not read as running code.** A file of saved findings, review notes or samples keeps other people's lines under keys such as `text`, `context`, `excerpt`, `fix` and `note`. Checks no longer fire on those lines. A key found there is still counted and is shown with `--all`, like a key in a test file.
 - **Code shown as text is not counted as code.** A log call inside a quoted string, on a page between two tags, or in a template literal with nothing filled in is text: a line drawn into an image, a slide, a code sample. A Python f-string and a template literal with `${...}` still count.

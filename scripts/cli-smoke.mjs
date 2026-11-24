@@ -116,7 +116,7 @@ rmSync(cx, { recursive: true, force: true });
 assert.match(run("setup", fresh), /^No agent folder in this project, so this is for Claude Code\. For another one: lintsure setup --agents cursor \| vscode \| gemini \| codex\nFor an agent set up in its own settings/);
 const cursorOnly = run("setup", fresh, "--agents", "cursor", "--yes");
 assert.ok(cursorOnly.includes("Then ask the agent") && !cursorOnly.includes("claude-plugin") && !cursorOnly.includes("No agent folder"));
-assert.ok(run("setup", fresh, "--agents", "claude", "--yes").includes("claude-plugin"));
+assert.ok(run("setup", fresh, "--agents", "claude", "--yes").includes("lintsure plugin"));
 run("setup", fresh, "--yes");
 assert.match(run("setup", fresh, "--yes"), /already set up\n\nNothing to write\. Check the connection with: lintsure status/);
 rmSync(fresh, { recursive: true, force: true });
@@ -213,6 +213,30 @@ assert.match(inSt("status").stdout, /ok +Lintsure skills: 7 installed, all curre
 writeFileSync(join(st, ".agents/skills/lintsure-check/SKILL.md"), "older");
 assert.match(inSt("status").stdout, /todo +Lintsure skills: 7 installed, 1 differ from this version/);
 rmSync(st, { recursive: true, force: true });
+// lintsure plugin, against a stand-in plugin folder: no download and no call to the claude command.
+{
+  const src = join(T, "plugin-src"), proj = join(T, "plugin-proj");
+  const plug = (...a) => spawnSync(process.execPath, [CLI, "plugin", proj, ...a], { encoding: "utf8", env: { ...process.env, LINTSURE_PLUGIN_SRC: src, NO_COLOR: "1" } });
+  for (const d of ["hooks", "cursor", "codex", "gemini"]) mkdirSync(join(src, d), { recursive: true });
+  writeFileSync(join(src, "cursor/hooks.json"), JSON.stringify({ version: 1, hooks: { sessionStart: [{ command: "node hooks/cursor.mjs remember" }], stop: [{ command: 'node "${CURSOR_PLUGIN_ROOT}/hooks/cursor.mjs" end' }] } }));
+  writeFileSync(join(src, "codex/hooks.json"), JSON.stringify({ hooks: { Stop: [{ command: 'node "${CLAUDE_PLUGIN_ROOT}/hooks/agents.mjs" codex end' }] } }));
+  writeFileSync(join(src, "gemini/hooks.json"), JSON.stringify({ hooks: { SessionEnd: [{ command: 'node "${extensionPath}/hooks/agents.mjs" gemini end' }] } }));
+  mkdirSync(join(proj, ".gemini"), { recursive: true }); mkdirSync(join(proj, ".codex"));
+  writeFileSync(join(proj, ".gemini/settings.json"), '{"theme":"dark"}');
+  writeFileSync(join(proj, ".codex/hooks.json"), '{"hooks":{"Stop":[]}}');
+  const all = ["--agents", "cursor,codex,gemini"], at = src.replace(/\\/g, "/");
+  assert.ok(plug(...all).stdout.includes("Nothing installed yet") && !existsSync(join(proj, ".cursor")), "the plan is shown first");
+  assert.ok(plug(...all, "--yes").stdout.includes("Cursor: created .cursor/hooks.json"));
+  const cur = JSON.parse(readFileSync(join(proj, ".cursor/hooks.json"), "utf8")).hooks;
+  assert.deepEqual([cur.sessionStart[0].command, cur.stop[0].command], [`node "${at}/hooks/cursor.mjs" remember`, `node "${at}/hooks/cursor.mjs" end`], "every command points at the plugin on this machine");
+  const gem = JSON.parse(readFileSync(join(proj, ".gemini/settings.json"), "utf8"));
+  assert.ok(gem.theme === "dark" && gem.hooks.SessionEnd[0].command.includes(at), "the user's own settings are kept");
+  assert.equal(readFileSync(join(proj, ".codex/hooks.json"), "utf8"), '{"hooks":{"Stop":[]}}', "someone's own hooks are never changed");
+  assert.ok(plug(...all, "--yes").stdout.includes("Cursor: already installed"));
+  plug("--undo");
+  assert.ok(!existsSync(join(proj, ".cursor/hooks.json")) && !("hooks" in JSON.parse(readFileSync(join(proj, ".gemini/settings.json"), "utf8"))) && !existsSync(join(proj, ".lintsure/guards.json")), "--undo takes out exactly what was written");
+  assert.equal(plug("--agents", "nope").status, 2);
+}
 const { moved, frame, frameMany } = await import(new URL("../packages/cli/dist/src/menu.js", import.meta.url).href);
 assert.deepEqual([moved("down", 0, 5), moved("down", 4, 5), moved("up", 0, 5), moved("end", 1, 5), moved("home", 3, 5), moved("x", 2, 5)], [1, 0, 4, 4, 0, 2]);
 assert.deepEqual(frame(["a", "b"], 1, false), ["    a", "  > b"]);
