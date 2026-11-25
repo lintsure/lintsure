@@ -1161,7 +1161,8 @@
   "agent.approval-author-alone": {
     "flag": [
       "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: approves, seats: 1 }",
-      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict:\n      claude: approves\n      seats: 1"
+      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict:\n      claude: comments\n      seats: 1",
+      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: comments, seats: 0 }"
     ],
     "pass": [
       "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: comments, seats: 2 }",
@@ -1173,7 +1174,7 @@
       "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: approves, seats: 2 }"
     ],
     "pass": [
-      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: approves, seats: 2 }\n  - paths: [\"**/.claude/**\", \"**/CLAUDE.md\"]\n    verdict: { claude: comments, seats: 2 }"
+      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: approves, seats: 2 }\n  - paths: [\"**/.claude/**\", \"**/CLAUDE.md\", \".github/**\"]\n    verdict: { claude: comments, seats: 2 }"
     ]
   }
 }

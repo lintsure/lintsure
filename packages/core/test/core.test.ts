@@ -1305,27 +1305,37 @@ test("stored lines and code shown as text are not read as running code", async (
   await rm(dir, { recursive: true, force: true });
 });
 
-test("approval policies: the author alone, and rule files with no stricter rule", async () => {
+test("approval policies: nobody but the author, and steering files on the easy path", async () => {
   const { approvalByAuthorAlone, ruleFilesShareAnApprover } = await import("../src/rules/owasp.js");
-  const head = ["version: 1", "rules:"];
-  // One line: Claude approves and one seat is enough.
-  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 1 }"]), [4]);
-  // Spread over lines, and inside an override.
-  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict:", "      claude: approves", "      seats: 1"]), [5]);
-  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 2 }", "    override:", "      - { if: \"claude/code_review = pass\", verdict: { claude: approves, seats: 1 } }"]), [6]);
-  // Not it: the author is kept out of the seat, two seats, Claude only comments, or a line that is commented out.
-  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"docs/**\"]", "    verdict:", "      claude: approves", "      seats: [{ count: 1, from: [humans, \"!pr/authors\"] }]"]), []);
-  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 2 }"]), []);
-  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 1 }"]), []);
-  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    # verdict: { claude: approves, seats: 1 }", "    verdict: { claude: comments, seats: 2 }"]), []);
-  // A strict rule in one item does not excuse the next item.
-  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"src/auth/**\"]", "    verdict: { claude: comments, seats: 2 }", "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 1 }"]), [6]);
+  // The author can fill one seat, so one seat asks for nobody else. Claude's verdict does not change that.
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 1 }"]), [4]);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 1 }"]), [4]);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 0 }"]), [4], "no person at all");
+  // Spread over lines, as a set of one drawn from everyone, and inside an override.
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict:", "      claude: approves", "      seats: 1"]), [6]);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: [{ count: 1, from: humans }] }"]), [4]);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict:", "      claude: comments", "      seats:", "        - { count: 1, from: [humans] }"]), [6]);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 2 }", "    override:", "      - { if: \"claude/code_review = pass\", verdict: { claude: approves, seats: 1 } }"]), [6]);
+  // A set that admits bots, beside a rule where Claude approves, is filled with no person.
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: [{ count: 2, from: everyone }] }"]), [4]);
+  // Not it: the author is taken out, two people, a named team, Claude blocks, or a line that is commented out.
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"docs/**\"]", "    verdict:", "      claude: approves", "      seats: [{ count: 1, from: [humans, \"!pr/authors\"] }]"]), []);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 2 }"]), []);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: [{ count: 1, from: acme/payments }] }"]), [], "a named team may not hold the author");
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: blocks }"]), []);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    # verdict: { claude: approves, seats: 1 }", "    verdict: { claude: comments, seats: 2 }"]), []);
+  // A strict rule in one item does not excuse the next item, and seats: 10 is not seats: 1.
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"src/auth/**\"]", "    verdict: { claude: comments, seats: 2 }", "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 1 }"]), [6]);
+  assert.deepEqual(approvalByAuthorAlone(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 10 }"]), []);
 
-  const open = [...head, "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 2 }"];
+  const open = ["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 2 }"];
   assert.deepEqual(ruleFilesShareAnApprover(open), [2], "points at the rules: line");
-  assert.deepEqual(ruleFilesShareAnApprover([...open, "  - paths: [\"**/.claude/**\", \"**/CLAUDE.md\", \".github/**\"]", "    verdict: { claude: comments, seats: 2 }"]), [], "a rule people must approve names the rule files");
-  assert.deepEqual(ruleFilesShareAnApprover([...head, "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 2 }"]), [], "Claude approves nowhere, so there is nothing to protect them from");
-  assert.deepEqual(ruleFilesShareAnApprover([...open, "  - paths: [\"**/.claude/**\"]", "    verdict: { claude: approves, seats: 1 }"]), [2], "naming the rule files in a rule Claude can approve is not protection");
+  assert.deepEqual(ruleFilesShareAnApprover([...open, "  - paths: [\"**/.claude/**\", \"**/CLAUDE.md\", \".github/**\"]", "    verdict: { claude: comments, seats: 2 }"]), [], "a stricter rule names the steering files");
+  assert.deepEqual(ruleFilesShareAnApprover(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 2 }"]), [], "no easy path anywhere, so nothing to keep them off");
+  assert.deepEqual(ruleFilesShareAnApprover([...open, "  - paths: [\"**/.claude/**\"]", "    verdict: { claude: approves, seats: 1 }"]), [2], "naming them in an easy rule is not cover");
+  assert.deepEqual(ruleFilesShareAnApprover(["version: 1", "rules:", "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 1 }"]), [2], "the author alone is an easy path too");
+  // CODEOWNERS and a root REVIEW.md are protected by the policy itself; naming only those leaves the rest open.
+  assert.deepEqual(ruleFilesShareAnApprover([...open, "  - paths: [\"**/CODEOWNERS\", \"REVIEW.md\"]", "    verdict: { claude: comments, seats: 2 }"]), [2]);
 });
 
 test("REVIEW.md is read as agent instructions", async () => {

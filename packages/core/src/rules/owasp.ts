@@ -63,7 +63,9 @@ export function yamlAllowsAll(lines: string[]): number[] {
 }
 // ---- Approval policies (.claude/approvals.yml): who has to say yes before a pull request can merge. ----
 export const APPROVALS_FILE = /(^|\/)\.claude\/approvals\.ya?ml$/;
-const RULE_FILES = /\.claude\b|\bCLAUDE\.md|\bREVIEW\.md|\bAGENTS\.md|\bCODEOWNERS\b|\.github\b/;
+// Files that steer agents and reviews and that the policy does not protect by itself. (The policy file, a root REVIEW.md
+// and CODEOWNERS always need a person; these do not unless a rule names them.)
+const RULE_FILES = /\.github\b|\bCLAUDE\.md|\bAGENTS\.md|\.mcp\.json|\.claude\b/;
 const noComment = (l: string) => l.replace(/\s+#.*$/, "").replace(/^\s*#.*$/, "");
 /** The rules of an approvals file: one block per item under "rules:", with its first line number. Pure. */
 function approvalBlocks(lines: string[]): { at: number; rows: { n: number; text: string }[] }[] {
@@ -80,28 +82,36 @@ function approvalBlocks(lines: string[]): { at: number; rows: { n: number; text:
   });
   return out;
 }
-/** Lines where Claude's approval plus one seat is enough, and nothing keeps the author out of that seat: the author's
- *  own word then merges the change. Reads the verdict written on one line, or spread over the lines of its rule. Pure. */
-export function approvalByAuthorAlone(lines: string[]): number[] {
-  const out: number[] = [];
-  for (const b of approvalBlocks(lines)) {
-    const whole = b.rows.map((r) => r.text).join("\n");
-    for (const r of b.rows) {
-      if (!/\bclaude:\s*approves\b/.test(r.text)) continue;
-      // The seat count beside the verdict when it is written there, otherwise anywhere in this rule.
-      const near = /\bseats:/.test(r.text) ? r.text : whole;
-      if (/\bseats:\s*[01]\b|\bcount:\s*[01]\b/.test(near) && !/!pr\/authors/.test(near)) out.push(r.n);
-    }
-  }
+/** The seat lines of one rule that leave nobody but the author: "seats: 0" or "seats: 1" as a number, or a set of one
+ *  drawn from everyone with the author not taken out. A number N is short for N people, and the author can be one of
+ *  them. A set that admits bots beside "claude: approves" needs no person at all. Reads a set written on one line or
+ *  spread over the lines below it. Pure. */
+function loneSeats(rows: { n: number; text: string }[]): number[] {
+  const out: number[] = [], approves = rows.some((r) => /\bclaude:\s*approves\b/.test(r.text));
+  rows.forEach((r, i) => {
+    if (!/\bseats:/.test(r.text)) return;
+    // The seats value: the rest of this line, plus the deeper lines under it when it is written as a block.
+    const depth = r.text.search(/\S/), rest = [r.text.slice(r.text.indexOf("seats:"))];
+    if (/\bseats:\s*$/.test(r.text)) for (let j = i + 1; j < rows.length && rows[j].text.search(/\S/) > depth; j++) rest.push(rows[j].text);
+    const v = rest.join(" ");
+    if (/!pr\/authors/.test(v)) return;
+    const number = /\bseats:\s*([01])\b/.test(v), oneOfAll = /\bcount:\s*1\b/.test(v) && /\bfrom:\s*\[?\s*(humans|everyone)\b/.test(v) && !/\bcount:\s*(?:[2-9]|1\d)\b/.test(v);
+    const botsFill = approves && /\bfrom:[^\n]*\b(bots|everyone|bot:claude)\b/.test(v);
+    if (number || oneOfAll || botsFill) out.push(r.n);
+  });
   return out;
 }
-/** The "rules:" line of a policy where Claude can approve somewhere, and no rule that Claude can't approve names the
- *  files that set the rules. The strictest matching rule wins, so one such rule is what protects them. Pure. */
+/** Lines of an approval policy where a change needs nobody but its author. Pure. */
+export function approvalByAuthorAlone(lines: string[]): number[] {
+  return approvalBlocks(lines).flatMap((b) => loneSeats(b.rows));
+}
+/** The "rules:" line of a policy that has an easy path (the author alone, or Claude approving) and no stricter rule that
+ *  names the files steering agents and reviews. The strictest matching rule wins, so one such rule is what covers them. Pure. */
 export function ruleFilesShareAnApprover(lines: string[]): number[] {
   const blocks = approvalBlocks(lines);
-  if (!blocks.some((b) => b.rows.some((r) => /\bclaude:\s*approves\b/.test(r.text)))) return [];
-  const guarded = blocks.some((b) => { const t = b.rows.map((r) => r.text).join("\n"); return RULE_FILES.test(t) && !/\bclaude:\s*approves\b/.test(t); });
-  if (guarded) return [];
+  const easy = (b: { rows: { n: number; text: string }[] }) => loneSeats(b.rows).length > 0 || b.rows.some((r) => /\bclaude:\s*approves\b/.test(r.text));
+  if (!blocks.some(easy)) return [];
+  if (blocks.some((b) => !easy(b) && b.rows.some((r) => /\bverdict:|\buse:/.test(r.text)) && RULE_FILES.test(b.rows.map((r) => r.text).join("\n")))) return [];
   const at = lines.findIndex((l) => /^rules:\s*$/.test(noComment(l)));
   return [at < 0 ? 1 : at + 1];
 }
@@ -254,14 +264,14 @@ export const owaspRules: Rule[] = [
     test: (l) => /"defaultMode"\s*:\s*"bypassPermissions"|(?:^|[[,])\s*"(Bash|Bash\(\*\)|Bash\(:\*\)|\*)"\s*(?:[,\]]|$)|--dangerously-skip-permissions|"(yolo|autoAccept)"\s*:\s*true|\bapproval_policy\s*=\s*["']never["']|\bsandbox_mode\s*=\s*["']danger-full-access["']|"chat\.tools\.autoApprove"\s*:\s*true/.test(l) }),
   // An approval policy decides who must say yes before a pull request merges. Two shapes leave nobody but the author:
   // Claude approves and one seat is enough, and the files that set the rules ride on the same easy path.
-  rule({ id: "agent.approval-author-alone", title: "Approval policy lets a change merge on the author's word alone", status: "partial", severity: "high", controls: [A02, LLM03, AST03],
-    fix: "Ask for a second person on this path: raise seats, or fill the seat from people other than the author, for example seats: [{ count: 1, from: [humans, \"!pr/authors\"] }]. Keep the rule only for paths where you have decided an author plus Claude is enough, and say so in its purpose.",
-    note: "When Claude approves and one seat is enough, the author can take that seat. A pull request then merges with no second person reading it, and text inside the pull request can sway an AI review. With auto-merge on, nobody has to act at all (CWE-284, OWASP LLM03 Excessive Agency).",
+  rule({ id: "agent.approval-author-alone", title: "Approval policy asks for nobody but the author", status: "partial", severity: "high", controls: [A02, LLM03, AST03],
+    fix: "Ask for a person who isn't the author on this path: seats: [{ count: 1, from: [humans, \"!pr/authors\"] }], or raise seats to 2. Keep the rule as it is only for paths where you have decided the author alone is enough, and say so in its purpose.",
+    note: "The author of a pull request can fill one seat, so seats: 1 asks for nobody else, and seats: 0 asks for no person at all. Where Claude also approves, a branch rule that needs one approval is met by Claude's, and with auto-merge on nobody has to act (CWE-284, OWASP LLM03 Excessive Agency).",
     extensions: [".yml", ".yaml"], pathMatch: APPROVALS_FILE, fileTest: approvalByAuthorAlone,
-    unseen: "Lintsure reads the policy file, not your branch rules. A branch rule that needs another approval covers this, and with mode: observe the policy only reports what it would decide." }),
+    unseen: "Lintsure reads this file, not your branch rules or CODEOWNERS. A branch rule that needs another person's approval covers this, mode: observe means the policy only reports, and a verdict copied in with use is not followed." }),
   rule({ id: "agent.approval-rule-files-open", title: "Approval policy has no stricter rule for the files that set the rules", status: "partial", severity: "medium", controls: [A02, LLM03, AST03],
-    fix: "Add a rule Claude cannot approve for the files that set the rules, for example paths: [\"**/.claude/**\", \"**/CLAUDE.md\", \"**/REVIEW.md\", \"**/CODEOWNERS\", \".github/**\"] with verdict: { claude: comments, seats: 2 }.",
-    note: "Somewhere in this policy Claude can approve, and no rule that needs people names the agent's instructions, the review rules, CODEOWNERS or CI. A change to those files changes what every later review checks, so it should take the most people, not the fewest (CWE-284).",
+    fix: "Add a rule for the files that steer agents and reviews, for example paths: [\"**/.claude/**\", \"**/CLAUDE.md\", \"**/AGENTS.md\", \".mcp.json\", \".github/**\"] with nested: inherit and verdict: { claude: comments, seats: [{ count: 1, from: [humans, \"!pr/authors\"] }] }.",
+    note: "This policy has an easy path, and no stricter rule names the agent's instructions, its settings or CI. The policy file, a root REVIEW.md and CODEOWNERS always need a person; CLAUDE.md, AGENTS.md, .mcp.json, the rest of .claude and .github do not unless a rule says so. A change there changes what every later review checks (CWE-284).",
     extensions: [".yml", ".yaml"], pathMatch: APPROVALS_FILE, fileTest: ruleFilesShareAnApprover,
     unseen: "Lintsure can't tell which rule your paths resolve to for a given file, or what CODEOWNERS and branch rules add on top. Check one change to CLAUDE.md against the policy by hand." }),
   rule({ id: "ci.action-unpinned", title: "Third-party GitHub Action not pinned to a commit", status: "partial", severity: "medium", controls: [A03],
