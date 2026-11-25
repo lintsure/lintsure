@@ -18,9 +18,19 @@ Lintsure checks the code Claude Code, Cursor, Codex and other agents write, and 
   <img src="https://img.shields.io/badge/rules-Beta-B45309" alt="Rules: Beta">
 </p>
 
-## Try it
+## Get started
 
-Check the project in the current folder. Nothing to install, and nothing leaves your machine:
+Connect Lintsure to the coding agents this project uses. It asks a few questions (which agents, this project or every project), shows the change first and backs up any file it edits. After that, your coding agents check their own work before they say they're done:
+
+```bash
+npx lintsure setup
+```
+
+Run it in your project's folder, the one with your code in it. Somewhere else? Name the folder: `npx lintsure setup path/to/your/project`. To connect Lintsure for every project on this machine, use `npx lintsure setup --everywhere`.
+
+Asking your agent to install it? Open your project in the agent first. If the agent starts in an empty or temporary folder, Lintsure has nothing to connect to, and it will say so.
+
+Want a report right away instead? `npx lintsure scan` checks the project in the current folder and prints what it finds. Nothing to install, and nothing leaves your machine:
 
 ```bash
 npx lintsure scan
@@ -33,16 +43,6 @@ partial  src/billing.ts:4  Data sent over plain HTTP
 gap      src/config.ts:2   Secret or private key committed to source
 gap      src/users.ts:5    Personal data written to logs
 ```
-
-Connect it to the coding agents this project uses, so they check their own work before they say they're done. It shows the change first and backs up any file it edits:
-
-```bash
-npx lintsure setup --yes
-```
-
-Run it in your project's folder, the one with your code in it. Somewhere else? Name the folder: `npx lintsure setup path/to/your/project`. To connect Lintsure for every project on this machine, use `npx lintsure setup --everywhere`.
-
-Asking your agent to install it? Open your project in the agent first. If the agent starts in an empty or temporary folder, Lintsure has nothing to connect to, and it will say so.
 
 The plugin adds guards that work while the agent edits: Drift Guard (your project's rules, made-up imports), Danger Guard (risky shell commands), Secret Guard and Loop Guard. One command installs it for Claude Code, Cursor, Codex and Gemini CLI, and it shows what it will write first:
 
