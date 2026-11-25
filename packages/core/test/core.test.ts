@@ -35,6 +35,8 @@ test("known findings stay put", async () => {
   const r = await scan(root);
   const got = r.findings.filter((f) => !/^(src\/(more|owasp|page|stack-client)\.|package\.json|\.github\/|supabase\/|next\.config|scripts\/|SECURITY\.md|sbom|bin\/|mobile\/|web\/|src\/llm\.)/.test(f.file)).map((f) => `${f.ruleId}@${f.file}:${f.line}`);
   assert.deepEqual(got, [
+    "agent.approval-rule-files-open@.claude/approvals.yml:3",
+    "agent.approval-author-alone@.claude/approvals.yml:6",
     "agent.config-runs-remote-code@.claude/settings.json:4",
     "agent.permissions-allow-all@.claude/settings.json:8",
     "skill.unrestricted-shell@.claude/skills/deploy/SKILL.md:3",
@@ -663,7 +665,7 @@ test("policy fingerprint is the same on every OS", async () => {
   // A fixed value, so CI on Linux catches any difference from Windows or macOS (paths, line endings).
   // It moves with every rules version: update it in the release commit.
   const r = await scan(root);
-  assert.equal(r.policy?.fingerprint, "E4FC-BB5C");
+  assert.equal(r.policy?.fingerprint, "76FE-6C2B");
 });
 
 test("env files not ignored: Gap with a secret, Partial with public settings, quiet when ignored or example-only", () => {
@@ -1301,4 +1303,33 @@ test("stored lines and code shown as text are not read as running code", async (
   // The quoted key is still found, and shown when everything is asked for.
   assert.ok((shown.held ?? 0) >= 1 && at(all).some((x) => x.startsWith("secret.in-source@data/findings.json")));
   await rm(dir, { recursive: true, force: true });
+});
+
+test("approval policies: the author alone, and rule files with no stricter rule", async () => {
+  const { approvalByAuthorAlone, ruleFilesShareAnApprover } = await import("../src/rules/owasp.js");
+  const head = ["version: 1", "rules:"];
+  // One line: Claude approves and one seat is enough.
+  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 1 }"]), [4]);
+  // Spread over lines, and inside an override.
+  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict:", "      claude: approves", "      seats: 1"]), [5]);
+  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 2 }", "    override:", "      - { if: \"claude/code_review = pass\", verdict: { claude: approves, seats: 1 } }"]), [6]);
+  // Not it: the author is kept out of the seat, two seats, Claude only comments, or a line that is commented out.
+  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"docs/**\"]", "    verdict:", "      claude: approves", "      seats: [{ count: 1, from: [humans, \"!pr/authors\"] }]"]), []);
+  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 2 }"]), []);
+  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 1 }"]), []);
+  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"**\"]", "    # verdict: { claude: approves, seats: 1 }", "    verdict: { claude: comments, seats: 2 }"]), []);
+  // A strict rule in one item does not excuse the next item.
+  assert.deepEqual(approvalByAuthorAlone([...head, "  - paths: [\"src/auth/**\"]", "    verdict: { claude: comments, seats: 2 }", "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 1 }"]), [6]);
+
+  const open = [...head, "  - paths: [\"**\"]", "    verdict: { claude: approves, seats: 2 }"];
+  assert.deepEqual(ruleFilesShareAnApprover(open), [2], "points at the rules: line");
+  assert.deepEqual(ruleFilesShareAnApprover([...open, "  - paths: [\"**/.claude/**\", \"**/CLAUDE.md\", \".github/**\"]", "    verdict: { claude: comments, seats: 2 }"]), [], "a rule people must approve names the rule files");
+  assert.deepEqual(ruleFilesShareAnApprover([...head, "  - paths: [\"**\"]", "    verdict: { claude: comments, seats: 2 }"]), [], "Claude approves nowhere, so there is nothing to protect them from");
+  assert.deepEqual(ruleFilesShareAnApprover([...open, "  - paths: [\"**/.claude/**\"]", "    verdict: { claude: approves, seats: 1 }"]), [2], "naming the rule files in a rule Claude can approve is not protection");
+});
+
+test("REVIEW.md is read as agent instructions", async () => {
+  const { AGENT_INSTRUCTIONS } = await import("../src/rules/owasp.js");
+  for (const f of ["REVIEW.md", "services/api/REVIEW.md", ".claude/skills/steward/SKILL.md", ".claude/skills/verify/SKILL.md"]) assert.ok(AGENT_INSTRUCTIONS.test(f), f);
+  assert.ok(!AGENT_INSTRUCTIONS.test("docs/code-review.md"));
 });

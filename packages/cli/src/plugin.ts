@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { writeJson } from "./agents.js";
 
 // The plugin release that pairs with this engine. Pinned: a moving branch here would be what the supply-chain rules flag.
-export const PLUGIN_TAG = "v0.3.5";
+export const PLUGIN_TAG = "v0.3.7";
 const REPO = "https://github.com/lintsure/plugin.git";
 
 export interface GuardAgent { id: string; name: string; marker: string; file?: string; from?: string }

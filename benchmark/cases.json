@@ -1157,5 +1157,23 @@
       "{ role: \"user\", content: `Reference material: ${chunks.join(\"\n\")}` },",
       "const context = await search(query);"
     ]
+  },
+  "agent.approval-author-alone": {
+    "flag": [
+      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: approves, seats: 1 }",
+      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict:\n      claude: approves\n      seats: 1"
+    ],
+    "pass": [
+      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: comments, seats: 2 }",
+      "version: 1\nrules:\n  - paths: [\"docs/**\"]\n    verdict:\n      claude: approves\n      seats: [{ count: 1, from: [humans, \"!pr/authors\"] }]"
+    ]
+  },
+  "agent.approval-rule-files-open": {
+    "flag": [
+      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: approves, seats: 2 }"
+    ],
+    "pass": [
+      "version: 1\nrules:\n  - paths: [\"**\"]\n    verdict: { claude: approves, seats: 2 }\n  - paths: [\"**/.claude/**\", \"**/CLAUDE.md\"]\n    verdict: { claude: comments, seats: 2 }"
+    ]
   }
 }

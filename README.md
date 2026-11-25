@@ -81,7 +81,7 @@ docker run -i --rm -v "$PWD:/workspace:ro" lintsure-mcp
 
 Lintsure sits between your AI coding agent and your codebase. It does three things:
 
-1. **Checks the code your agent writes.** 114 rules look for problems that AI-written code often has: secrets committed to source, databases without row level security, personal data written to logs, AI output used without a human check, agent configs that run remote code, and more. It reads JavaScript, TypeScript and Python, plus config and secret checks for every file.
+1. **Checks the code your agent writes.** 116 rules look for problems that AI-written code often has: secrets committed to source, databases without row level security, personal data written to logs, AI output used without a human check, agent configs that run remote code, and more. It reads JavaScript, TypeScript and Python, plus config and secret checks for every file.
 2. **Maps each finding to the standards you connect.** Eight frameworks are built in: OWASP Top 10, the OWASP API Security Top 10, OWASP LLM Top 10, the OWASP Agentic Skills Top 10, CWE Top 25, GDPR, the EU AI Act and the EU Cyber Resilience Act. You pick which ones apply in `lintsure.config.yaml`.
 3. **Keeps your agent on your rules.** The MCP server lets the agent ask which checks apply before it writes code (`plan_checks`) and scan its own work before it says it's done. The [Claude Code plugin](https://github.com/lintsure/plugin) adds Drift Guard, which holds the agent to the rules you write in `.lintsure/rules.yml`.
 
@@ -109,6 +109,8 @@ There are five ways to use Lintsure. They all run the same engine, on your machi
 | **GitHub Action** | `uses: lintsure/action@v1` | The same check on every pull request, with findings on the changed lines. The code lives in [lintsure/action](https://github.com/lintsure/action). |
 
 The MCP server gives the agent a tool it can choose to use. The plugin is what makes checking happen every time.
+
+Some agents commit and push for you without running git hooks. A check that must never be skipped belongs in CI, which is what the Action is for.
 
 ## Built to inform, not to decide
 
@@ -158,7 +160,7 @@ Run it on every pull request with **[lintsure/action](https://github.com/lintsur
 
 | Path | What |
 |---|---|
-| `packages/core` | Finding schema, 114 rules, framework knowledge, scan, config reader, report writer, policy fingerprint, pack loader, safety wording |
+| `packages/core` | Finding schema, 116 rules, framework knowledge, scan, config reader, report writer, policy fingerprint, pack loader, safety wording |
 | `packages/cli` | The `lintsure` command: `scan`, `baseline`, `init`, `info`, `setup`, `status`, `export` |
 | `packages/mcp` | MCP server: `scan`, `plan_checks`, `classify`, `explain_framework`, `explain_rule` |
 | `fixtures/` | Planted problems, near misses and a config example used by the tests |

@@ -2,6 +2,23 @@
 
 All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](https://lintsure.com/changelog).
 
+## 0.3.17 · 2026-11-26 · Approval policies, review rules and the files that set the rules
+
+### New
+- **Two checks on approval policies** (`.claude/approvals.yml`), the file that says who must approve a pull request:
+  - a rule where Claude approves and one seat is enough, with nothing keeping the author out of that seat, so a change can merge on the author's word alone (`agent.approval-author-alone`)
+  - a policy where Claude can approve somewhere and no stricter rule names the files that set the rules: the agent's instructions, the review rules, CODEOWNERS and CI (`agent.approval-rule-files-open`)
+- Both are Partial. Lintsure reads the policy file, not your branch rules, and says so. 116 rules in all.
+- **`REVIEW.md` is read as agent instructions.** The checks for hidden text, orders to ignore earlier instructions and download-and-run lines now cover review rules, next to `CLAUDE.md`, `AGENTS.md` and skills.
+- **The rules skill suggests protecting the files that set the rules.** When a project has `CLAUDE.md`, `AGENTS.md`, `REVIEW.md`, `CODEOWNERS` or a `.claude` folder, it offers one rule that stops an agent changing them unless you ask.
+
+### Changed
+- **A rule is suggested after two accepts, not three.** Twice is a pattern, and it is the bar many teams use before they write a rule down.
+- `lintsure hook` now says that an agent committing for you may skip git hooks, so the check should also run in CI.
+
+### Fixed
+- **Two skills load with their description again.** The headers of `lintsure-check` and `lintsure-rules` had a colon a strict reader rejects, so the skills could load with no description and never be picked. A check now covers every skill header.
+
 ## 0.3.16 · 2026-11-25 · Two new frameworks, eight new checks, fixes you can apply
 
 ### Install the plugin from the CLI

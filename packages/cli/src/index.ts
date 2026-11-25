@@ -433,7 +433,7 @@ async function main(argv: string[]): Promise<number> {
     await mkdir(join(root, ".git", "hooks"), { recursive: true });
     // Pinned to this version when the command is not installed: a moving version in a hook is what the supply-chain rules warn about.
     await writeFile(file, `#!/bin/sh\n${MARK}. Remove with: lintsure hook --undo\n# Checks only the lines being committed and stops the commit on a clear problem.\nif command -v lintsure >/dev/null 2>&1; then lintsure scan --staged --fail-on gap; else npx --yes lintsure@${RULES_VERSION} scan --staged --fail-on gap; fi\n`, { mode: 0o755 });
-    console.log("\nWritten. Each commit now checks the lines being committed.\nSkip it once with: git commit --no-verify\nRemove it with: lintsure hook --undo");
+    console.log("\nWritten. Each commit now checks the lines being committed.\nSkip it once with: git commit --no-verify\nRemove it with: lintsure hook --undo\nAn agent that commits for you may skip git hooks, so keep the check in CI too: lintsure/action");
     return 0;
   }
   // lintsure plugin: the guards, for the agents this project uses. Shown first; nothing is downloaded or written before a yes.

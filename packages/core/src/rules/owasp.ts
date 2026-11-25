@@ -23,7 +23,7 @@ const RUNS_REMOTE = new RegExp([
 // The folder each agent keeps its own files in: .claude, .agents, .cursor, .kiro, .continue, .github (Copilot) and the rest.
 export const AGENT_DIRS = String.raw`\.(claude|agents?|codex|gemini|cursor|continue|kiro|kilocode|factory|codebuddy|opencode|pi|hermes|mastracode|openclaw|adal|autohand|roo|windsurf|cline|junie|rovodev|github)`;
 export const AGENT_INSTRUCTIONS = new RegExp([
-  String.raw`(^|\/)(SKILL\.md|AGENTS\.md|CLAUDE\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|\.clinerules|copilot-instructions\.md)$`,
+  String.raw`(^|\/)(SKILL\.md|AGENTS\.md|CLAUDE\.md|REVIEW\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|\.clinerules|copilot-instructions\.md)$`,
   String.raw`(^|\/)\.cursor\/rules\/[^/]+\.mdc?$`,
   String.raw`(^|\/)\.clinerules\/[^/]+\.md$|(^|\/)\.junie\/guidelines\.md$`,
   String.raw`(^|\/)${AGENT_DIRS}\/(skills|commands|agents|rules|steering|prompts|instructions)\/.+\.md$`,
@@ -60,6 +60,50 @@ export function yamlAllowsAll(lines: string[]): number[] {
     else if (section === "allow" && ALLOWS_ALL.test(l)) out.push(i + 1);
   });
   return out;
+}
+// ---- Approval policies (.claude/approvals.yml): who has to say yes before a pull request can merge. ----
+export const APPROVALS_FILE = /(^|\/)\.claude\/approvals\.ya?ml$/;
+const RULE_FILES = /\.claude\b|\bCLAUDE\.md|\bREVIEW\.md|\bAGENTS\.md|\bCODEOWNERS\b|\.github\b/;
+const noComment = (l: string) => l.replace(/\s+#.*$/, "").replace(/^\s*#.*$/, "");
+/** The rules of an approvals file: one block per item under "rules:", with its first line number. Pure. */
+function approvalBlocks(lines: string[]): { at: number; rows: { n: number; text: string }[] }[] {
+  const out: { at: number; rows: { n: number; text: string }[] }[] = [];
+  let inRules = false, indent = -1;
+  lines.forEach((raw, i) => {
+    const l = noComment(raw);
+    if (/^rules:\s*$/.test(l)) { inRules = true; indent = -1; return; }
+    if (!inRules || !l.trim()) return;
+    if (/^\S/.test(l)) { inRules = false; return; }
+    const item = /^(\s*)-\s/.exec(l);
+    if (item && (indent < 0 || item[1].length === indent)) { indent = item[1].length; out.push({ at: i + 1, rows: [] }); }
+    out[out.length - 1]?.rows.push({ n: i + 1, text: l });
+  });
+  return out;
+}
+/** Lines where Claude's approval plus one seat is enough, and nothing keeps the author out of that seat: the author's
+ *  own word then merges the change. Reads the verdict written on one line, or spread over the lines of its rule. Pure. */
+export function approvalByAuthorAlone(lines: string[]): number[] {
+  const out: number[] = [];
+  for (const b of approvalBlocks(lines)) {
+    const whole = b.rows.map((r) => r.text).join("\n");
+    for (const r of b.rows) {
+      if (!/\bclaude:\s*approves\b/.test(r.text)) continue;
+      // The seat count beside the verdict when it is written there, otherwise anywhere in this rule.
+      const near = /\bseats:/.test(r.text) ? r.text : whole;
+      if (/\bseats:\s*[01]\b|\bcount:\s*[01]\b/.test(near) && !/!pr\/authors/.test(near)) out.push(r.n);
+    }
+  }
+  return out;
+}
+/** The "rules:" line of a policy where Claude can approve somewhere, and no rule that Claude can't approve names the
+ *  files that set the rules. The strictest matching rule wins, so one such rule is what protects them. Pure. */
+export function ruleFilesShareAnApprover(lines: string[]): number[] {
+  const blocks = approvalBlocks(lines);
+  if (!blocks.some((b) => b.rows.some((r) => /\bclaude:\s*approves\b/.test(r.text)))) return [];
+  const guarded = blocks.some((b) => { const t = b.rows.map((r) => r.text).join("\n"); return RULE_FILES.test(t) && !/\bclaude:\s*approves\b/.test(t); });
+  if (guarded) return [];
+  const at = lines.findIndex((l) => /^rules:\s*$/.test(noComment(l)));
+  return [at < 0 ? 1 : at + 1];
 }
 /** Agent instruction line: Gap for override, concealment, hidden text or sending secrets out; Partial for download-and-run. Pure. */
 export function instructionsUnsafe(l: string): boolean | "partial" {
@@ -208,6 +252,18 @@ export const owaspRules: Rule[] = [
     note: "Committed agent settings apply to everyone who opens the repo with that agent. Skipping prompts or allowing every shell command lets a bad instruction, a poisoned file or a mistake run without a person seeing it (CWE-250, OWASP LLM03 Excessive Agency).",
     extensions: [".json", ".toml", ".yaml", ".yml"], fileTest: yamlAllowsAll, pathMatch: /(^|\/)(\.claude\/settings\.json|\.gemini\/settings\.json|\.codex\/config\.toml|\.continue\/(config|permissions)\.ya?ml|\.vscode\/settings\.json)$/,
     test: (l) => /"defaultMode"\s*:\s*"bypassPermissions"|(?:^|[[,])\s*"(Bash|Bash\(\*\)|Bash\(:\*\)|\*)"\s*(?:[,\]]|$)|--dangerously-skip-permissions|"(yolo|autoAccept)"\s*:\s*true|\bapproval_policy\s*=\s*["']never["']|\bsandbox_mode\s*=\s*["']danger-full-access["']|"chat\.tools\.autoApprove"\s*:\s*true/.test(l) }),
+  // An approval policy decides who must say yes before a pull request merges. Two shapes leave nobody but the author:
+  // Claude approves and one seat is enough, and the files that set the rules ride on the same easy path.
+  rule({ id: "agent.approval-author-alone", title: "Approval policy lets a change merge on the author's word alone", status: "partial", severity: "high", controls: [A02, LLM03, AST03],
+    fix: "Ask for a second person on this path: raise seats, or fill the seat from people other than the author, for example seats: [{ count: 1, from: [humans, \"!pr/authors\"] }]. Keep the rule only for paths where you have decided an author plus Claude is enough, and say so in its purpose.",
+    note: "When Claude approves and one seat is enough, the author can take that seat. A pull request then merges with no second person reading it, and text inside the pull request can sway an AI review. With auto-merge on, nobody has to act at all (CWE-284, OWASP LLM03 Excessive Agency).",
+    extensions: [".yml", ".yaml"], pathMatch: APPROVALS_FILE, fileTest: approvalByAuthorAlone,
+    unseen: "Lintsure reads the policy file, not your branch rules. A branch rule that needs another approval covers this, and with mode: observe the policy only reports what it would decide." }),
+  rule({ id: "agent.approval-rule-files-open", title: "Approval policy has no stricter rule for the files that set the rules", status: "partial", severity: "medium", controls: [A02, LLM03, AST03],
+    fix: "Add a rule Claude cannot approve for the files that set the rules, for example paths: [\"**/.claude/**\", \"**/CLAUDE.md\", \"**/REVIEW.md\", \"**/CODEOWNERS\", \".github/**\"] with verdict: { claude: comments, seats: 2 }.",
+    note: "Somewhere in this policy Claude can approve, and no rule that needs people names the agent's instructions, the review rules, CODEOWNERS or CI. A change to those files changes what every later review checks, so it should take the most people, not the fewest (CWE-284).",
+    extensions: [".yml", ".yaml"], pathMatch: APPROVALS_FILE, fileTest: ruleFilesShareAnApprover,
+    unseen: "Lintsure can't tell which rule your paths resolve to for a given file, or what CODEOWNERS and branch rules add on top. Check one change to CLAUDE.md against the policy by hand." }),
   rule({ id: "ci.action-unpinned", title: "Third-party GitHub Action not pinned to a commit", status: "partial", severity: "medium", controls: [A03],
     fix: "Pin third-party actions to a full commit SHA, with the version as a comment, for example uses: owner/action@<40-character sha> # v2.",
     note: "A tag like @v1 can be moved by the action's owner, or by whoever takes over their account (CWE-829).", extensions: YAML,

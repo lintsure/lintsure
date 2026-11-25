@@ -26,7 +26,7 @@ export { loadPacks, registerPack, type Pack } from "./packs.js";
 export { checksFor } from "./plan.js";
 import { configPacks, loadPacks, packFrameworks, packsLoaded } from "./packs.js";
 import { buildGraph, declaredEntries, reachOf } from "./reach.js";
-export const RULES_VERSION = "0.3.16";
+export const RULES_VERSION = "0.3.17";
 
 /** Shown with every result, in every interface. Lintsure prepares; people decide. */
 export const DISCLAIMER =
@@ -49,7 +49,7 @@ export function nextSteps(r: Report): string[] {
   // The same rule accepted again and again is a setting waiting to be written down.
   const perRule = new Map<string, number>();
   for (const f of r.findings) if (f.accepted && !f.accepted.expired) perRule.set(f.ruleId, (perRule.get(f.ruleId) ?? 0) + 1);
-  const repeats = [...perRule].filter(([, n]) => n >= 3);
+  const repeats = [...perRule].filter(([, n]) => n >= 2); // twice is a pattern: the bar teams use before they write a rule down
   return [
     gaps ? `Review the ${gaps} gap${gaps === 1 ? "" : "s"} and decide how to fix each one. Approve any change before it is made.` : "No gaps were found by the current rules. Keep checking as the code changes.",
     partial ? `Check the ${partial} partial finding${partial === 1 ? "" : "s"}: each depends on context only you can confirm.` : "",
@@ -273,7 +273,7 @@ export function importedNames(file: string, text: string, files: Set<string>, by
   }
   return out;
 }
-const TOOLING_RULES = new Set(["agent.config-runs-remote-code", "agent.instructions-unsafe", "agent.permissions-allow-all", "skill.fetches-remote-instructions", "skill.writes-agent-memory", "skill.unrestricted-shell"]);
+const TOOLING_RULES = new Set(["agent.config-runs-remote-code", "agent.instructions-unsafe", "agent.permissions-allow-all", "agent.approval-author-alone", "agent.approval-rule-files-open", "skill.fetches-remote-instructions", "skill.writes-agent-memory", "skill.unrestricted-shell"]);
 // Lines a person already reviewed. lintsure-ignore and the secret allowlist pragma count only in a comment and apply
 // to every rule. Other linters' markers (noqa, nosec, NOSONAR) don't hide secrets: `# noqa: E501` is about line length.
 const REVIEWED = /(#|\/\/|\/\*|--)\s*(lintsure-ignore|pragma:\s*allowlist secret)\b/;

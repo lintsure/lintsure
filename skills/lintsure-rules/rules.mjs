@@ -71,6 +71,10 @@ function suggest() {
   if (p.content.length) s.push({ id: "real-copy", kind: "note", text: `Use the real quotes, names and copy from ${p.content.slice(0, 3).join(", ")}. Never invent them.`, why: "Suggested because the project keeps content in these files." });
   const wf = has(/^\.github\/workflows\/[^/]+\.ya?ml$/);
   if (wf) s.push({ id: "protect-ci", kind: "protect", paths: ".github/workflows/**", text: "Don't change the CI workflows unless I ask.", why: "Suggested because the project has GitHub workflows. Changes there can leak secrets or skip checks." });
+  // The files that tell agents and reviewers what to do. A change there changes what every later check looks for.
+  const setters = [["CLAUDE.md", /(^|\/)CLAUDE\.md$/], ["AGENTS.md", /(^|\/)AGENTS\.md$/], ["REVIEW.md", /(^|\/)REVIEW\.md$/], ["CODEOWNERS", /(^|\/)CODEOWNERS$/]].filter(([, re]) => has(re)).map(([n]) => n);
+  const claudeDir = existsSync(join(root, ".claude")); // dot folders are not in the file list
+  if (setters.length || claudeDir) s.push({ id: "protect-rule-files", kind: "protect", paths: [...setters.flatMap((n) => [n, `**/${n}`]), ...(claudeDir ? [".claude/**"] : [])].join(", "), text: "Don't change the files that set the rules for agents and reviews unless I ask.", why: `Suggested because the project has ${[...setters, ...(claudeDir ? [".claude/"] : [])].join(", ")}. A change there changes what every later check looks for.` });
   const gen = has(/(^|\/)(generated|__generated__)\/|\.gen\.[jt]s$/);
   if (gen) s.push({ id: "protect-generated", kind: "protect", paths: gen.includes("generated/") ? `${gen.slice(0, gen.indexOf("generated/") + 10)}**` : "**/*.gen.*", text: "Don't edit generated files by hand. Change the source and regenerate.", why: `Suggested because ${gen} looks generated.` });
   const env = has(/(^|\/)\.env(\.example|\.sample)?$/);
