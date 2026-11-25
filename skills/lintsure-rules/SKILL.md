@@ -1,6 +1,7 @@
 ---
 name: lintsure-rules
-description: Use whenever a message starts with "Lintsure:" followed by a rule in plain words ("Lintsure: never let it touch the payment code", "Lintsure: always use our logger"), and whenever the user states a standing rule for how agents must work in this project (never, always, don't, only, ask before). Also use when the user wants to set up, suggest, add or see Lintsure rules ("Lintsure, suggest rules", "what rules do we have"), or share them with other agents ("make Cursor follow these too"). Turns the words into one rule, tries it, and writes it to .lintsure/rules.yml only after the user agrees.
+description: >-
+  Use whenever a message starts with "Lintsure:" followed by a rule in plain words ("Lintsure: never let it touch the payment code", "Lintsure: always use our logger"), and whenever the user states a standing rule for how agents must work in this project (never, always, don't, only, ask before). Also use when the user wants to set up, suggest, add or see Lintsure rules ("Lintsure, suggest rules", "what rules do we have"), or share them with other agents ("make Cursor follow these too"). Turns the words into one rule, tries it, and writes it to .lintsure/rules.yml only after the user agrees.
 ---
 
 # Lintsure rules

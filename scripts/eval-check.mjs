@@ -62,3 +62,14 @@ for (const [file, texts] of Object.entries(known)) {
 for (const f of Object.keys(regexGraders)) assert.ok(known[f], `regex grader ${f} has no known text here`);
 assert.ok(existsSync(new URL("evals/README.md", root)));
 console.log(`evals: ${cases.length} cases, ${graders} graders, all well formed`);
+
+// Every shipped skill's header must be one a strict YAML reader accepts: an unquoted value with a colon and a space in it
+// is read as a nested map, and the skill then loads with no description.
+{
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const dir = new URL("../skills/", import.meta.url);
+  for (const d of readdirSync(dir)) {
+    const head = readFileSync(new URL(`${d}/SKILL.md`, dir), "utf8").replace(/\r\n/g, "\n").match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+    for (const line of head.split("\n")) if (/^\w+: (?![>|"'])[^\n]*: /.test(line)) { console.error(`skills/${d}/SKILL.md: quote or fold this header line: ${line.slice(0, 60)}`); process.exit(1); }
+  }
+}
