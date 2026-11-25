@@ -75,6 +75,20 @@ function suggest() {
   const setters = [["CLAUDE.md", /(^|\/)CLAUDE\.md$/], ["AGENTS.md", /(^|\/)AGENTS\.md$/], ["REVIEW.md", /(^|\/)REVIEW\.md$/], ["CODEOWNERS", /(^|\/)CODEOWNERS$/]].filter(([, re]) => has(re)).map(([n]) => n);
   const claudeDir = existsSync(join(root, ".claude")); // dot folders are not in the file list
   if (setters.length || claudeDir) s.push({ id: "protect-rule-files", kind: "protect", paths: [...setters.flatMap((n) => [n, `**/${n}`]), ...(claudeDir ? [".claude/**"] : [])].join(", "), text: "Don't change the files that set the rules for agents and reviews unless I ask.", why: `Suggested because the project has ${[...setters, ...(claudeDir ? [".claude/"] : [])].join(", ")}. A change there changes what every later check looks for.` });
+  // Rules the project already wrote down for one agent, offered so that every agent follows them. Only plain
+  // do and don't lines from the top-level files; a line that steers an agent against its user is never passed on.
+  const said = [];
+  for (const f of ["CLAUDE.md", "AGENTS.md", "REVIEW.md"]) {
+    let text; try { text = readFileSync(join(root, f), "utf8"); } catch { continue; }
+    text.split(/\r?\n/).forEach((line, i) => {
+      const t = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
+      if (said.length >= 5 || t.length < 12 || t.length > 160) return;
+      if (!/^(never|always|don'?t|do not|must|only|avoid|use)\b/i.test(t)) return;
+      if (/\b(ignore|disregard|override|forget)\b.*\b(instructions|rules|prompts?)\b|\b(tell|inform|mention|show)\b.*\bthe user\b|https?:\/\/|\bcurl\b|\bwget\b/i.test(t)) return;
+      said.push({ id: `from-${f.toLowerCase().replace(/\W/g, "-")}-${i + 1}`, kind: "note", text: t, why: `Suggested because ${f} line ${i + 1} says so. As a Lintsure rule every agent follows it, not only the one that reads ${f}.` });
+    });
+  }
+  s.push(...said);
   const gen = has(/(^|\/)(generated|__generated__)\/|\.gen\.[jt]s$/);
   if (gen) s.push({ id: "protect-generated", kind: "protect", paths: gen.includes("generated/") ? `${gen.slice(0, gen.indexOf("generated/") + 10)}**` : "**/*.gen.*", text: "Don't edit generated files by hand. Change the source and regenerate.", why: `Suggested because ${gen} looks generated.` });
   const env = has(/(^|\/)\.env(\.example|\.sample)?$/);

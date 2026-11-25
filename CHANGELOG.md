@@ -10,6 +10,7 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
   - a policy where Claude can approve somewhere and no stricter rule names the files that set the rules: the agent's instructions, the review rules, CODEOWNERS and CI (`agent.approval-rule-files-open`)
 - Both are Partial. Lintsure reads the policy file, not your branch rules, and says so. 116 rules in all.
 - **`REVIEW.md` is read as agent instructions.** The checks for hidden text, orders to ignore earlier instructions and download-and-run lines now cover review rules, next to `CLAUDE.md`, `AGENTS.md` and skills.
+- **The rules skill suggests rules your project already wrote down.** It reads the do and don't lines in `CLAUDE.md`, `AGENTS.md` and `REVIEW.md` and offers up to five as Lintsure rules, each with the file and line it came from. Kept ones are followed by every agent, not only the one that reads that file. A line that tries to steer an agent against its user, or that points at a web address, is never offered.
 - **The rules skill suggests protecting the files that set the rules.** When a project has `CLAUDE.md`, `AGENTS.md`, `REVIEW.md`, `CODEOWNERS` or a `.claude` folder, it offers one rule that stops an agent changing them unless you ask.
 
 ### Changed
