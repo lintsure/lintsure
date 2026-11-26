@@ -102,10 +102,14 @@ const START: { label: string; run: string[] | null; show?: string; badge?: boole
   { label: "Check this folder", run: ["scan"] },
   // `show` is the command to learn; the menu itself asks for the folder with --pick.
   { label: "Check another folder", run: ["scan", "--pick"], show: "scan <folder>" },
-  { label: "Is everything set up?", run: ["status"] },
+  { label: "Check what I'm committing", run: ["scan", "--staged"] },
+  { label: "Apply the sure fixes", run: ["fix"] },
+  { label: "Check before every commit", run: ["hook"] },
+  { label: "Look up my packages", run: ["deps"] },
   { label: "Connect your coding agent", run: ["setup"] },
   { label: "Give your agent skills", run: ["skills"] },
   { label: "Add the Lintsure plugin", run: ["plugin"] },
+  { label: "Is everything set up?", run: ["status"] },
   { label: "Every command and option", run: ["--help"] },
   { label: "Quit", run: null },
 ];
@@ -395,7 +399,11 @@ async function main(argv: string[]): Promise<number> {
     const { found, files } = await pinned(root);
     if (!found.length) { console.log("No package-lock.json or pinned requirements.txt at the top of this folder, so there is nothing to look up."); return 0; }
     console.log(`This asks the public database at api.osv.dev about ${found.length} package${found.length === 1 ? "" : "s"} from ${files.join(" and ")}.\nIt sends package names and versions. It never sends code, file names or anything else from this project.`);
-    if (!raw.includes("--yes")) { console.log("\nNothing sent yet. To run it: lintsure deps --yes"); return 0; }
+    if (!raw.includes("--yes")) {
+      console.log("\nNothing sent yet. To run it: lintsure deps --yes");
+      if (viaMenu && process.stdin.isTTY && process.stdout.isTTY) { console.log(""); const ran = await offer([{ text: `${"Send the names and look them up".padEnd(54)}lintsure deps --yes`, run: ["deps", ...raw, "--yes"] }], !process.env.NO_COLOR && process.env.TERM !== "dumb"); if (ran !== undefined) return ran; }
+      return 0;
+    }
     let hits: Awaited<ReturnType<typeof advisories>>;
     try { hits = await advisories(found); }
     catch (e) { console.error(`\nCouldn't reach api.osv.dev (${e instanceof Error ? e.message : e}). Nothing else was tried.`); return 2; }
@@ -429,7 +437,11 @@ async function main(argv: string[]): Promise<number> {
     // Someone else's hook is never overwritten: say what to add to it.
     if (now !== null && !now.includes(MARK)) { console.error("This repository already has a pre-commit hook of its own. Add this line to it:\n    lintsure scan --staged --fail-on gap"); return 2; }
     console.log(`- pre-commit hook: ${now === null ? "create" : "update"} .git/hooks/pre-commit\n    lintsure scan --staged --fail-on gap`);
-    if (!raw.includes("--yes")) { console.log("\nNothing written yet. To apply, run: lintsure hook --yes"); return 0; }
+    if (!raw.includes("--yes")) {
+      console.log("\nNothing written yet. To apply, run: lintsure hook --yes");
+      if (viaMenu && process.stdin.isTTY && process.stdout.isTTY) { console.log(""); const ran = await offer([{ text: `${"Add this hook".padEnd(54)}lintsure hook --yes`, run: ["hook", ...raw, "--yes"] }], !process.env.NO_COLOR && process.env.TERM !== "dumb"); if (ran !== undefined) return ran; }
+      return 0;
+    }
     await mkdir(join(root, ".git", "hooks"), { recursive: true });
     // Pinned to this version when the command is not installed: a moving version in a hook is what the supply-chain rules warn about.
     await writeFile(file, `#!/bin/sh\n${MARK}. Remove with: lintsure hook --undo\n# Checks only the lines being committed and stops the commit on a clear problem.\nif command -v lintsure >/dev/null 2>&1; then lintsure scan --staged --fail-on gap; else npx --yes lintsure@${RULES_VERSION} scan --staged --fail-on gap; fi\n`, { mode: 0o755 });
