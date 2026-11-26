@@ -20,6 +20,7 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 
 ### Changed
 - **A rule is suggested after two accepts, not three.** Twice is a pattern, and it is the bar many teams use before they write a rule down.
+- **The start menu offers more.** Check what you are committing, apply the sure fixes, add the commit hook and look up your packages are now rows in the menu. Each shows its preview, then offers a row to apply it.
 - `lintsure hook` now says that an agent committing for you may skip git hooks, so the check should also run in CI.
 
 ### Fixed
