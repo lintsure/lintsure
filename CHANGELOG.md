@@ -13,6 +13,11 @@ All notable changes to Lintsure. Also on the website: [lintsure.com/changelog](h
 - **The rules skill suggests rules your project already wrote down.** It reads the do and don't lines in `CLAUDE.md`, `AGENTS.md` and `REVIEW.md` and offers up to five as Lintsure rules, each with the file and line it came from. Kept ones are followed by every agent, not only the one that reads that file. A line that tries to steer an agent against its user, or that points at a web address, is never offered.
 - **The rules skill suggests protecting the files that set the rules.** When a project has `CLAUDE.md`, `AGENTS.md`, `REVIEW.md`, `CODEOWNERS` or a `.claude` folder, it offers one rule that stops an agent changing them unless you ask.
 
+### In the plugin (0.3.7)
+- **One agent over several projects now works.** The guards used to treat the folder you opened your agent in as the project. They now start at the file being edited and use the nearest folder above it that has a `.lintsure` folder. Two projects opened under one folder each keep their own rules, and each keeps its own record. A folder above the one you opened is never used, and when one project sits inside another the inner one wins.
+- **The check at the end of a task runs again when an API key is set.** A naming slip made it stop silently for anyone connected to a workspace. It now also scans each project you edited, with that project's settings.
+- **A change to a file that sets the rules is your call.** Editing an existing `CLAUDE.md`, `AGENTS.md`, `REVIEW.md`, `CODEOWNERS`, agent settings, an approval policy or a git hook is put to you, the same as a change to CI.
+
 ### Changed
 - **A rule is suggested after two accepts, not three.** Twice is a pattern, and it is the bar many teams use before they write a rule down.
 - `lintsure hook` now says that an agent committing for you may skip git hooks, so the check should also run in CI.
